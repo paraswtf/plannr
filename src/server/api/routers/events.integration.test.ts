@@ -1,11 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { fromWallTime } from "~/lib/dates";
-import { PermissionBitField, effectivePermissions } from "~/lib/permissions";
+import { PermissionBitField, SYSTEM_ROLES } from "~/lib/permissions";
 import { appRouter } from "~/server/api/root";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
-import { EventKind, RoomType, type Role } from "../../../../generated/prisma";
+import { EventKind, RoomType } from "../../../../generated/prisma";
 
 /**
  * Exercises the write path against a real database: conflict detection,
@@ -26,12 +26,12 @@ const at = (month: number, day: number, hour: number, minute = 0) =>
 interface Actor {
   id: string;
   orgId: string;
-  role: Role;
+  roles: Array<{ id: string; name: string; key: string | null }>;
   permissions: bigint;
 }
 
 function callerFor(actor: Actor) {
-  const bits = PermissionBitField.for(actor);
+  const bits = new PermissionBitField(actor.permissions);
   return createCaller({
     db,
     headers: new Headers(),
@@ -40,7 +40,7 @@ function callerFor(actor: Actor) {
       user: {
         id: actor.id,
         orgId: actor.orgId,
-        role: actor.role,
+        roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
       },
@@ -49,6 +49,41 @@ function callerFor(actor: Actor) {
     bits,
     orgId: actor.orgId,
   } as Parameters<typeof createCaller>[0]);
+}
+
+const permissionsOf = (...keys: string[]) =>
+  keys.reduce(
+    (bits, key) => bits | SYSTEM_ROLES.find((r) => r.key === key)!.permissions,
+    0n,
+  );
+
+/** Creates a user holding the named system roles and returns them as an actor. */
+async function makeActor(
+  email: string,
+  name: string,
+  ...roleKeys: string[]
+): Promise<Actor> {
+  const user = await db.user.upsert({
+    where: { email },
+    update: { name },
+    create: { email, name, orgId },
+  });
+  const roles = await db.role.findMany({
+    where: { orgId, key: { in: roleKeys } },
+  });
+  await db.userRole.deleteMany({ where: { userId: user.id } });
+  await db.userRole.createMany({
+    data: roles.map((r) => ({ userId: user.id, roleId: r.id })),
+  });
+  return {
+    id: user.id,
+    orgId,
+    roles: roles.map(({ id, name: n, key }) => ({ id, name: n, key })),
+    permissions: roles.reduce(
+      (bits, r) => bits | r.permissions,
+      user.permissions,
+    ),
+  };
 }
 
 let orgId: string;
@@ -76,6 +111,22 @@ beforeEach(async () => {
   // Clear anything an earlier test left behind.
   await db.event.deleteMany({ where: { orgId } });
 
+  // The test org needs its own copy of the locked roles.
+  for (const role of SYSTEM_ROLES) {
+    await db.role.upsert({
+      where: { orgId_key: { orgId, key: role.key } },
+      update: { permissions: role.permissions },
+      create: {
+        orgId,
+        key: role.key,
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions,
+        isSystem: true,
+      },
+    });
+  }
+
   const building = await db.building.upsert({
     where: { orgId_name: { orgId, name: "Test Block" } },
     update: {},
@@ -102,38 +153,22 @@ beforeEach(async () => {
   roomA = await mkRoom("IT-1", 60);
   roomB = await mkRoom("IT-2", 20);
 
-  const adminUser = await db.user.upsert({
-    where: { email: "itest-admin@plannr-demo.invalid" },
-    update: { role: "ADMIN" },
-    create: {
-      email: "itest-admin@plannr-demo.invalid",
-      name: "Integration Admin",
-      orgId,
-      role: "ADMIN",
-    },
-  });
-  admin = {
-    id: adminUser.id,
-    orgId,
-    role: "ADMIN",
-    permissions: adminUser.permissions,
-  };
+  admin = await makeActor(
+    "itest-admin@plannr-demo.invalid",
+    "Integration Admin",
+    "admin",
+  );
 
-  const facultyUser = await db.user.upsert({
-    where: { email: "itest-faculty@plannr-demo.invalid" },
-    update: { role: "FACULTY" },
-    create: {
-      email: "itest-faculty@plannr-demo.invalid",
-      name: "Integration Faculty",
-      orgId,
-      role: "FACULTY",
-    },
-  });
+  const teacher = await makeActor(
+    "itest-faculty@plannr-demo.invalid",
+    "Integration Faculty",
+    "faculty",
+  );
   facultyId = (
     await db.facultyProfile.upsert({
-      where: { userId: facultyUser.id },
+      where: { userId: teacher.id },
       update: {},
-      create: { userId: facultyUser.id, orgId, shortName: "Dr. Test" },
+      create: { userId: teacher.id, orgId, shortName: "Dr. Test" },
     })
   ).id;
 
@@ -681,21 +716,12 @@ describe("events.update", () => {
 
 describe("permissions", () => {
   it("a student cannot add a class to the timetable", async () => {
-    const studentUser = await db.user.upsert({
-      where: { email: "itest-student@plannr-demo.invalid" },
-      update: { role: "STUDENT" },
-      create: {
-        email: "itest-student@plannr-demo.invalid",
-        orgId,
-        role: "STUDENT",
-      },
-    });
-    const caller = callerFor({
-      id: studentUser.id,
-      orgId,
-      role: "STUDENT",
-      permissions: studentUser.permissions,
-    });
+    const student = await makeActor(
+      "itest-student@plannr-demo.invalid",
+      "Integration Student",
+      "student",
+    );
+    const caller = callerFor(student);
 
     await expect(
       caller.events.create({
@@ -716,21 +742,12 @@ describe("permissions", () => {
         allowStudentSelfBooking: true,
       },
     });
-    const studentUser = await db.user.upsert({
-      where: { email: "itest-student2@plannr-demo.invalid" },
-      update: { role: "STUDENT" },
-      create: {
-        email: "itest-student2@plannr-demo.invalid",
-        orgId,
-        role: "STUDENT",
-      },
-    });
-    const caller = callerFor({
-      id: studentUser.id,
-      orgId,
-      role: "STUDENT",
-      permissions: studentUser.permissions,
-    });
+    const student = await makeActor(
+      "itest-student2@plannr-demo.invalid",
+      "Integration Student Two",
+      "student",
+    );
+    const caller = callerFor(student);
 
     const { event } = await caller.events.create({
       kind: EventKind.BOOKING,
@@ -742,10 +759,42 @@ describe("permissions", () => {
     expect(event.status).toBe("PENDING");
   });
 
-  it("effectivePermissions gives an admin everything", () => {
-    const bits = new PermissionBitField(
-      effectivePermissions({ role: "ADMIN", permissions: 0n }),
+  it("a faculty member who also coordinates can schedule for others", async () => {
+    // Neither role alone allows this: faculty manage only their own classes,
+    // and the combination is the reason roles became rows.
+    const hybrid = await makeActor(
+      "itest-hybrid@plannr-demo.invalid",
+      "Teaches and coordinates",
+      "faculty",
+      "coordinator",
     );
-    expect(bits.has(1n << 9n)).toBe(true);
+    expect(hybrid.permissions).toBe(permissionsOf("faculty", "coordinator"));
+
+    await expect(
+      callerFor(hybrid).events.create({
+        kind: EventKind.CLASS,
+        title: "Scheduled by a coordinator",
+        roomId: roomA,
+        startTime: at(4, 7, 9),
+        endTime: at(4, 7, 10),
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("a faculty member alone cannot schedule someone else's class", async () => {
+    const teacher = await makeActor(
+      "itest-teacher-only@plannr-demo.invalid",
+      "Teaches only",
+      "faculty",
+    );
+    await expect(
+      callerFor(teacher).events.create({
+        kind: EventKind.CLASS,
+        title: "Not allowed",
+        roomId: roomA,
+        startTime: at(4, 8, 9),
+        endTime: at(4, 8, 10),
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

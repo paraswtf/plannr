@@ -143,25 +143,23 @@ export const eventsRouter = createTRPCRouter({
           message: "Only schedulers can add classes to the timetable.",
         });
       }
-      if (
-        !isClass &&
-        !ctx.bits.hasAny(
-          PermissionFlags.BookStudyRoom,
-          PermissionFlags.RequestRoom,
-        )
-      ) {
+      if (!isClass && !ctx.bits.has(PermissionFlags.BookRoom)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You do not have permission to book rooms.",
         });
       }
 
-      const isStudent = ctx.actor.role === "STUDENT";
-      if (isStudent) {
+      // The self-booking limits exist to stop students holding rooms all day.
+      // They are keyed on capability rather than on holding the student role,
+      // so someone who teaches *and* studies is not caught by them.
+      const isSelfServeBooking =
+        !isClass && !ctx.bits.has(PermissionFlags.ManageAllEvents);
+      if (isSelfServeBooking) {
         if (!settings.allowStudentSelfBooking) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Student room booking is currently switched off.",
+            message: "Self-service room booking is currently switched off.",
           });
         }
         const minutes =
@@ -169,7 +167,7 @@ export const eventsRouter = createTRPCRouter({
         if (minutes > settings.maxStudentBookingMinutes) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Student bookings are limited to ${settings.maxStudentBookingMinutes} minutes.`,
+            message: `Self-service bookings are limited to ${settings.maxStudentBookingMinutes} minutes.`,
           });
         }
       }
@@ -185,9 +183,13 @@ export const eventsRouter = createTRPCRouter({
         }
       }
 
-      // Student requests wait for sign-off when the setting demands it.
+      // Self-service requests wait for sign-off when the setting demands it.
+      // Anyone who can approve bookings skips the queue, since they would only
+      // be approving their own request.
       const status =
-        isStudent && settings.requireApprovalStudentBookings
+        isSelfServeBooking &&
+        settings.requireApprovalStudentBookings &&
+        !ctx.bits.has(PermissionFlags.ApproveBookings)
           ? EventStatus.PENDING
           : EventStatus.CONFIRMED;
 

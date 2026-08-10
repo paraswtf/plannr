@@ -9,7 +9,7 @@ import { api } from "~/trpc/server";
 export default async function ClassesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canOpen(session.user.role, "/classes")) redirect("/");
+  if (!canOpen(BigInt(session.user.permissions), "/classes")) redirect("/");
 
   const now = new Date();
   const initialDay = await api.timetable.myDay({ date: now });

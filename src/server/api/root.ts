@@ -1,7 +1,9 @@
 import { eventsRouter } from "~/server/api/routers/events";
 import { groupsRouter } from "~/server/api/routers/groups";
+import { rolesRouter } from "~/server/api/routers/roles";
 import { buildingsRouter, roomsRouter } from "~/server/api/routers/rooms";
 import { timetableRouter } from "~/server/api/routers/timetable";
+import { usersRouter } from "~/server/api/routers/users";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -15,6 +17,8 @@ export const appRouter = createTRPCRouter({
   timetable: timetableRouter,
   events: eventsRouter,
   groups: groupsRouter,
+  users: usersRouter,
+  roles: rolesRouter,
 });
 
 // export type definition of API

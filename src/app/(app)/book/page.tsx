@@ -12,7 +12,7 @@ export default async function BookPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canOpen(session.user.role, "/book")) redirect("/");
+  if (!canOpen(BigInt(session.user.permissions), "/book")) redirect("/");
 
   const params = await searchParams;
   const [initial, groups, allFaculty] = await Promise.all([
@@ -26,7 +26,7 @@ export default async function BookPage({
       initial={initial}
       groups={groups}
       allFaculty={allFaculty}
-      role={session.user.role}
+      permissions={session.user.permissions}
       preselectedRoomId={params.room}
     />
   );

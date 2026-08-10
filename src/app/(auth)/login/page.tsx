@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { env } from "~/env";
-import { ROLE_HOME } from "~/lib/role-nav";
+import { homeFor } from "~/lib/role-nav";
 import { auth, signIn } from "~/server/auth";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -20,7 +20,7 @@ export default async function LoginPage({
   const params = await searchParams;
 
   if (session?.user) {
-    redirect(params.callbackUrl ?? ROLE_HOME[session.user.role]);
+    redirect(params.callbackUrl ?? homeFor(BigInt(session.user.permissions)));
   }
 
   const error = params.error
@@ -65,7 +65,7 @@ export default async function LoginPage({
           action={async () => {
             "use server";
             await signIn("google", {
-              redirectTo: params.callbackUrl ?? "/timetable",
+              redirectTo: params.callbackUrl ?? "/",
             });
           }}
         >

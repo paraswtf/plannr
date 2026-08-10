@@ -14,7 +14,7 @@ import {
   localTimeOnDay,
   startOfLocalDay,
 } from "~/lib/dates";
-import type { Role } from "~/lib/permissions";
+import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { ConflictBanner } from "./conflict-banner";
 import { SlotGrid, type BusyInterval } from "./slot-grid";
@@ -36,18 +36,21 @@ export function BookRoomView({
   initial,
   groups,
   allFaculty,
-  role,
+  permissions,
   preselectedRoomId,
 }: {
   initial: GridData;
   groups: Groups;
   allFaculty: Faculty;
-  role: Role;
+  permissions: string;
   preselectedRoomId?: string;
 }) {
   const router = useRouter();
   const utils = api.useUtils();
-  const isStudent = role === "STUDENT";
+  // Someone who can schedule for others gets the class/faculty fields;
+  // everyone else is booking for themselves.
+  const bits = new PermissionBitField(BigInt(permissions));
+  const isSelfServe = !bits.has(PermissionFlags.ManageAllEvents);
 
   const timeZone = initial.timeZone;
   const settings = initial.settings;
@@ -66,7 +69,9 @@ export function BookRoomView({
   );
   const [duration, setDuration] = useState(60);
   const [start, setStart] = useState<Date | null>(null);
-  const [title, setTitle] = useState(isStudent ? "Group study" : "Extra class");
+  const [title, setTitle] = useState(
+    isSelfServe ? "Group study" : "Extra class",
+  );
   const [groupId, setGroupId] = useState<string>("");
   const [facultyId, setFacultyId] = useState<string>("");
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -242,7 +247,7 @@ export function BookRoomView({
               </div>
             </div>
 
-            {!isStudent && (
+            {!isSelfServe && (
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1.5">
                   <span className="text-ink text-[13px] font-semibold">
@@ -344,7 +349,7 @@ export function BookRoomView({
 
             <label className="flex flex-col gap-1.5">
               <span className="text-ink text-[13px] font-semibold">
-                {isStudent ? "Purpose" : "Session title"}
+                {isSelfServe ? "Purpose" : "Session title"}
               </span>
               <input
                 value={title}

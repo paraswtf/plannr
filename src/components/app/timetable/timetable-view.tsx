@@ -5,7 +5,7 @@ import { useState } from "react";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Segmented } from "~/components/ui/segmented";
 import { addDays, startOfLocalDay } from "~/lib/dates";
-import type { Role } from "~/lib/permissions";
+import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import { TimetableGrid, type GridEvent } from "./timetable-grid";
 
@@ -18,14 +18,17 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function TimetableView({
   initialDate,
   initial,
-  role,
+  permissions,
 }: {
   initialDate: string;
   initial: GridData;
-  role: Role;
+  permissions: string;
 }) {
   const [date, setDate] = useState(() => new Date(initialDate));
   const [buildingId, setBuildingId] = useState<string | undefined>();
+  const canBook = new PermissionBitField(BigInt(permissions)).has(
+    PermissionFlags.BookRoom,
+  );
 
   const { data } = api.timetable.grid.useQuery(
     { date, buildingId },
@@ -123,9 +126,9 @@ export function TimetableView({
         )}
 
         <p className="text-faint mt-3 text-[12.5px]">
-          {role === "STUDENT"
-            ? "Click a block to see the details."
-            : "Click a block for details, or an empty slot to book it."}
+          {canBook
+            ? "Click a block for details, or an empty slot to book it."
+            : "Click a block to see the details."}
         </p>
       </div>
     </>

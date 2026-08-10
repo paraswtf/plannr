@@ -8,7 +8,7 @@ import { api } from "~/trpc/server";
 export default async function TodayPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canOpen(session.user.role, "/today")) redirect("/");
+  if (!canOpen(BigInt(session.user.permissions), "/today")) redirect("/");
 
   const initial = await api.timetable.myDay({ date: new Date() });
   const firstName = (session.user.name ?? session.user.email ?? "there").split(

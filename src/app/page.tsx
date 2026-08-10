@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ROLE_HOME } from "~/lib/role-nav";
+import { homeFor } from "~/lib/role-nav";
 import { auth } from "~/server/auth";
 
 /**
@@ -9,5 +9,7 @@ import { auth } from "~/server/auth";
  */
 export default async function Home() {
   const session = await auth();
-  redirect(session?.user ? ROLE_HOME[session.user.role] : "/login");
+  redirect(
+    session?.user ? homeFor(BigInt(session.user.permissions)) : "/login",
+  );
 }

@@ -17,11 +17,8 @@ datasource db {
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
-enum Role {
-    STUDENT
-    FACULTY
-    ADMIN
-}
+// Roles are rows, not an enum: an institution can define its own alongside the
+// four locked ones. See src/lib/permissions.ts for the bitfield they carry.
 
 enum RoomType {
     LECTURE
@@ -86,6 +83,7 @@ model Organization {
 
     settings        OrgSettings?
     users           User[]
+    roles           Role[]
     buildings       Building[]
     rooms           Room[]
     terms           Term[]
@@ -134,8 +132,8 @@ model User {
     orgId String
     org   Organization @relation(fields: [orgId], references: [id])
 
-    role Role @default(STUDENT)
-    /// Extra per-user permission bits OR'd over the role defaults. See src/lib/permissions.ts.
+    /// Extra permission bits granted to this person alone, on top of whatever
+    /// their roles carry. See src/lib/permissions.ts.
     permissions        BigInt  @default(0)
     isActive           Boolean @default(true)
     emailNotifications Boolean @default(true)
@@ -143,6 +141,7 @@ model User {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
+    roles          UserRole[]
     accounts       Account[]
     sessions       Session[]
     studentProfile StudentProfile?
@@ -151,8 +150,48 @@ model User {
     importBatches  ImportBatch[]
     outboxEntries  EmailOutbox[]
 
-    @@index([orgId, role])
     @@index([orgId, name])
+    @@index([orgId, email])
+}
+
+/// A named bundle of permissions. The four seeded roles (student, faculty,
+/// coordinator, admin) carry a `key` and are locked: they cannot be renamed,
+/// repermissioned or deleted, because the seed and the docs describe the app in
+/// terms of them. Custom roles have a null key and are fully editable.
+model Role {
+    id    String       @id @default(cuid())
+    orgId String
+    org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+    /// Set only for the built-in roles: "student", "faculty", "coordinator", "admin".
+    key         String?
+    name        String
+    description String?
+    /// Permission bitfield. Implications are applied at check time, not stored.
+    permissions BigInt  @default(0)
+    isSystem    Boolean @default(false)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    users UserRole[]
+
+    @@unique([orgId, name])
+    @@unique([orgId, key])
+    @@index([orgId])
+}
+
+model UserRole {
+    userId String
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    roleId String
+    role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+    assignedAt   DateTime @default(now())
+    assignedById String?
+
+    @@id([userId, roleId])
+    @@index([roleId])
 }
 
 model Account {

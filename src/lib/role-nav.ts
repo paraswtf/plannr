@@ -1,65 +1,87 @@
-import type { Role } from "./permissions";
+import {
+  PermissionBitField,
+  PermissionFlags as F,
+  type PermissionName,
+} from "./permissions";
 
 /**
- * Navigation and route access, in one place.
+ * Navigation and route access, driven by permissions rather than roles.
  *
+ * A person can hold several roles at once — teaching while also coordinating —
+ * so "which nav does a faculty member see?" is the wrong question. Each screen
+ * declares what it needs, and everyone sees the screens they can actually open.
  * The middleware, the sidebar and the post-login redirect all read from here,
- * so a route can never appear in the nav for a role that cannot open it.
+ * so a link can never appear for someone who would be bounced off it.
  */
 
 export interface NavItem {
   href: string;
   label: string;
   icon: string;
+  /** Any one of these is enough to reach the screen. */
+  requires: PermissionName[];
 }
 
-export const NAV: Record<Role, NavItem[]> = {
-  STUDENT: [
-    { href: "/today", label: "Today", icon: "home" },
-    { href: "/book", label: "Book a room", icon: "door" },
-    { href: "/timetable", label: "Timetable", icon: "grid" },
-  ],
-  FACULTY: [
-    { href: "/classes", label: "My classes", icon: "calendar" },
-    { href: "/book", label: "Book a room", icon: "door" },
-    { href: "/timetable", label: "Timetable", icon: "grid" },
-  ],
-  ADMIN: [
-    { href: "/timetable", label: "Timetable", icon: "grid" },
-    { href: "/rooms", label: "Rooms", icon: "door" },
-    { href: "/book", label: "Book a room", icon: "plus" },
-    { href: "/people", label: "People", icon: "users" },
-    { href: "/settings", label: "Settings", icon: "settings" },
-  ],
-};
-
-/** Where each role lands after signing in. */
-export const ROLE_HOME: Record<Role, string> = {
-  STUDENT: "/today",
-  FACULTY: "/classes",
-  ADMIN: "/timetable",
-};
-
-/** Which roles may open each app route prefix. */
-export const ROUTE_ACL: Array<{ prefix: string; roles: Role[] }> = [
-  { prefix: "/today", roles: ["STUDENT"] },
-  { prefix: "/classes", roles: ["FACULTY"] },
-  { prefix: "/book", roles: ["STUDENT", "FACULTY", "ADMIN"] },
-  { prefix: "/timetable", roles: ["STUDENT", "FACULTY", "ADMIN"] },
-  { prefix: "/rooms", roles: ["ADMIN"] },
-  { prefix: "/people", roles: ["ADMIN"] },
-  { prefix: "/settings", roles: ["ADMIN"] },
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/today", label: "Today", icon: "home", requires: ["ViewOwnEvents"] },
+  {
+    href: "/classes",
+    label: "My classes",
+    icon: "calendar",
+    requires: ["ManageOwnEvents"],
+  },
+  {
+    href: "/timetable",
+    label: "Timetable",
+    icon: "grid",
+    requires: ["ViewAllEvents"],
+  },
+  { href: "/rooms", label: "Rooms", icon: "door", requires: ["ViewRooms"] },
+  { href: "/book", label: "Book a room", icon: "plus", requires: ["BookRoom"] },
+  { href: "/people", label: "People", icon: "users", requires: ["ViewUsers"] },
+  {
+    href: "/groups",
+    label: "Groups",
+    icon: "layers",
+    requires: ["ViewGroups"],
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: "settings",
+    requires: ["ManageSettings"],
+  },
 ];
 
-/** True when `role` may open `pathname`. Unlisted paths are open. */
-export function canOpen(role: Role, pathname: string): boolean {
+/** Route prefixes that need a session, with what each one requires. */
+export const ROUTE_ACL: Array<{ prefix: string; requires: PermissionName[] }> =
+  NAV_ITEMS.map(({ href, requires }) => ({ prefix: href, requires }));
+
+const bitsFor = (permissions: bigint) => new PermissionBitField(permissions);
+
+/** The nav items this person can actually open, in display order. */
+export function navFor(permissions: bigint): NavItem[] {
+  const bits = bitsFor(permissions);
+  return NAV_ITEMS.filter((item) =>
+    item.requires.some((name) => bits.has(F[name])),
+  );
+}
+
+/** Where to land after signing in: the first screen they can open. */
+export function homeFor(permissions: bigint): string {
+  return navFor(permissions)[0]?.href ?? "/no-access";
+}
+
+/** May this person open `pathname`? Unlisted paths are open to any signed-in user. */
+export function canOpen(permissions: bigint, pathname: string): boolean {
   const rule = ROUTE_ACL.find(
     (r) => pathname === r.prefix || pathname.startsWith(`${r.prefix}/`),
   );
-  return rule ? rule.roles.includes(role) : true;
+  if (!rule) return true;
+  const bits = bitsFor(permissions);
+  return rule.requires.some((name) => bits.has(F[name]));
 }
 
-/** Route prefixes that require a session. */
 export const APP_PREFIXES = ROUTE_ACL.map((r) => r.prefix);
 
 export function isAppRoute(pathname: string): boolean {

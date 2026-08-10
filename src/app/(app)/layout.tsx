@@ -26,7 +26,8 @@ export default async function AppLayout({
   return (
     <HydrateClient>
       <AppShell
-        role={session.user.role}
+        permissions={session.user.permissions}
+        roleNames={session.user.roles.map((r) => r.name)}
         orgName={org?.name ?? "Plannr"}
         user={{
           name: session.user.name ?? null,

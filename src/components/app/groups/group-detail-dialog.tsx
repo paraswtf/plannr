@@ -1,0 +1,326 @@
+"use client";
+
+import { useState } from "react";
+
+import { Badge } from "~/components/ui/badge";
+import { Dialog } from "~/components/ui/dialog";
+import { Icon } from "~/components/ui/icon";
+import { Segmented } from "~/components/ui/segmented";
+import { api } from "~/trpc/react";
+
+/** Members, teaching staff, and deletion — everything about one group. */
+export function GroupDetailDialog({
+  groupId,
+  canManage,
+  onClose,
+}: {
+  groupId: string;
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const utils = api.useUtils();
+  const group = api.groups.byId.useQuery({ id: groupId });
+  const faculty = api.groups.facultyList.useQuery();
+
+  const [tab, setTab] = useState<"students" | "faculty" | "danger">("students");
+  const [paste, setPaste] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const refresh = async () => {
+    await utils.groups.invalidate();
+    setError(null);
+  };
+  const onError = (e: { message: string }) => setError(e.message);
+
+  const addMembers = api.groups.addMembers.useMutation({
+    onSuccess: async (r) => {
+      await refresh();
+      setPaste("");
+      setNotFound(r.notFound);
+      setResult(
+        `Added ${r.added.length}. ${r.alreadyMembers} already in the group.` +
+          (r.notFound.length ? ` ${r.notFound.length} not found.` : ""),
+      );
+    },
+    onError,
+  });
+  const removeMembers = api.groups.removeMembers.useMutation({
+    onSuccess: async (r) => {
+      await refresh();
+      setSelected(new Set());
+      setResult(`Removed ${r.removed}.`);
+    },
+    onError,
+  });
+  const setFaculty = api.groups.setFaculty.useMutation({
+    onSuccess: refresh,
+    onError,
+  });
+  const remove = api.groups.delete.useMutation({
+    onSuccess: async () => {
+      await refresh();
+      onClose();
+    },
+    onError,
+  });
+
+  const data = group.data;
+  const facultyIds = new Set(data?.faculty.map((f) => f.id) ?? []);
+
+  return (
+    <Dialog
+      open
+      title={data?.label ?? "Group"}
+      icon="layers"
+      width={660}
+      onClose={onClose}
+    >
+      {!data ? (
+        <p className="text-muted text-[13.5px]">Loading…</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="orange">{data.course.code}</Badge>
+            {data.term && <Badge tone="neutral">{data.term.name}</Badge>}
+            <Badge tone="green" dot>
+              {data.students.length} students
+            </Badge>
+            {data.eventCount > 0 && (
+              <Badge tone="slate">{data.eventCount} classes</Badge>
+            )}
+          </div>
+
+          <Segmented
+            items={[
+              { value: "students" as const, label: "Students" },
+              { value: "faculty" as const, label: "Faculty" },
+              ...(canManage
+                ? [{ value: "danger" as const, label: "Delete" }]
+                : []),
+            ]}
+            value={tab}
+            onChange={setTab}
+            size="sm"
+          />
+
+          {error && (
+            <div
+              className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
+              style={{
+                background: "rgba(220,56,72,0.07)",
+                boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
+              }}
+            >
+              {error}
+            </div>
+          )}
+          {result && (
+            <div
+              className="text-ink rounded-xl p-3 text-[12.5px]"
+              style={{
+                background: "rgba(68,88,121,0.07)",
+                boxShadow: "inset 0 0 0 1px var(--card-ring)",
+              }}
+            >
+              {result}
+              {notFound.length > 0 && (
+                <div className="mt-1.5 font-mono text-[11.5px] text-[#a2660f]">
+                  Not found: {notFound.slice(0, 8).join(", ")}
+                  {notFound.length > 8 && ` +${notFound.length - 8} more`}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "students" && (
+            <>
+              {canManage && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-ink text-[13px] font-semibold">
+                    Add students
+                  </span>
+                  <textarea
+                    value={paste}
+                    onChange={(e) => setPaste(e.target.value)}
+                    rows={3}
+                    placeholder="Paste emails or PRNs, one per line or comma separated"
+                    className="bg-surface w-full resize-y rounded-[10px] px-3 py-2 font-mono text-[12.5px] outline-none"
+                    style={{ boxShadow: "var(--ring)" }}
+                  />
+                  <button
+                    type="button"
+                    disabled={!paste.trim() || addMembers.isPending}
+                    onClick={() =>
+                      addMembers.mutate({
+                        groupId,
+                        identifiers: paste
+                          .split(/[\s,;]+/)
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    className="self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    style={{
+                      background: "var(--slate)",
+                      opacity: paste.trim() ? 1 : 0.5,
+                      cursor: paste.trim() ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Add to group
+                  </button>
+                </div>
+              )}
+
+              {canManage && selected.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeMembers.mutate({
+                      groupId,
+                      studentIds: [...selected],
+                    })
+                  }
+                  className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                  style={{ background: "var(--red)" }}
+                >
+                  <Icon name="trash" size={13} color="#fff" />
+                  Remove {selected.size} selected
+                </button>
+              )}
+
+              <div
+                className="plr-scroll max-h-[280px] overflow-y-auto rounded-[10px]"
+                style={{ boxShadow: "var(--ring)" }}
+              >
+                {data.students.length === 0 ? (
+                  <p className="text-muted p-4 text-[13px]">
+                    No students in this group yet.
+                  </p>
+                ) : (
+                  data.students.map((s) => (
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-3 px-3 py-2.5"
+                      style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)" }}
+                    >
+                      {canManage && (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(s.id)}
+                          onChange={() =>
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) next.delete(s.id);
+                              else next.add(s.id);
+                              return next;
+                            })
+                          }
+                        />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="text-title block truncate text-[13.5px] font-semibold">
+                          {s.name ?? s.email}
+                        </span>
+                        <span className="text-faint block truncate text-[12px]">
+                          {s.email}
+                        </span>
+                      </span>
+                      <span className="text-muted font-mono text-[12px]">
+                        {s.prn}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
+          {tab === "faculty" && (
+            <div className="flex flex-col gap-3">
+              <span className="text-muted text-[12.5px]">
+                Who teaches this group. Scheduling a class for them checks their
+                availability.
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(faculty.data ?? []).map((f) => {
+                  const on = facultyIds.has(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      disabled={!canManage}
+                      onClick={() => {
+                        const next = new Set(facultyIds);
+                        if (next.has(f.id)) next.delete(f.id);
+                        else next.add(f.id);
+                        setFaculty.mutate({
+                          groupId,
+                          facultyIds: [...next],
+                        });
+                      }}
+                      className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
+                      style={{
+                        background: on ? "var(--slate)" : "var(--surface)",
+                        color: on ? "#fff" : "var(--muted)",
+                        boxShadow: on ? "none" : "var(--ring)",
+                        cursor: canManage ? "pointer" : "default",
+                      }}
+                    >
+                      {f.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "danger" && canManage && (
+            <div
+              className="flex flex-col gap-3 rounded-xl p-4"
+              style={{
+                background: "rgba(220,56,72,0.05)",
+                boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.25)",
+              }}
+            >
+              <span className="text-[13.5px] font-bold text-[#b02636]">
+                Delete this group
+              </span>
+              <span className="text-ink text-[12.5px]">
+                {data.eventCount > 0 ? (
+                  <>
+                    This group has <b>{data.eventCount}</b> scheduled{" "}
+                    {data.eventCount === 1 ? "class" : "classes"}. Deleting it
+                    removes them from the timetable too.
+                  </>
+                ) : (
+                  <>
+                    It has no scheduled classes. Its {data.students.length}{" "}
+                    student {data.students.length === 1 ? "link" : "links"} will
+                    be removed; the people themselves stay.
+                  </>
+                )}
+              </span>
+              <button
+                type="button"
+                disabled={remove.isPending}
+                onClick={() =>
+                  confirmDelete
+                    ? remove.mutate({ id: groupId, confirmCascade: true })
+                    : setConfirmDelete(true)
+                }
+                className="cursor-pointer self-start rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white"
+                style={{ background: "var(--red)" }}
+              >
+                {confirmDelete ? `Yes, delete ${data.label}` : "Delete group"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </Dialog>
+  );
+}

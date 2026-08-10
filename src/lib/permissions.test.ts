@@ -1,146 +1,251 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALL_PERMISSIONS,
   canActOn,
-  effectivePermissions,
+  expandPermissions,
+  grants,
+  impliedPermissions,
   PermissionBitField,
-  PermissionFlags,
-  ROLE_DEFAULT_PERMISSIONS,
+  PermissionFlags as F,
+  PERMISSION_CATALOG,
+  PERMISSION_NAMES,
+  SYSTEM_ROLES,
   wouldLockSelfOut,
-  type Role,
 } from "./permissions";
 
-const user = (role: Role, permissions = 0n, id = "u1") => ({
-  id,
-  role,
-  permissions,
-});
+const roleByKey = (key: string) => SYSTEM_ROLES.find((r) => r.key === key)!;
 
-describe("effectivePermissions", () => {
-  it("gives a student view and self-booking only", () => {
-    const bits = new PermissionBitField(effectivePermissions(user("STUDENT")));
-    expect(bits.has(PermissionFlags.ViewTimetable)).toBe(true);
-    expect(bits.has(PermissionFlags.BookStudyRoom)).toBe(true);
-    expect(bits.has(PermissionFlags.ManageAllEvents)).toBe(false);
-    expect(bits.has(PermissionFlags.ManageUsers)).toBe(false);
+describe("permission implications", () => {
+  it("managing all events grants viewing all and own events", () => {
+    // The rule the whole model hangs on: a scheduler never has to be given
+    // "view" separately.
+    const bits = new PermissionBitField(F.ManageAllEvents);
+    expect(bits.has(F.ViewAllEvents)).toBe(true);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageOwnEvents)).toBe(true);
   });
 
-  it("lets faculty manage their own events but not everyone's", () => {
-    const bits = new PermissionBitField(effectivePermissions(user("FACULTY")));
-    expect(bits.has(PermissionFlags.ManageOwnEvents)).toBe(true);
-    expect(bits.has(PermissionFlags.RequestRoom)).toBe(true);
-    expect(bits.has(PermissionFlags.ManageAllEvents)).toBe(false);
-    expect(bits.has(PermissionFlags.ApproveBookings)).toBe(false);
+  it("viewing all events grants viewing own events but not managing", () => {
+    const bits = new PermissionBitField(F.ViewAllEvents);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageOwnEvents)).toBe(false);
+    expect(bits.has(F.ManageAllEvents)).toBe(false);
   });
 
-  it("unions per-user grants over the role defaults", () => {
-    const bits = new PermissionBitField(
-      effectivePermissions(user("FACULTY", PermissionFlags.ApproveBookings)),
+  it("managing own events does not leak into seeing everyone's", () => {
+    const bits = new PermissionBitField(F.ManageOwnEvents);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.ViewAllEvents)).toBe(false);
+  });
+
+  it("resolves a chain transitively", () => {
+    // ImportUsers → ManageUsers → ViewUsers, none of it spelled out directly.
+    const bits = new PermissionBitField(F.ImportUsers);
+    expect(bits.has(F.ManageUsers)).toBe(true);
+    expect(bits.has(F.ViewUsers)).toBe(true);
+  });
+
+  it("applies implications for rooms, groups and courses", () => {
+    expect(new PermissionBitField(F.ManageRooms).has(F.ViewRooms)).toBe(true);
+    expect(new PermissionBitField(F.ManageGroups).has(F.ViewGroups)).toBe(true);
+    expect(new PermissionBitField(F.ManageCourses).has(F.ViewGroups)).toBe(
+      true,
     );
-    expect(bits.has(PermissionFlags.ApproveBookings)).toBe(true);
-    // Still not a blanket admin.
-    expect(bits.has(PermissionFlags.ManageUsers)).toBe(false);
+    expect(new PermissionBitField(F.ApproveBookings).has(F.ViewAllEvents)).toBe(
+      true,
+    );
   });
 
-  it("treats Administrator as satisfying every flag", () => {
-    const bits = new PermissionBitField(effectivePermissions(user("ADMIN")));
-    for (const flag of Object.values(PermissionFlags)) {
-      expect(bits.has(flag)).toBe(true);
+  it("Administrator grants everything, including unknown future flags", () => {
+    const bits = new PermissionBitField(F.Administrator);
+    for (const name of PERMISSION_NAMES) {
+      expect(bits.has(F[name])).toBe(true);
     }
-    // Including a flag that does not exist yet.
-    expect(bits.has(1n << 40n)).toBe(true);
+    expect(bits.has(1n << 50n)).toBe(true);
+  });
+
+  it("expandPermissions is idempotent", () => {
+    const once = expandPermissions(F.ManageAllEvents);
+    expect(expandPermissions(once)).toBe(once);
+  });
+
+  it("grants nothing extra for an empty set", () => {
+    expect(expandPermissions(0n)).toBe(0n);
+    expect(new PermissionBitField(0n).has(F.ViewOwnEvents)).toBe(false);
   });
 });
 
-describe("PermissionBitField", () => {
-  it("add and remove return new fields without mutating", () => {
-    const base = new PermissionBitField(PermissionFlags.ViewTimetable);
-    const added = base.add(PermissionFlags.ManageRooms);
-
-    expect(added.has(PermissionFlags.ManageRooms)).toBe(true);
-    expect(base.has(PermissionFlags.ManageRooms)).toBe(false);
-    expect(
-      added
-        .remove(PermissionFlags.ManageRooms)
-        .has(PermissionFlags.ManageRooms),
-    ).toBe(false);
+describe("impliedPermissions", () => {
+  it("reports exactly the bits held only by implication", () => {
+    // What the editor should show ticked-but-locked.
+    const implied = impliedPermissions(F.ManageAllEvents);
+    expect((implied & F.ViewAllEvents) !== 0n).toBe(true);
+    expect((implied & F.ViewOwnEvents) !== 0n).toBe(true);
+    expect((implied & F.ManageOwnEvents) !== 0n).toBe(true);
+    // The flag actually chosen is not "implied".
+    expect((implied & F.ManageAllEvents) === 0n).toBe(true);
   });
 
-  it("hasAll requires every flag, hasAny requires one", () => {
-    const bits = new PermissionBitField(
-      PermissionFlags.ViewTimetable | PermissionFlags.ManageRooms,
-    );
-    expect(
-      bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageRooms),
-    ).toBe(true);
-    expect(
-      bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageUsers),
-    ).toBe(false);
-    expect(
-      bits.hasAny(PermissionFlags.ManageUsers, PermissionFlags.ManageRooms),
-    ).toBe(true);
-    expect(bits.hasAny(PermissionFlags.ManageUsers)).toBe(false);
+  it("is empty when a permission implies nothing", () => {
+    expect(impliedPermissions(F.ManageSettings)).toBe(0n);
   });
 
-  it("lists held flags by name", () => {
-    const bits = new PermissionBitField(ROLE_DEFAULT_PERMISSIONS.FACULTY);
-    expect(bits.toArray()).toEqual([
-      "ViewTimetable",
-      "BookStudyRoom",
-      "RequestRoom",
-      "ManageOwnEvents",
+  it("does not mark a bit implied when it was granted directly too", () => {
+    const implied = impliedPermissions(F.ManageAllEvents | F.ViewAllEvents);
+    expect((implied & F.ViewAllEvents) === 0n).toBe(true);
+  });
+});
+
+describe("grants", () => {
+  it("answers whether one permission covers another", () => {
+    expect(grants(F.ManageAllEvents, F.ViewOwnEvents)).toBe(true);
+    expect(grants(F.ViewOwnEvents, F.ManageAllEvents)).toBe(false);
+  });
+});
+
+describe("PermissionBitField.fromRoles", () => {
+  it("unions the permissions of every role held", () => {
+    const bits = PermissionBitField.fromRoles([
+      roleByKey("student"),
+      roleByKey("faculty"),
     ]);
+    expect(bits.has(F.BookRoom)).toBe(true);
+    expect(bits.has(F.ManageOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageAllEvents)).toBe(false);
+  });
+
+  it("lets a faculty member who is also a coordinator do both", () => {
+    // The combination the institution actually has: someone teaches and also
+    // runs the timetable.
+    const bits = PermissionBitField.fromRoles([
+      roleByKey("faculty"),
+      roleByKey("coordinator"),
+    ]);
+    expect(bits.has(F.ManageOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageAllEvents)).toBe(true);
+    expect(bits.has(F.ApproveBookings)).toBe(true);
+    expect(bits.has(F.ManageSettings)).toBe(false);
+  });
+
+  it("adds per-user grants on top of roles", () => {
+    const bits = PermissionBitField.fromRoles(
+      [roleByKey("faculty")],
+      F.ApproveBookings,
+    );
+    expect(bits.has(F.ApproveBookings)).toBe(true);
+    expect(bits.has(F.ManageUsers)).toBe(false);
+  });
+
+  it("gives an admin who also holds student everything", () => {
+    const bits = PermissionBitField.fromRoles([
+      roleByKey("student"),
+      roleByKey("admin"),
+    ]);
+    expect(bits.has(F.ManageSettings)).toBe(true);
+    expect(bits.effective).toBe(ALL_PERMISSIONS);
+  });
+
+  it("returns nothing for a user with no roles", () => {
+    expect(PermissionBitField.fromRoles([]).effective).toBe(0n);
+  });
+});
+
+describe("system roles", () => {
+  it("gives students their own events and nothing more", () => {
+    const bits = new PermissionBitField(roleByKey("student").permissions);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.BookRoom)).toBe(true);
+    expect(bits.has(F.ViewAllEvents)).toBe(false);
+    expect(bits.has(F.ManageUsers)).toBe(false);
+  });
+
+  it("lets faculty see the timetable and manage only their own classes", () => {
+    const bits = new PermissionBitField(roleByKey("faculty").permissions);
+    expect(bits.has(F.ViewAllEvents)).toBe(true);
+    expect(bits.has(F.ManageOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageAllEvents)).toBe(false);
+  });
+
+  it("lets coordinators schedule but not change institution settings", () => {
+    const bits = new PermissionBitField(roleByKey("coordinator").permissions);
+    expect(bits.has(F.ManageAllEvents)).toBe(true);
+    expect(bits.has(F.ApproveBookings)).toBe(true);
+    expect(bits.has(F.ManageGroups)).toBe(true);
+    expect(bits.has(F.ManageSettings)).toBe(false);
+    expect(bits.has(F.ManageRoles)).toBe(false);
+  });
+
+  it("covers every flag in the catalog", () => {
+    // A permission with no catalog entry would be invisible in the editor.
+    const documented = new Set(PERMISSION_CATALOG.map((p) => p.name));
+    for (const name of PERMISSION_NAMES) {
+      expect(documented.has(name)).toBe(true);
+    }
   });
 });
 
 describe("canActOn", () => {
-  const admin = user("ADMIN", 0n, "admin");
-  const otherAdmin = user("ADMIN", 0n, "admin2");
-  const faculty = user("FACULTY", 0n, "fac");
-  const student = user("STUDENT", 0n, "stu");
+  const admin = { id: "admin", permissions: F.Administrator };
+  const coordinator = {
+    id: "coord",
+    permissions: roleByKey("coordinator").permissions,
+  };
+  const faculty = { id: "fac", permissions: roleByKey("faculty").permissions };
+  const student = { id: "stu", permissions: roleByKey("student").permissions };
 
   it("refuses to act on yourself", () => {
     expect(canActOn(admin, admin)).toBe("SELF");
   });
 
-  it("requires ManageUsers", () => {
+  it("requires the manage-users permission", () => {
     expect(canActOn(faculty, student)).toBe("MISSING_MANAGE_USERS");
+    // A coordinator can only view people, not manage them.
+    expect(canActOn(coordinator, student)).toBe("MISSING_MANAGE_USERS");
   });
 
-  it("lets an admin act on lower-privilege users", () => {
+  it("lets an admin act on anyone below them", () => {
     expect(canActOn(admin, student)).toBeNull();
     expect(canActOn(admin, faculty)).toBeNull();
+    expect(canActOn(admin, coordinator)).toBeNull();
   });
 
-  it("blocks acting on a user holding permissions the actor lacks", () => {
-    const userManager = user("FACULTY", PermissionFlags.ManageUsers, "mgr");
-    const approver = user("FACULTY", PermissionFlags.ApproveBookings, "appr");
-    expect(canActOn(userManager, approver)).toBe("HIGHER_PRIVILEGE");
+  it("blocks acting on someone holding a permission the actor lacks", () => {
+    const userManager = { id: "mgr", permissions: F.ManageUsers };
+    const scheduler = {
+      id: "sch",
+      permissions: F.ManageUsers | F.ManageAllEvents,
+    };
+    expect(canActOn(userManager, scheduler)).toBe("HIGHER_PRIVILEGE");
+    expect(canActOn(scheduler, userManager)).toBeNull();
   });
 
-  it("allows an admin to act on another admin", () => {
-    // Both hold Administrator, so neither has bits the other lacks.
-    expect(canActOn(admin, otherAdmin)).toBeNull();
+  it("accounts for implied permissions when comparing privilege", () => {
+    // The target only holds ManageAllEvents, but that implies ViewAllEvents,
+    // which the actor lacks — so the actor still cannot touch them.
+    const actor = { id: "a", permissions: F.ManageUsers | F.ViewOwnEvents };
+    const target = { id: "b", permissions: F.ManageAllEvents };
+    expect(canActOn(actor, target)).toBe("HIGHER_PRIVILEGE");
+  });
+
+  it("allows two admins to act on each other", () => {
+    expect(
+      canActOn(admin, { id: "admin2", permissions: F.Administrator }),
+    ).toBeNull();
   });
 });
 
 describe("wouldLockSelfOut", () => {
-  const admin = user("ADMIN", 0n, "admin");
-
-  it("flags an admin demoting themselves below user management", () => {
-    expect(wouldLockSelfOut(admin, admin, "FACULTY", 0n)).toBe(true);
+  it("flags dropping your own ability to manage roles", () => {
+    expect(wouldLockSelfOut("me", "me", F.ManageUsers)).toBe(true);
   });
 
-  it("allows a self-change that keeps user management", () => {
-    expect(
-      wouldLockSelfOut(admin, admin, "FACULTY", PermissionFlags.ManageUsers),
-    ).toBe(false);
-    expect(wouldLockSelfOut(admin, admin, "ADMIN", 0n)).toBe(false);
+  it("allows a self-change that keeps role management", () => {
+    expect(wouldLockSelfOut("me", "me", F.ManageRoles)).toBe(false);
+    expect(wouldLockSelfOut("me", "me", F.Administrator)).toBe(false);
   });
 
   it("ignores changes to other people", () => {
-    expect(wouldLockSelfOut(admin, { id: "someone-else" }, "STUDENT", 0n)).toBe(
-      false,
-    );
+    expect(wouldLockSelfOut("me", "someone-else", 0n)).toBe(false);
   });
 });

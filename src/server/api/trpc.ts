@@ -133,11 +133,14 @@ export const protectedProcedure = t.procedure
     }
 
     const user = ctx.session.user;
+    // Already the union of every role held plus personal grants; the session
+    // callback did that against live data on this request.
+    const permissions = BigInt(user.permissions);
     const actor = {
       id: user.id,
       orgId: user.orgId,
-      role: user.role,
-      permissions: BigInt(user.permissions),
+      roles: user.roles,
+      permissions,
     };
 
     return next({
@@ -146,7 +149,7 @@ export const protectedProcedure = t.procedure
         session: { ...ctx.session, user },
         /** The acting user, plus their resolved permission bits. */
         actor,
-        bits: PermissionBitField.for(actor),
+        bits: new PermissionBitField(permissions),
         /** Every domain query filters by this. */
         orgId: user.orgId,
       },

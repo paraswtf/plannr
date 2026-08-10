@@ -4,25 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Icon, type IconName } from "~/components/ui/icon";
-import { NAV } from "~/lib/role-nav";
-import type { Role } from "~/lib/permissions";
+import { navFor } from "~/lib/role-nav";
 
 interface AppShellProps {
-  role: Role;
+  /** The user's permission bits, as a decimal string. */
+  permissions: string;
+  /** Every role held, shown under the institution name. */
+  roleNames: string[];
   user: { name: string | null; email: string; image: string | null };
   orgName: string;
   children: React.ReactNode;
 }
 
-const ROLE_LABEL: Record<Role, string> = {
-  STUDENT: "Student",
-  FACULTY: "Faculty",
-  ADMIN: "Admin",
-};
-
-export function AppShell({ role, user, orgName, children }: AppShellProps) {
+export function AppShell({
+  permissions,
+  roleNames,
+  user,
+  orgName,
+  children,
+}: AppShellProps) {
   const pathname = usePathname();
-  const items = NAV[role];
+  // Someone who teaches and coordinates sees the union of both, so the nav is
+  // derived from what they can do rather than from a single role.
+  const items = navFor(BigInt(permissions));
 
   return (
     <div className="flex min-h-screen">
@@ -57,7 +61,7 @@ export function AppShell({ role, user, orgName, children }: AppShellProps) {
               {orgName}
             </span>
             <span className="text-muted block truncate text-[11px]">
-              {ROLE_LABEL[role]}
+              {roleNames.length > 0 ? roleNames.join(" · ") : "No role"}
             </span>
           </span>
         </div>

@@ -10,10 +10,10 @@
 import {
   EventKind,
   PrismaClient,
-  Role,
   RoomFeature,
   RoomType,
 } from "../generated/prisma";
+import { SYSTEM_ROLES } from "../src/lib/permissions";
 import { fromWallTime, toWallTime } from "../src/lib/dates";
 import { buildRRule } from "../src/lib/recurrence";
 import { regenerateOccurrences } from "../src/server/services/occurrences";
@@ -54,16 +54,91 @@ const ROOMS: Array<{
   type: RoomType;
   features: RoomFeature[];
 }> = [
-  { code: "A-101", building: "Ashby Hall", floor: 1, capacity: 60, type: RoomType.LECTURE, features: [RoomFeature.PROJECTOR, RoomFeature.AC, RoomFeature.WHITEBOARD] },
-  { code: "A-102", building: "Ashby Hall", floor: 1, capacity: 45, type: RoomType.LECTURE, features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD] },
-  { code: "A-201", building: "Ashby Hall", floor: 2, capacity: 80, type: RoomType.LECTURE_HALL, features: [RoomFeature.PROJECTOR, RoomFeature.AC, RoomFeature.MIC] },
-  { code: "A-Lab1", building: "Ashby Hall", floor: 2, capacity: 30, type: RoomType.LAB, features: [RoomFeature.COMPUTERS, RoomFeature.PROJECTOR, RoomFeature.AC] },
-  { code: "K-301", building: "Kepler Building", floor: 3, capacity: 50, type: RoomType.LECTURE, features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD, RoomFeature.AC] },
-  { code: "K-302", building: "Kepler Building", floor: 3, capacity: 40, type: RoomType.SEMINAR, features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD] },
-  { code: "K-Lab2", building: "Kepler Building", floor: 2, capacity: 28, type: RoomType.LAB, features: [RoomFeature.COMPUTERS, RoomFeature.AC] },
-  { code: "K-Aud", building: "Kepler Building", floor: 1, capacity: 220, type: RoomType.AUDITORIUM, features: [RoomFeature.STAGE, RoomFeature.MIC, RoomFeature.PROJECTOR, RoomFeature.AC] },
-  { code: "T-105", building: "Turing Annexe", floor: 1, capacity: 35, type: RoomType.SEMINAR, features: [RoomFeature.WHITEBOARD, RoomFeature.TV] },
-  { code: "T-Studio", building: "Turing Annexe", floor: 2, capacity: 24, type: RoomType.STUDIO, features: [RoomFeature.WHITEBOARD, RoomFeature.TV, RoomFeature.AC] },
+  {
+    code: "A-101",
+    building: "Ashby Hall",
+    floor: 1,
+    capacity: 60,
+    type: RoomType.LECTURE,
+    features: [RoomFeature.PROJECTOR, RoomFeature.AC, RoomFeature.WHITEBOARD],
+  },
+  {
+    code: "A-102",
+    building: "Ashby Hall",
+    floor: 1,
+    capacity: 45,
+    type: RoomType.LECTURE,
+    features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD],
+  },
+  {
+    code: "A-201",
+    building: "Ashby Hall",
+    floor: 2,
+    capacity: 80,
+    type: RoomType.LECTURE_HALL,
+    features: [RoomFeature.PROJECTOR, RoomFeature.AC, RoomFeature.MIC],
+  },
+  {
+    code: "A-Lab1",
+    building: "Ashby Hall",
+    floor: 2,
+    capacity: 30,
+    type: RoomType.LAB,
+    features: [RoomFeature.COMPUTERS, RoomFeature.PROJECTOR, RoomFeature.AC],
+  },
+  {
+    code: "K-301",
+    building: "Kepler Building",
+    floor: 3,
+    capacity: 50,
+    type: RoomType.LECTURE,
+    features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD, RoomFeature.AC],
+  },
+  {
+    code: "K-302",
+    building: "Kepler Building",
+    floor: 3,
+    capacity: 40,
+    type: RoomType.SEMINAR,
+    features: [RoomFeature.PROJECTOR, RoomFeature.WHITEBOARD],
+  },
+  {
+    code: "K-Lab2",
+    building: "Kepler Building",
+    floor: 2,
+    capacity: 28,
+    type: RoomType.LAB,
+    features: [RoomFeature.COMPUTERS, RoomFeature.AC],
+  },
+  {
+    code: "K-Aud",
+    building: "Kepler Building",
+    floor: 1,
+    capacity: 220,
+    type: RoomType.AUDITORIUM,
+    features: [
+      RoomFeature.STAGE,
+      RoomFeature.MIC,
+      RoomFeature.PROJECTOR,
+      RoomFeature.AC,
+    ],
+  },
+  {
+    code: "T-105",
+    building: "Turing Annexe",
+    floor: 1,
+    capacity: 35,
+    type: RoomType.SEMINAR,
+    features: [RoomFeature.WHITEBOARD, RoomFeature.TV],
+  },
+  {
+    code: "T-Studio",
+    building: "Turing Annexe",
+    floor: 2,
+    capacity: 24,
+    type: RoomType.STUDIO,
+    features: [RoomFeature.WHITEBOARD, RoomFeature.TV, RoomFeature.AC],
+  },
 ];
 
 const COURSES = [
@@ -81,15 +156,64 @@ const GROUPS = [
   { name: "MSc-II", label: "M.Sc CS · Sem II", course: "M.Sc CS" },
 ];
 
-const FACULTY = [
-  { name: "Dr. Meera Rao", short: "Dr. Rao", dept: "Computer Science", groups: ["BCA-A"] },
-  { name: "Dr. S. Deshpande", short: "Dr. Deshpande", dept: "Computer Science", groups: ["BCA-A"] },
-  { name: "Ms. P. Joshi", short: "Ms. Joshi", dept: "Mathematics", groups: ["BCA-A", "BCom-I"] },
-  { name: "Ms. R. Walhekar", short: "Ms. Walhekar", dept: "Computer Science", groups: ["BCA-A"] },
-  { name: "Mr. N. Bose", short: "Mr. Bose", dept: "Computer Science", groups: ["BCA-B", "MSc-II"] },
-  { name: "Dr. L. Fernandes", short: "Dr. Fernandes", dept: "Commerce", groups: ["BCom-I", "BBAIT-IV"] },
-  { name: "Prof. A. Kulkarni", short: "Prof. Kulkarni", dept: "Management", groups: ["BBAIT-IV"] },
-  { name: "Dr. V. Iyer", short: "Dr. Iyer", dept: "Computer Science", groups: ["MSc-II"] },
+const FACULTY: Array<{
+  name: string;
+  short: string;
+  dept: string;
+  groups: string[];
+  extraRoles?: string[];
+}> = [
+  {
+    name: "Dr. Meera Rao",
+    short: "Dr. Rao",
+    dept: "Computer Science",
+    groups: ["BCA-A"],
+  },
+  {
+    name: "Dr. S. Deshpande",
+    short: "Dr. Deshpande",
+    dept: "Computer Science",
+    groups: ["BCA-A"],
+  },
+  {
+    name: "Ms. P. Joshi",
+    short: "Ms. Joshi",
+    dept: "Mathematics",
+    groups: ["BCA-A", "BCom-I"],
+  },
+  {
+    name: "Ms. R. Walhekar",
+    short: "Ms. Walhekar",
+    dept: "Computer Science",
+    groups: ["BCA-A"],
+  },
+  {
+    name: "Mr. N. Bose",
+    short: "Mr. Bose",
+    dept: "Computer Science",
+    groups: ["BCA-B", "MSc-II"],
+  },
+  {
+    name: "Dr. L. Fernandes",
+    short: "Dr. Fernandes",
+    dept: "Commerce",
+    groups: ["BCom-I", "BBAIT-IV"],
+  },
+  {
+    name: "Prof. A. Kulkarni",
+    short: "Prof. Kulkarni",
+    dept: "Management",
+    groups: ["BBAIT-IV"],
+  },
+  // Teaches and also runs the timetable — the multi-role case the permission
+  // model exists for.
+  {
+    name: "Dr. V. Iyer",
+    short: "Dr. Iyer",
+    dept: "Computer Science",
+    groups: ["MSc-II"],
+    extraRoles: ["coordinator"],
+  },
 ];
 
 const STUDENTS = [
@@ -115,24 +239,168 @@ const TIMETABLE: Array<{
   startHour: number;
   endHour: number;
 }> = [
-  { title: "Operating Systems", room: "A-201", group: "BCA-A", faculty: "Dr. Deshpande", weekday: 0, startHour: 10, endHour: 11.5 },
-  { title: "Database Systems", room: "K-301", group: "BCA-A", faculty: "Dr. Rao", weekday: 0, startHour: 11.5, endHour: 12.5 },
-  { title: "Accounting I", room: "A-101", group: "BCom-I", faculty: "Dr. Fernandes", weekday: 0, startHour: 9, endHour: 10 },
-  { title: "Programming Lab", room: "K-Lab2", group: "BCA-B", faculty: "Mr. Bose", weekday: 0, startHour: 9, endHour: 11 },
-  { title: "Discrete Maths", room: "A-102", group: "BCA-A", faculty: "Ms. Joshi", weekday: 1, startHour: 10.5, endHour: 11.5 },
-  { title: "Marketing", room: "A-201", group: "BBAIT-IV", faculty: "Prof. Kulkarni", weekday: 1, startHour: 11.5, endHour: 13 },
-  { title: "OS Lab · Batch 2", room: "A-Lab1", group: "BCA-A", faculty: "Dr. Deshpande", weekday: 1, startHour: 14, endHour: 16 },
-  { title: "Web Technologies", room: "K-302", group: "BCA-A", faculty: "Ms. Walhekar", weekday: 1, startHour: 9, endHour: 10 },
-  { title: "Design Studio", room: "T-Studio", group: "MSc-II", faculty: "Dr. Iyer", weekday: 1, startHour: 16, endHour: 17.5 },
-  { title: "Database Systems", room: "K-301", group: "BCA-A", faculty: "Dr. Rao", weekday: 2, startHour: 10, endHour: 11 },
-  { title: "Statistics", room: "A-201", group: "BCom-I", faculty: "Ms. Joshi", weekday: 2, startHour: 15, endHour: 16 },
-  { title: "Departmental Seminar", room: "K-Aud", group: "MSc-II", faculty: "Dr. Iyer", weekday: 2, startHour: 13, endHour: 15 },
-  { title: "Networks Lab", room: "K-Lab2", group: "MSc-II", faculty: "Mr. Bose", weekday: 3, startHour: 13, endHour: 15 },
-  { title: "Soft Skills", room: "T-105", group: "BCom-I", faculty: "Dr. Fernandes", weekday: 3, startHour: 10, endHour: 11 },
-  { title: "Web Technologies", room: "K-302", group: "BCA-A", faculty: "Ms. Walhekar", weekday: 3, startHour: 11, endHour: 12 },
-  { title: "Operating Systems", room: "A-201", group: "BCA-A", faculty: "Dr. Deshpande", weekday: 4, startHour: 9, endHour: 10.5 },
-  { title: "Project Studio", room: "A-Lab1", group: "MSc-II", faculty: "Dr. Iyer", weekday: 4, startHour: 14, endHour: 16 },
-  { title: "Weekly Assembly", room: "K-Aud", group: "BCA-A", faculty: "Dr. Iyer", weekday: 4, startHour: 12, endHour: 13 },
+  {
+    title: "Operating Systems",
+    room: "A-201",
+    group: "BCA-A",
+    faculty: "Dr. Deshpande",
+    weekday: 0,
+    startHour: 10,
+    endHour: 11.5,
+  },
+  {
+    title: "Database Systems",
+    room: "K-301",
+    group: "BCA-A",
+    faculty: "Dr. Rao",
+    weekday: 0,
+    startHour: 11.5,
+    endHour: 12.5,
+  },
+  {
+    title: "Accounting I",
+    room: "A-101",
+    group: "BCom-I",
+    faculty: "Dr. Fernandes",
+    weekday: 0,
+    startHour: 9,
+    endHour: 10,
+  },
+  {
+    title: "Programming Lab",
+    room: "K-Lab2",
+    group: "BCA-B",
+    faculty: "Mr. Bose",
+    weekday: 0,
+    startHour: 9,
+    endHour: 11,
+  },
+  {
+    title: "Discrete Maths",
+    room: "A-102",
+    group: "BCA-A",
+    faculty: "Ms. Joshi",
+    weekday: 1,
+    startHour: 10.5,
+    endHour: 11.5,
+  },
+  {
+    title: "Marketing",
+    room: "A-201",
+    group: "BBAIT-IV",
+    faculty: "Prof. Kulkarni",
+    weekday: 1,
+    startHour: 11.5,
+    endHour: 13,
+  },
+  {
+    title: "OS Lab · Batch 2",
+    room: "A-Lab1",
+    group: "BCA-A",
+    faculty: "Dr. Deshpande",
+    weekday: 1,
+    startHour: 14,
+    endHour: 16,
+  },
+  {
+    title: "Web Technologies",
+    room: "K-302",
+    group: "BCA-A",
+    faculty: "Ms. Walhekar",
+    weekday: 1,
+    startHour: 9,
+    endHour: 10,
+  },
+  {
+    title: "Design Studio",
+    room: "T-Studio",
+    group: "MSc-II",
+    faculty: "Dr. Iyer",
+    weekday: 1,
+    startHour: 16,
+    endHour: 17.5,
+  },
+  {
+    title: "Database Systems",
+    room: "K-301",
+    group: "BCA-A",
+    faculty: "Dr. Rao",
+    weekday: 2,
+    startHour: 10,
+    endHour: 11,
+  },
+  {
+    title: "Statistics",
+    room: "A-201",
+    group: "BCom-I",
+    faculty: "Ms. Joshi",
+    weekday: 2,
+    startHour: 15,
+    endHour: 16,
+  },
+  {
+    title: "Departmental Seminar",
+    room: "K-Aud",
+    group: "MSc-II",
+    faculty: "Dr. Iyer",
+    weekday: 2,
+    startHour: 13,
+    endHour: 15,
+  },
+  {
+    title: "Networks Lab",
+    room: "K-Lab2",
+    group: "MSc-II",
+    faculty: "Mr. Bose",
+    weekday: 3,
+    startHour: 13,
+    endHour: 15,
+  },
+  {
+    title: "Soft Skills",
+    room: "T-105",
+    group: "BCom-I",
+    faculty: "Dr. Fernandes",
+    weekday: 3,
+    startHour: 10,
+    endHour: 11,
+  },
+  {
+    title: "Web Technologies",
+    room: "K-302",
+    group: "BCA-A",
+    faculty: "Ms. Walhekar",
+    weekday: 3,
+    startHour: 11,
+    endHour: 12,
+  },
+  {
+    title: "Operating Systems",
+    room: "A-201",
+    group: "BCA-A",
+    faculty: "Dr. Deshpande",
+    weekday: 4,
+    startHour: 9,
+    endHour: 10.5,
+  },
+  {
+    title: "Project Studio",
+    room: "A-Lab1",
+    group: "MSc-II",
+    faculty: "Dr. Iyer",
+    weekday: 4,
+    startHour: 14,
+    endHour: 16,
+  },
+  {
+    title: "Weekly Assembly",
+    room: "K-Aud",
+    group: "BCA-A",
+    faculty: "Dr. Iyer",
+    weekday: 4,
+    startHour: 12,
+    endHour: 13,
+  },
 ];
 
 /** Turns a decimal hour (9.5) into an instant on the term's first week. */
@@ -176,6 +444,41 @@ async function main() {
   });
   console.log(`✓ organisation ${org.name}`);
 
+  // --- roles --------------------------------------------------------------
+  // Re-upserted every run, so the locked roles stay in step with the
+  // definitions in src/lib/permissions.ts.
+  const roleIds = new Map<string, string>();
+  for (const role of SYSTEM_ROLES) {
+    const row = await db.role.upsert({
+      where: { orgId_key: { orgId: org.id, key: role.key } },
+      update: {
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions,
+        isSystem: true,
+      },
+      create: {
+        orgId: org.id,
+        key: role.key,
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions,
+        isSystem: true,
+      },
+    });
+    roleIds.set(role.key, row.id);
+  }
+  console.log(`✓ ${roleIds.size} locked roles`);
+
+  /** Gives a user exactly the roles named, leaving others intact. */
+  const assignRole = async (userId: string, key: string) => {
+    await db.userRole.upsert({
+      where: { userId_roleId: { userId, roleId: roleIds.get(key)! } },
+      update: {},
+      create: { userId, roleId: roleIds.get(key)! },
+    });
+  };
+
   // --- admins -------------------------------------------------------------
   const adminEmails = (process.env.SEED_ADMIN_EMAILS ?? "")
     .split(",")
@@ -183,11 +486,12 @@ async function main() {
     .filter(Boolean);
 
   for (const email of adminEmails) {
-    await db.user.upsert({
+    const user = await db.user.upsert({
       where: { email },
-      update: { role: Role.ADMIN },
-      create: { email, orgId: org.id, role: Role.ADMIN, name: email.split("@")[0] },
+      update: {},
+      create: { email, orgId: org.id, name: email.split("@")[0] },
     });
+    await assignRole(user.id, "admin");
   }
   console.log(
     adminEmails.length
@@ -236,7 +540,13 @@ async function main() {
     TZ,
   );
   const termEnd = fromWallTime(
-    { ...TERM_START, day: TERM_START.day + TERM_WEEKS * 7, hour: 0, minute: 0, second: 0 },
+    {
+      ...TERM_START,
+      day: TERM_START.day + TERM_WEEKS * 7,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    },
     TZ,
   );
   // A stable name matters more than a descriptive one: groups are keyed to the
@@ -287,7 +597,9 @@ async function main() {
       }));
     groupIds.set(group.name, row.id);
   }
-  console.log(`✓ term ${term.name}, ${courseIds.size} courses, ${groupIds.size} groups`);
+  console.log(
+    `✓ term ${term.name}, ${courseIds.size} courses, ${groupIds.size} groups`,
+  );
 
   // --- people -------------------------------------------------------------
   const facultyIds = new Map<string, string>();
@@ -296,8 +608,12 @@ async function main() {
     const user = await db.user.upsert({
       where: { email },
       update: { name: person.name },
-      create: { email, name: person.name, orgId: org.id, role: Role.FACULTY },
+      create: { email, name: person.name, orgId: org.id },
     });
+    await assignRole(user.id, "faculty");
+    for (const extra of person.extraRoles ?? []) {
+      await assignRole(user.id, extra);
+    }
     const profile = await db.facultyProfile.upsert({
       where: { userId: user.id },
       update: { shortName: person.short, department: person.dept },
@@ -329,8 +645,9 @@ async function main() {
     const user = await db.user.upsert({
       where: { email },
       update: { name: person.name },
-      create: { email, name: person.name, orgId: org.id, role: Role.STUDENT },
+      create: { email, name: person.name, orgId: org.id },
     });
+    await assignRole(user.id, "student");
     const profile = await db.studentProfile.upsert({
       where: { userId: user.id },
       update: { prn: person.prn },
@@ -354,7 +671,9 @@ async function main() {
   // --- weekly timetable ---------------------------------------------------
   // Re-seeding replaces the demo classes rather than duplicating them. Scoped
   // to CLASS so real room bookings made through the app survive a re-seed.
-  await db.event.deleteMany({ where: { orgId: org.id, kind: EventKind.CLASS } });
+  await db.event.deleteMany({
+    where: { orgId: org.id, kind: EventKind.CLASS },
+  });
 
   const rrule = buildRRule({
     freq: "WEEKLY",
@@ -384,7 +703,9 @@ async function main() {
     await regenerateOccurrences(db, event.id);
   }
 
-  const occurrenceCount = await db.eventOccurrence.count({ where: { orgId: org.id } });
+  const occurrenceCount = await db.eventOccurrence.count({
+    where: { orgId: org.id },
+  });
   console.log(
     `✓ ${TIMETABLE.length} weekly classes → ${occurrenceCount} occurrences over ${TERM_WEEKS} weeks`,
   );

@@ -6,7 +6,6 @@ import GoogleProvider from "next-auth/providers/google";
 import { env } from "~/env";
 import { db } from "~/server/db";
 import { getOrgId } from "~/server/org";
-import type { Role } from "~/lib/permissions";
 
 /**
  * Module augmentation for `next-auth`. The session carries what authorisation
@@ -17,8 +16,13 @@ declare module "next-auth" {
     user: {
       id: string;
       orgId: string;
-      role: Role;
-      /** Extra permission bits, serialised as a decimal string for the client. */
+      /** Names of the roles held, for display. */
+      roles: Array<{ id: string; name: string; key: string | null }>;
+      /**
+       * Union of every role's bits plus personal grants, before implications
+       * are applied — serialised as a decimal string because BigInt does not
+       * survive JSON. Pass through `new PermissionBitField(...)` to check it.
+       */
       permissions: string;
       isActive: boolean;
     } & DefaultSession["user"];
@@ -43,6 +47,14 @@ function orgAwareAdapter(): Adapter {
     ...adapter,
     async createUser(user: AdapterUser) {
       const orgId = await getOrgId();
+      // Roles live in their own table, so "new users are students" is an
+      // explicit assignment rather than a column default. Someone with the
+      // people permission promotes them from there.
+      const student = await db.role.findUnique({
+        where: { orgId_key: { orgId, key: "student" } },
+        select: { id: true },
+      });
+
       return db.user.create({
         data: {
           id: user.id,
@@ -51,6 +63,7 @@ function orgAwareAdapter(): Adapter {
           emailVerified: user.emailVerified,
           image: user.image,
           orgId,
+          ...(student ? { roles: { create: { roleId: student.id } } } : {}),
         },
       });
     },
@@ -98,23 +111,39 @@ export const authConfig = {
         email?.endsWith(`@${domain}`),
       );
     },
-    session({ session, user }) {
-      // With the database strategy `user` is the freshly-read row, so role and
-      // permission changes are picked up without waiting for a token refresh.
+    async session({ session, user }) {
       const row = user as typeof user & {
         orgId: string;
-        role: Role;
         permissions: bigint;
         isActive: boolean;
       };
+
+      // Roles are a separate table, so the adapter's user row cannot carry
+      // them. With the database session strategy this runs per request against
+      // live data, which is what makes a role change take effect immediately.
+      const assignments = await db.userRole.findMany({
+        where: { userId: row.id },
+        select: {
+          role: {
+            select: { id: true, name: true, key: true, permissions: true },
+          },
+        },
+      });
+
+      const roles = assignments.map((a) => a.role);
+      const permissions = roles.reduce(
+        (bits, role) => bits | role.permissions,
+        row.permissions,
+      );
+
       return {
         ...session,
         user: {
           ...session.user,
           id: row.id,
           orgId: row.orgId,
-          role: row.role,
-          permissions: row.permissions.toString(),
+          roles: roles.map(({ id, name, key }) => ({ id, name, key })),
+          permissions: permissions.toString(),
           isActive: row.isActive,
         },
       };

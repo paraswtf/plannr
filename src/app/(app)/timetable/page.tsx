@@ -12,7 +12,7 @@ export default async function TimetablePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canOpen(session.user.role, "/timetable")) redirect("/");
+  if (!canOpen(BigInt(session.user.permissions), "/timetable")) redirect("/");
 
   const params = await searchParams;
   const date = params.date ? new Date(params.date) : new Date();
@@ -22,7 +22,7 @@ export default async function TimetablePage({
     <TimetableView
       initialDate={date.toISOString()}
       initial={initial}
-      role={session.user.role}
+      permissions={session.user.permissions}
     />
   );
 }
