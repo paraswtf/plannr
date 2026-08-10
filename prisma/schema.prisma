@@ -1,5 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Plannr — college timetable & room scheduling.
+//
+// Single tenant for now, but every domain table carries `orgId` and every
+// natural key is unique *within* an org, so adding tenants later is a matter of
+// resolving `orgId` from the session instead of a constant.
 
 generator client {
     provider = "prisma-client-js"
@@ -7,44 +10,169 @@ generator client {
 }
 
 datasource db {
-    provider = "postgresql"
-    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
-    // Further reading:
-    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
-    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
-    url      = env("DATABASE_URL")
+    provider  = "postgresql"
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum Role {
+    STUDENT
+    FACULTY
+    ADMIN
+}
+
+enum RoomType {
+    LECTURE
+    LECTURE_HALL
+    LAB
+    SEMINAR
+    AUDITORIUM
+    STUDIO
+    OTHER
+}
+
+enum RoomFeature {
+    PROJECTOR
+    COMPUTERS
+    AC
+    WHITEBOARD
+    MIC
+    TV
+    STAGE
+    SMART_BOARD
+}
+
+enum EventKind {
+    CLASS // timetabled class: a group taught by a faculty member
+    BOOKING // ad-hoc reservation: student study room or faculty request
+    BLOCK // room unavailable: maintenance, exams
+}
+
+enum EventStatus {
+    CONFIRMED
+    PENDING // student booking awaiting approval
+    REJECTED
+    CANCELLED // whole series cancelled; single occurrences use EventException
+}
+
+enum ExceptionType {
+    CANCELLED // occurrence skipped (iCal EXDATE)
+    MODIFIED // occurrence overridden (iCal RECURRENCE-ID)
+}
+
+enum EmailType {
+    BOOKING_CONFIRMED
+    BOOKING_CANCELLED
+    BOOKING_APPROVED
+    BOOKING_REJECTED
+}
+
+enum EmailStatus {
+    PENDING
+    SENT
+    FAILED
+}
+
+// ─── Tenancy ────────────────────────────────────────────────────────────────
+
+model Organization {
+    id        String   @id @default(cuid())
     name      String
+    slug      String   @unique
+    timezone  String   @default("Asia/Kolkata")
+    createdAt DateTime @default(now())
+
+    settings        OrgSettings?
+    users           User[]
+    buildings       Building[]
+    rooms           Room[]
+    terms           Term[]
+    courses         Course[]
+    groups          Group[]
+    events          Event[]
+    occurrences     EventOccurrence[]
+    studentProfiles StudentProfile[]
+    facultyProfiles FacultyProfile[]
+    importBatches   ImportBatch[]
+}
+
+model OrgSettings {
+    id    String       @id @default(cuid())
+    orgId String       @unique
+    org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+    /// Booking granularity in minutes (30 or 60). Drives grid snapping.
+    slotMinutes Int @default(60)
+    /// Working window as minutes from local midnight: 480 = 08:00, 1080 = 18:00.
+    dayStartMinutes Int @default(480)
+    dayEndMinutes   Int @default(1080)
+    /// ISO weekdays that are bookable: 1 = Monday … 7 = Sunday.
+    workingDays Int[] @default([1, 2, 3, 4, 5])
+
+    blockConflicts                 Boolean @default(true)
+    requireApprovalStudentBookings Boolean @default(true)
+    allowStudentSelfBooking        Boolean @default(true)
+    emailNotifications             Boolean @default(true)
+    maxStudentBookingMinutes       Int     @default(120)
+
+    activeTermId String?
+
+    updatedAt DateTime @updatedAt
+}
+
+// ─── Auth.js adapter tables + User ──────────────────────────────────────────
+
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    email         String    @unique // lowercased on write; multi-tenant: @@unique([orgId, email])
+    emailVerified DateTime?
+    image         String?
+
+    orgId String
+    org   Organization @relation(fields: [orgId], references: [id])
+
+    role Role @default(STUDENT)
+    /// Extra per-user permission bits OR'd over the role defaults. See src/lib/permissions.ts.
+    permissions        BigInt  @default(0)
+    isActive           Boolean @default(true)
+    emailNotifications Boolean @default(true)
+
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    createdBy   User   @relation(fields: [createdById], references: [id])
-    createdById String
+    accounts       Account[]
+    sessions       Session[]
+    studentProfile StudentProfile?
+    facultyProfile FacultyProfile?
+    createdEvents  Event[]         @relation("EventCreator")
+    importBatches  ImportBatch[]
+    outboxEntries  EmailOutbox[]
 
-    @@index([name])
+    @@index([orgId, role])
+    @@index([orgId, name])
 }
 
-// Necessary for Next auth
 model Account {
     id                       String  @id @default(cuid())
     userId                   String
     type                     String
     provider                 String
     providerAccountId        String
-    refresh_token            String? // @db.Text
-    access_token             String? // @db.Text
+    refresh_token            String?
+    access_token             String?
     expires_at               Int?
     token_type               String?
     scope                    String?
-    id_token                 String? // @db.Text
+    id_token                 String?
     session_state            String?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
     refresh_token_expires_in Int?
+    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
     @@unique([provider, providerAccountId])
+    @@index([userId])
 }
 
 model Session {
@@ -53,17 +181,8 @@ model Session {
     userId       String
     expires      DateTime
     user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
-model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
-    accounts      Account[]
-    sessions      Session[]
-    posts         Post[]
+    @@index([userId])
 }
 
 model VerificationToken {
@@ -72,4 +191,299 @@ model VerificationToken {
     expires    DateTime
 
     @@unique([identifier, token])
+}
+
+// ─── People ─────────────────────────────────────────────────────────────────
+
+model StudentProfile {
+    id     String       @id @default(cuid())
+    userId String       @unique
+    user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    orgId  String
+    org    Organization @relation(fields: [orgId], references: [id])
+
+    prn String
+
+    memberships StudentGroupMembership[]
+
+    @@unique([orgId, prn])
+    @@index([prn])
+}
+
+model FacultyProfile {
+    id     String       @id @default(cuid())
+    userId String       @unique
+    user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    orgId  String
+    org    Organization @relation(fields: [orgId], references: [id])
+
+    /// Short display name used on timetable cards, e.g. "Dr. Rao".
+    shortName  String?
+    department String?
+
+    assignments FacultyGroupAssignment[]
+    events      Event[]
+    occurrences EventOccurrence[]
+
+    @@index([orgId, department])
+}
+
+// ─── Spaces ─────────────────────────────────────────────────────────────────
+
+model Building {
+    id    String       @id @default(cuid())
+    orgId String
+    org   Organization @relation(fields: [orgId], references: [id])
+    name  String
+
+    rooms Room[]
+
+    @@unique([orgId, name])
+}
+
+model Room {
+    id         String       @id @default(cuid())
+    orgId      String
+    org        Organization @relation(fields: [orgId], references: [id])
+    /// Display code, e.g. "A-101".
+    code       String
+    buildingId String
+    building   Building     @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+
+    floor    Int
+    capacity Int
+    type     RoomType
+    features RoomFeature[]
+    isActive Boolean       @default(true)
+    notes    String?
+
+    events      Event[]
+    occurrences EventOccurrence[]
+
+    @@unique([orgId, code])
+    @@index([buildingId])
+    @@index([orgId, type, capacity])
+}
+
+// ─── Academic structure ─────────────────────────────────────────────────────
+
+model Term {
+    id        String       @id @default(cuid())
+    orgId     String
+    org       Organization @relation(fields: [orgId], references: [id])
+    name      String
+    startDate DateTime     @db.Date
+    endDate   DateTime     @db.Date
+
+    groups Group[]
+    events Event[]
+
+    @@unique([orgId, name])
+}
+
+model Course {
+    id     String       @id @default(cuid())
+    orgId  String
+    org    Organization @relation(fields: [orgId], references: [id])
+    code   String
+    name   String
+    groups Group[]
+
+    @@unique([orgId, code])
+}
+
+model Group {
+    id       String       @id @default(cuid())
+    orgId    String
+    org      Organization @relation(fields: [orgId], references: [id])
+    courseId String
+    course   Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+    termId   String?
+    term     Term?        @relation(fields: [termId], references: [id], onDelete: SetNull)
+
+    /// Section name, e.g. "BCA-A".
+    name  String
+    /// Display label including semester, e.g. "BCA-A · Sem III".
+    label String?
+
+    students    StudentGroupMembership[]
+    faculty     FacultyGroupAssignment[]
+    events      Event[]
+    occurrences EventOccurrence[]
+
+    @@unique([courseId, termId, name])
+    @@index([orgId])
+}
+
+model StudentGroupMembership {
+    studentId String
+    student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+    groupId   String
+    group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    addedAt   DateTime       @default(now())
+    addedById String?
+
+    @@id([studentId, groupId])
+    @@index([groupId])
+}
+
+model FacultyGroupAssignment {
+    facultyId String
+    faculty   FacultyProfile @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+    groupId   String
+    group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    addedAt   DateTime       @default(now())
+
+    @@id([facultyId, groupId])
+    @@index([groupId])
+}
+
+// ─── Events & recurrence ────────────────────────────────────────────────────
+
+model Event {
+    id     String       @id @default(cuid())
+    orgId  String
+    org    Organization @relation(fields: [orgId], references: [id])
+    kind   EventKind
+    status EventStatus  @default(CONFIRMED)
+    title  String
+
+    roomId    String
+    room      Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
+    groupId   String?
+    group     Group?          @relation(fields: [groupId], references: [id], onDelete: Restrict)
+    facultyId String?
+    faculty   FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+    termId    String?
+    term      Term?           @relation(fields: [termId], references: [id], onDelete: SetNull)
+
+    createdById String?
+    createdBy   User?   @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+    /// First occurrence as UTC instants — this is DTSTART plus a duration.
+    startTime DateTime
+    endTime   DateTime
+    /// IANA zone the recurrence is expressed in. Occurrences repeat at the same
+    /// *wall clock* time in this zone, not at a fixed UTC offset.
+    timezone  String  @default("Asia/Kolkata")
+    /// Bare RFC 5545 RRULE value with no DTSTART line, e.g.
+    /// "FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215T235959". Null means a one-off.
+    rrule     String?
+
+    notes     String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    exceptions  EventException[]
+    occurrences EventOccurrence[]
+
+    @@index([orgId, roomId])
+    @@index([groupId])
+    @@index([facultyId])
+    @@index([termId])
+    @@index([orgId, kind, status])
+}
+
+/// An override for one occurrence of a series, keyed by the occurrence's
+/// original start instant (iCal RECURRENCE-ID). Covers both "skip this one"
+/// (EXDATE) and "this one is different".
+model EventException {
+    id            String        @id @default(cuid())
+    eventId       String
+    event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+    originalStart DateTime
+    type          ExceptionType
+
+    // Overrides, only meaningful for MODIFIED. Null means "inherit from series".
+    newStartTime DateTime?
+    newEndTime   DateTime?
+    newRoomId    String?
+    newTitle     String?
+    newFacultyId String?
+
+    reason    String?
+    createdAt DateTime @default(now())
+
+    occurrence EventOccurrence?
+
+    @@unique([eventId, originalStart])
+}
+
+/// Materialised expansion of every Event. Rebuilt inside the same transaction
+/// as any write to its Event or that Event's exceptions, so readers never deal
+/// with recurrence rules. Every scheduling query hits this table alone.
+model EventOccurrence {
+    id      String       @id @default(cuid())
+    orgId   String
+    org     Organization @relation(fields: [orgId], references: [id])
+    eventId String
+    event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+    start DateTime
+    end   DateTime
+
+    // Effective values after any exception is applied, denormalised so the hot
+    // queries (grid, conflicts, availability) need no joins.
+    roomId    String
+    room      Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
+    groupId   String?
+    group     Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    facultyId String?
+    faculty   FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+    kind      EventKind
+    /// CANCELLED rows are kept so the UI can show a ghost and offer restore;
+    /// every scheduling query filters them out.
+    status    EventStatus
+
+    exceptionId String?         @unique
+    exception   EventException? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
+
+    @@index([roomId, start])
+    @@index([facultyId, start])
+    @@index([groupId, start])
+    @@index([orgId, start])
+    @@index([eventId])
+}
+
+// ─── Operations ─────────────────────────────────────────────────────────────
+
+/// Transactional outbox: rows are written in the same transaction as the
+/// booking they notify about, then dispatched after the response and swept by
+/// a cron retry. Guarantees at-least-once delivery with only Postgres.
+model EmailOutbox {
+    id      String @id @default(cuid())
+    toEmail String
+    userId  String?
+    user    User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+    type    EmailType
+    payload Json
+
+    status    EmailStatus @default(PENDING)
+    attempts  Int         @default(0)
+    lastError String?
+    createdAt DateTime    @default(now())
+    sentAt    DateTime?
+
+    @@index([status, createdAt])
+}
+
+/// Audit trail for CSV bulk imports.
+model ImportBatch {
+    id    String       @id @default(cuid())
+    orgId String
+    org   Organization @relation(fields: [orgId], references: [id])
+
+    createdById String?
+    createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+    fileName String?
+    created  Int
+    updated  Int
+    skipped  Int
+    errors   Json?
+
+    createdAt DateTime @default(now())
+
+    @@index([orgId, createdAt])
 }

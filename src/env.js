@@ -7,16 +7,39 @@ export const env = createEnv({
    * isn't built with invalid env vars.
    */
   server: {
-    AUTH_SECRET:
-      process.env.NODE_ENV === "production"
-        ? z.string()
-        : z.string().optional(),
-    AUTH_DISCORD_ID: z.string(),
-    AUTH_DISCORD_SECRET: z.string(),
-    DATABASE_URL: z.string().url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+
+    // --- Database ---
+    DATABASE_URL: z.string().url(),
+    // Unpooled connection used by `prisma migrate`. Falls back to DATABASE_URL locally.
+    DIRECT_URL: z.string().url().optional(),
+
+    // --- Auth ---
+    AUTH_SECRET:
+      process.env.NODE_ENV === "production"
+        ? z.string().min(32)
+        : z.string().optional(),
+    AUTH_GOOGLE_ID: z.string(),
+    AUTH_GOOGLE_SECRET: z.string(),
+    /** Google Workspace domain users must belong to, e.g. "sicsr.ac.in". */
+    GOOGLE_WORKSPACE_DOMAIN: z.string().min(1),
+    /** Comma-separated emails seeded as ADMIN so the first admin exists pre-login. */
+    SEED_ADMIN_EMAILS: z.string().optional(),
+
+    // --- Email ---
+    EMAIL_PROVIDER: z.enum(["resend", "smtp", "console"]).default("console"),
+    EMAIL_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
+    EMAIL_FROM: z.string().optional(),
+    RESEND_API_KEY: z.string().optional(),
+    SMTP_URL: z.string().optional(),
+
+    /** Bearer token guarding /api/cron/outbox. */
+    CRON_SECRET: z.string().min(16).optional(),
   },
 
   /**
@@ -25,7 +48,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
+    NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   },
 
   /**
@@ -33,11 +56,21 @@ export const env = createEnv({
    * middlewares) or client-side so we need to destruct manually.
    */
   runtimeEnv: {
-    AUTH_SECRET: process.env.AUTH_SECRET,
-    AUTH_DISCORD_ID: process.env.AUTH_DISCORD_ID,
-    AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
-    DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
+    DIRECT_URL: process.env.DIRECT_URL,
+    AUTH_SECRET: process.env.AUTH_SECRET,
+    AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
+    AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
+    GOOGLE_WORKSPACE_DOMAIN: process.env.GOOGLE_WORKSPACE_DOMAIN,
+    SEED_ADMIN_EMAILS: process.env.SEED_ADMIN_EMAILS,
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+    EMAIL_ENABLED: process.env.EMAIL_ENABLED,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    SMTP_URL: process.env.SMTP_URL,
+    CRON_SECRET: process.env.CRON_SECRET,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
