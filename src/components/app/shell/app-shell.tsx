@@ -27,7 +27,7 @@ export function AppShell({ role, user, orgName, children }: AppShellProps) {
   return (
     <div className="flex min-h-screen">
       <aside
-        className="sticky top-0 flex h-screen w-[244px] shrink-0 flex-col gap-1 bg-[var(--surface)] px-4 py-6"
+        className="bg-surface sticky top-0 flex h-screen w-[244px] shrink-0 flex-col gap-1 px-4 py-6"
         style={{ boxShadow: "inset -1px 0 0 var(--hair)" }}
       >
         <Link href="/" className="mb-7 flex items-center gap-2.5 px-2">
@@ -37,7 +37,7 @@ export function AppShell({ role, user, orgName, children }: AppShellProps) {
           >
             P
           </span>
-          <span className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-0.02em] text-[var(--app-title)]">
+          <span className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
             Plannr
           </span>
         </Link>
@@ -53,10 +53,10 @@ export function AppShell({ role, user, orgName, children }: AppShellProps) {
             <Icon name="building" size={16} color="var(--slate)" stroke={2} />
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-[family-name:var(--font-display)] text-[13.5px] font-bold text-[var(--app-title)]">
+            <span className="font-display text-title block truncate text-[13.5px] font-bold">
               {orgName}
             </span>
-            <span className="block truncate text-[11px] text-[var(--muted)]">
+            <span className="text-muted block truncate text-[11px]">
               {ROLE_LABEL[role]}
             </span>
           </span>
@@ -103,10 +103,10 @@ export function AppShell({ role, user, orgName, children }: AppShellProps) {
             {(user.name ?? user.email).charAt(0).toUpperCase()}
           </span>
           <span className="mt-4 min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold text-[var(--app-title)]">
+            <span className="text-title block truncate text-[13px] font-semibold">
               {user.name ?? user.email}
             </span>
-            <span className="block truncate text-[11px] text-[var(--faint)]">
+            <span className="text-faint block truncate text-[11px]">
               {user.email}
             </span>
           </span>

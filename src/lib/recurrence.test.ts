@@ -194,7 +194,12 @@ describe("validateRRule", () => {
 describe("buildRRule", () => {
   it("builds a weekly rule with weekdays and a count", () => {
     expect(
-      buildRRule({ freq: "WEEKLY", byWeekday: [1, 3], count: 10, timeZone: IST }),
+      buildRRule({
+        freq: "WEEKLY",
+        byWeekday: [1, 3],
+        count: 10,
+        timeZone: IST,
+      }),
     ).toBe("FREQ=WEEKLY;BYDAY=TU,TH;COUNT=10");
   });
 
@@ -203,18 +208,18 @@ describe("buildRRule", () => {
       { year: 2026, month: 12, day: 15, hour: 23, minute: 59, second: 59 },
       IST,
     );
-    expect(buildRRule({ freq: "WEEKLY", byWeekday: [0], until, timeZone: IST })).toBe(
-      "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261215T235959",
-    );
+    expect(
+      buildRRule({ freq: "WEEKLY", byWeekday: [0], until, timeZone: IST }),
+    ).toBe("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261215T235959");
   });
 
   it("omits INTERVAL when it is 1", () => {
-    expect(buildRRule({ freq: "DAILY", interval: 1, count: 3, timeZone: IST })).toBe(
-      "FREQ=DAILY;COUNT=3",
-    );
-    expect(buildRRule({ freq: "DAILY", interval: 2, count: 3, timeZone: IST })).toBe(
-      "FREQ=DAILY;INTERVAL=2;COUNT=3",
-    );
+    expect(
+      buildRRule({ freq: "DAILY", interval: 1, count: 3, timeZone: IST }),
+    ).toBe("FREQ=DAILY;COUNT=3");
+    expect(
+      buildRRule({ freq: "DAILY", interval: 2, count: 3, timeZone: IST }),
+    ).toBe("FREQ=DAILY;INTERVAL=2;COUNT=3");
   });
 
   it("round-trips through expandSeries", () => {
@@ -250,7 +255,9 @@ describe("setUntil", () => {
       { year: 2026, month: 11, day: 3, hour: 8, minute: 0, second: 0 },
       IST,
     );
-    expect(setUntil("FREQ=WEEKLY;BYDAY=TU;COUNT=8", pivot, IST)).not.toMatch(/COUNT/);
+    expect(setUntil("FREQ=WEEKLY;BYDAY=TU;COUNT=8", pivot, IST)).not.toMatch(
+      /COUNT/,
+    );
   });
 });
 

@@ -117,14 +117,17 @@ export async function findNextFreeSlot(
 
   for (let dayOffset = 0; dayOffset <= maxDays; dayOffset++) {
     const anchor =
-      dayOffset === 0 ? query.after : addDays(startOfLocalDay(query.after, timeZone), dayOffset, timeZone);
+      dayOffset === 0
+        ? query.after
+        : addDays(startOfLocalDay(query.after, timeZone), dayOffset, timeZone);
 
     if (!settings.workingDays.includes(isoWeekday(anchor, timeZone))) continue;
 
     const dayOpen = localTimeOnDay(anchor, settings.dayStartMinutes, timeZone);
     const dayClose = localTimeOnDay(anchor, settings.dayEndMinutes, timeZone);
     // On the first day, never suggest a slot in the past.
-    const windowStart = dayOffset === 0 && query.after > dayOpen ? query.after : dayOpen;
+    const windowStart =
+      dayOffset === 0 && query.after > dayOpen ? query.after : dayOpen;
     if (windowStart >= dayClose) continue;
 
     const busy = await db.eventOccurrence.findMany({
@@ -134,7 +137,9 @@ export async function findNextFreeSlot(
         status: { in: [...OCCUPYING_STATUSES] },
         start: { lt: dayClose },
         end: { gt: windowStart },
-        ...(query.ignoreEventId ? { eventId: { not: query.ignoreEventId } } : {}),
+        ...(query.ignoreEventId
+          ? { eventId: { not: query.ignoreEventId } }
+          : {}),
       },
       select: { start: true, end: true },
       orderBy: { start: "asc" },

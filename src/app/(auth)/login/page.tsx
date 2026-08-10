@@ -30,7 +30,7 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
       <div
-        className="w-full max-w-[420px] rounded-[var(--radius-card)] bg-[var(--surface)] p-10"
+        className="bg-surface w-full max-w-[420px] rounded-[var(--radius-card)] p-10"
         style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
       >
         <div
@@ -40,10 +40,10 @@ export default async function LoginPage({
           P
         </div>
 
-        <h1 className="font-[family-name:var(--font-display)] text-[30px] leading-tight font-bold tracking-[-0.02em] text-[var(--app-title)]">
+        <h1 className="font-display text-title text-[30px] leading-tight font-bold tracking-[-0.02em]">
           Sign in to Plannr
         </h1>
-        <p className="mt-2 text-[14.5px] text-[var(--muted)]">
+        <p className="text-muted mt-2 text-[14.5px]">
           Timetables, room bookings and clash-free scheduling for the whole
           campus.
         </p>
@@ -79,7 +79,7 @@ export default async function LoginPage({
           </button>
         </form>
 
-        <p className="mt-6 text-center font-[family-name:var(--font-mono)] text-[11.5px] text-[var(--faint)]">
+        <p className="text-faint mt-6 text-center font-mono text-[11.5px]">
           @{env.GOOGLE_WORKSPACE_DOMAIN} accounts only
         </p>
       </div>

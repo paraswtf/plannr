@@ -16,11 +16,11 @@ export function PageHeader({
       }}
     >
       <div className="min-w-0">
-        <h1 className="font-[family-name:var(--font-display)] text-[26px] leading-tight font-bold tracking-[-0.02em] text-[var(--app-title)]">
+        <h1 className="font-display text-title text-[26px] leading-tight font-bold tracking-[-0.02em]">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-0.5 text-[13.5px] text-[var(--muted)]">{subtitle}</p>
+          <p className="text-muted mt-0.5 text-[13.5px]">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2.5">{actions}</div>}

@@ -94,8 +94,8 @@ export const authConfig = {
       // address as well guards against a provider quirk in either direction.
       return Boolean(
         google?.email_verified === true &&
-          google.hd?.toLowerCase() === domain &&
-          email?.endsWith(`@${domain}`),
+        google.hd?.toLowerCase() === domain &&
+        email?.endsWith(`@${domain}`),
       );
     },
     session({ session, user }) {

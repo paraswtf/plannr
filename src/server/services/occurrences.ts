@@ -10,7 +10,11 @@
  * 500 occurrences, so correctness is worth more than the saved writes.
  */
 
-import type { EventStatus, Prisma, PrismaClient } from "../../../generated/prisma";
+import type {
+  EventStatus,
+  Prisma,
+  PrismaClient,
+} from "../../../generated/prisma";
 import { ExceptionType } from "../../../generated/prisma";
 
 import { expandSeries, setUntil } from "~/lib/recurrence";
@@ -40,7 +44,8 @@ export async function regenerateOccurrences(
     where: { id: eventId },
     include: { exceptions: true },
   });
-  if (!event) throw new Error(`Cannot regenerate occurrences: no event ${eventId}`);
+  if (!event)
+    throw new Error(`Cannot regenerate occurrences: no event ${eventId}`);
 
   const natural = expandSeries({
     startTime: event.startTime,

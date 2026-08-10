@@ -54,8 +54,18 @@ describe("overlaps", () => {
 
 describe("intersectOccurrences", () => {
   it("returns nothing when either side is empty", () => {
-    expect(intersectOccurrences([], [slot("2026-10-13T09:00Z", "2026-10-13T10:00Z")])).toEqual([]);
-    expect(intersectOccurrences([slot("2026-10-13T09:00Z", "2026-10-13T10:00Z")], [])).toEqual([]);
+    expect(
+      intersectOccurrences(
+        [],
+        [slot("2026-10-13T09:00Z", "2026-10-13T10:00Z")],
+      ),
+    ).toEqual([]);
+    expect(
+      intersectOccurrences(
+        [slot("2026-10-13T09:00Z", "2026-10-13T10:00Z")],
+        [],
+      ),
+    ).toEqual([]);
   });
 
   it("matches only the clashing weeks of a recurring candidate", () => {
@@ -72,7 +82,9 @@ describe("intersectOccurrences", () => {
     const hits = intersectOccurrences(candidates, existing);
     expect(hits).toHaveLength(1);
     expect(hits[0]!.existing.id).toBe("a");
-    expect(hits[0]!.candidate.start.toISOString()).toBe("2026-10-20T09:00:00.000Z");
+    expect(hits[0]!.candidate.start.toISOString()).toBe(
+      "2026-10-20T09:00:00.000Z",
+    );
   });
 
   it("reports every clashing pair when one candidate spans several bookings", () => {
@@ -94,7 +106,9 @@ describe("intersectOccurrences", () => {
       slot("2026-10-13T09:00Z", "2026-10-13T10:00Z"),
       slot("2026-10-13T11:00Z", "2026-10-13T12:00Z"),
     ];
-    const existing = [{ id: "long", ...slot("2026-10-13T08:00Z", "2026-10-13T18:00Z") }];
+    const existing = [
+      { id: "long", ...slot("2026-10-13T08:00Z", "2026-10-13T18:00Z") },
+    ];
 
     const hits = intersectOccurrences(candidates, existing);
     expect(hits).toHaveLength(2);

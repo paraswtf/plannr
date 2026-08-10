@@ -67,7 +67,8 @@ function fromFakeUtc(fake: Date, timeZone: string): Date {
 }
 
 function buildRule(event: RecurringEventInput): InstanceType<typeof RRule> {
-  if (!event.rrule) throw new Error("buildRule called on a non-recurring event");
+  if (!event.rrule)
+    throw new Error("buildRule called on a non-recurring event");
   // The stored string carries no DTSTART; it comes from the event's columns.
   return new RRule({
     ...RRule.parseString(event.rrule),
@@ -122,8 +123,7 @@ export function expandSeries(
 }
 
 export type RRuleValidation =
-  | { ok: true; count: number }
-  | { ok: false; error: string };
+  { ok: true; count: number } | { ok: false; error: string };
 
 /**
  * Checks a rule is parseable and *bounded*. Unbounded series are rejected
@@ -150,7 +150,8 @@ export function validateRRule(
   if (!options.until && !options.count) {
     return {
       ok: false,
-      error: "A repeating event must end — set an end date (UNTIL) or a number of occurrences (COUNT).",
+      error:
+        "A repeating event must end — set an end date (UNTIL) or a number of occurrences (COUNT).",
     };
   }
 
@@ -199,7 +200,10 @@ export function setUntil(rrule: string, until: Date, timeZone: string): string {
 
   const rule = new RRule({ ...options, dtstart: options.until });
   // `toString` emits "RRULE:FREQ=..."; we store the bare value.
-  return rule.toString().replace(/^RRULE:/, "").replace(/DTSTART[^;\n]*[;\n]?/, "");
+  return rule
+    .toString()
+    .replace(/^RRULE:/, "")
+    .replace(/DTSTART[^;\n]*[;\n]?/, "");
 }
 
 /** Builds a bare RRULE value from the pieces the recurrence editor collects. */
@@ -212,7 +216,8 @@ export function buildRRule(input: {
   timeZone: string;
 }): string {
   const parts: string[] = [`FREQ=${input.freq}`];
-  if (input.interval && input.interval > 1) parts.push(`INTERVAL=${input.interval}`);
+  if (input.interval && input.interval > 1)
+    parts.push(`INTERVAL=${input.interval}`);
   if (input.byWeekday?.length) {
     const codes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
     parts.push(`BYDAY=${input.byWeekday.map((d) => codes[d]).join(",")}`);

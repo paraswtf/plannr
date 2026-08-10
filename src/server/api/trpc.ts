@@ -175,4 +175,6 @@ export const permissionProcedure = (...required: bigint[]) =>
   });
 
 /** Convenience for the admin-only console procedures. */
-export const adminProcedure = permissionProcedure(PermissionFlags.Administrator);
+export const adminProcedure = permissionProcedure(
+  PermissionFlags.Administrator,
+);

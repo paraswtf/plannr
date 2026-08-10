@@ -41,13 +41,27 @@ export const roomsRouter = createTRPCRouter({
           ...(input.includeInactive ? {} : { isActive: true }),
           ...(input.buildingId ? { buildingId: input.buildingId } : {}),
           ...(input.type ? { type: input.type } : {}),
-          ...(input.minCapacity ? { capacity: { gte: input.minCapacity } } : {}),
-          ...(input.features?.length ? { features: { hasEvery: input.features } } : {}),
+          ...(input.minCapacity
+            ? { capacity: { gte: input.minCapacity } }
+            : {}),
+          ...(input.features?.length
+            ? { features: { hasEvery: input.features } }
+            : {}),
           ...(input.query
             ? {
                 OR: [
-                  { code: { contains: input.query, mode: "insensitive" as const } },
-                  { notes: { contains: input.query, mode: "insensitive" as const } },
+                  {
+                    code: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    notes: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
+                    },
+                  },
                 ],
               }
             : {}),
@@ -85,8 +99,12 @@ export const roomsRouter = createTRPCRouter({
           isActive: true,
           ...(input.buildingId ? { buildingId: input.buildingId } : {}),
           ...(input.type ? { type: input.type } : {}),
-          ...(input.minCapacity ? { capacity: { gte: input.minCapacity } } : {}),
-          ...(input.features?.length ? { features: { hasEvery: input.features } } : {}),
+          ...(input.minCapacity
+            ? { capacity: { gte: input.minCapacity } }
+            : {}),
+          ...(input.features?.length
+            ? { features: { hasEvery: input.features } }
+            : {}),
           occurrences: {
             none: {
               status: { in: [...OCCUPYING_STATUSES] },
@@ -106,7 +124,11 @@ export const roomsRouter = createTRPCRouter({
       z.object({
         roomId: z.string().cuid(),
         after: z.date(),
-        durationMinutes: z.number().int().min(15).max(12 * 60),
+        durationMinutes: z
+          .number()
+          .int()
+          .min(15)
+          .max(12 * 60),
         ignoreEventId: z.string().cuid().optional(),
       }),
     )
@@ -178,7 +200,9 @@ export const roomsRouter = createTRPCRouter({
     }),
 
   delete: permissionProcedure(PermissionFlags.ManageRooms)
-    .input(z.object({ id: z.string().cuid(), force: z.boolean().default(false) }))
+    .input(
+      z.object({ id: z.string().cuid(), force: z.boolean().default(false) }),
+    )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
         const room = await tx.room.findFirst({
@@ -222,7 +246,9 @@ export const buildingsRouter = createTRPCRouter({
     }),
 
   update: permissionProcedure(PermissionFlags.ManageRooms)
-    .input(z.object({ id: z.string().cuid(), name: z.string().min(1).max(120) }))
+    .input(
+      z.object({ id: z.string().cuid(), name: z.string().min(1).max(120) }),
+    )
     .mutation(async ({ ctx, input }) => {
       await ctx.db.building.updateMany({
         where: { id: input.id, orgId: ctx.orgId },
@@ -234,7 +260,9 @@ export const buildingsRouter = createTRPCRouter({
   delete: permissionProcedure(PermissionFlags.ManageRooms)
     .input(z.object({ id: z.string().cuid() }))
     .mutation(async ({ ctx, input }) => {
-      const rooms = await ctx.db.room.count({ where: { buildingId: input.id } });
+      const rooms = await ctx.db.room.count({
+        where: { buildingId: input.id },
+      });
       if (rooms > 0) {
         throw new Error(
           `This building still has ${rooms} room(s). Move or delete them first.`,

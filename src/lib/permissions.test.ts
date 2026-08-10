@@ -59,16 +59,26 @@ describe("PermissionBitField", () => {
 
     expect(added.has(PermissionFlags.ManageRooms)).toBe(true);
     expect(base.has(PermissionFlags.ManageRooms)).toBe(false);
-    expect(added.remove(PermissionFlags.ManageRooms).has(PermissionFlags.ManageRooms)).toBe(false);
+    expect(
+      added
+        .remove(PermissionFlags.ManageRooms)
+        .has(PermissionFlags.ManageRooms),
+    ).toBe(false);
   });
 
   it("hasAll requires every flag, hasAny requires one", () => {
     const bits = new PermissionBitField(
       PermissionFlags.ViewTimetable | PermissionFlags.ManageRooms,
     );
-    expect(bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageRooms)).toBe(true);
-    expect(bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageUsers)).toBe(false);
-    expect(bits.hasAny(PermissionFlags.ManageUsers, PermissionFlags.ManageRooms)).toBe(true);
+    expect(
+      bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageRooms),
+    ).toBe(true);
+    expect(
+      bits.hasAll(PermissionFlags.ViewTimetable, PermissionFlags.ManageUsers),
+    ).toBe(false);
+    expect(
+      bits.hasAny(PermissionFlags.ManageUsers, PermissionFlags.ManageRooms),
+    ).toBe(true);
     expect(bits.hasAny(PermissionFlags.ManageUsers)).toBe(false);
   });
 
@@ -129,6 +139,8 @@ describe("wouldLockSelfOut", () => {
   });
 
   it("ignores changes to other people", () => {
-    expect(wouldLockSelfOut(admin, { id: "someone-else" }, "STUDENT", 0n)).toBe(false);
+    expect(wouldLockSelfOut(admin, { id: "someone-else" }, "STUDENT", 0n)).toBe(
+      false,
+    );
   });
 });

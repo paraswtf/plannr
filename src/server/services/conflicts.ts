@@ -146,7 +146,9 @@ export async function checkConflicts(
     slots[0]!.end,
   );
 
-  const dimensions: Array<Record<string, string>> = [{ roomId: candidate.roomId }];
+  const dimensions: Array<Record<string, string>> = [
+    { roomId: candidate.roomId },
+  ];
   if (candidate.facultyId) dimensions.push({ facultyId: candidate.facultyId });
   if (candidate.groupId) dimensions.push({ groupId: candidate.groupId });
 
@@ -156,7 +158,9 @@ export async function checkConflicts(
       status: { in: [...OCCUPYING_STATUSES] },
       start: { lt: windowEnd },
       end: { gt: windowStart },
-      ...(candidate.excludeEventId ? { eventId: { not: candidate.excludeEventId } } : {}),
+      ...(candidate.excludeEventId
+        ? { eventId: { not: candidate.excludeEventId } }
+        : {}),
       ...(candidate.excludeOccurrenceIds?.length
         ? { id: { notIn: candidate.excludeOccurrenceIds } }
         : {}),
@@ -167,11 +171,15 @@ export async function checkConflicts(
       event: { select: { title: true } },
       room: { select: { code: true } },
       group: { select: { label: true, name: true } },
-      faculty: { select: { shortName: true, user: { select: { name: true } } } },
+      faculty: {
+        select: { shortName: true, user: { select: { name: true } } },
+      },
     },
   });
 
-  const sortedSlots = [...slots].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const sortedSlots = [...slots].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
   const hits = intersectOccurrences(sortedSlots, existing);
 
   const conflicts: Conflict[] = [];

@@ -44,7 +44,11 @@ type OccurrenceRow = {
   event: { title: string; rrule: string | null; notes: string | null };
   room: { code: string; buildingId: string };
   group: { id: string; name: string; label: string | null } | null;
-  faculty: { id: string; shortName: string | null; user: { name: string | null } } | null;
+  faculty: {
+    id: string;
+    shortName: string | null;
+    user: { name: string | null };
+  } | null;
 };
 
 function toDto(row: OccurrenceRow) {
@@ -111,7 +115,9 @@ export const timetableRouter = createTRPCRouter({
             ...(input.includeCancelled
               ? {}
               : { status: { in: [...OCCUPYING_STATUSES] } }),
-            ...(input.buildingId ? { room: { buildingId: input.buildingId } } : {}),
+            ...(input.buildingId
+              ? { room: { buildingId: input.buildingId } }
+              : {}),
           },
           select: selectOccurrence,
           orderBy: { start: "asc" },

@@ -31,16 +31,17 @@ export const PermissionFlags = {
 
 export type PermissionName = keyof typeof PermissionFlags;
 
-export const PERMISSION_NAMES = Object.keys(PermissionFlags) as PermissionName[];
+export const PERMISSION_NAMES = Object.keys(
+  PermissionFlags,
+) as PermissionName[];
 
 export type Role = "STUDENT" | "FACULTY" | "ADMIN";
 
-const STUDENT_BITS = PermissionFlags.ViewTimetable | PermissionFlags.BookStudyRoom;
+const STUDENT_BITS =
+  PermissionFlags.ViewTimetable | PermissionFlags.BookStudyRoom;
 
 const FACULTY_BITS =
-  STUDENT_BITS |
-  PermissionFlags.RequestRoom |
-  PermissionFlags.ManageOwnEvents;
+  STUDENT_BITS | PermissionFlags.RequestRoom | PermissionFlags.ManageOwnEvents;
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<Role, bigint> = {
   STUDENT: STUDENT_BITS,
@@ -60,9 +61,7 @@ export const ALL_PERMISSIONS = PERMISSION_NAMES.reduce(
  * raw Administrator bit alone looks like *fewer* permissions than a student's.
  */
 export function expandPermissions(bits: bigint): bigint {
-  return (bits & PermissionFlags.Administrator) !== 0n
-    ? ALL_PERMISSIONS
-    : bits;
+  return (bits & PermissionFlags.Administrator) !== 0n ? ALL_PERMISSIONS : bits;
 }
 
 /** Bits a user actually holds: their role's defaults plus any personal grants. */
@@ -115,10 +114,7 @@ export class PermissionBitField {
 }
 
 export type ActOnDenial =
-  | "SELF"
-  | "HIGHER_PRIVILEGE"
-  | "MISSING_MANAGE_USERS"
-  | null;
+  "SELF" | "HIGHER_PRIVILEGE" | "MISSING_MANAGE_USERS" | null;
 
 /**
  * Guards every user-mutating operation, mirroring the MRBS rules: you may not

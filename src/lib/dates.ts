@@ -61,10 +61,7 @@ export function isoWeekday(instant: Date, timeZone: string): number {
 /** Local midnight of the day containing `instant`, as a UTC instant. */
 export function startOfLocalDay(instant: Date, timeZone: string): Date {
   const wall = toWallTime(instant, timeZone);
-  return fromWallTime(
-    { ...wall, hour: 0, minute: 0, second: 0 },
-    timeZone,
-  );
+  return fromWallTime({ ...wall, hour: 0, minute: 0, second: 0 }, timeZone);
 }
 
 /** Local midnight after the day containing `instant`, as a UTC instant. */

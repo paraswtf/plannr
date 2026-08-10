@@ -55,8 +55,7 @@ export function TimetableView({
   }));
 
   const today = startOfLocalDay(new Date(), timeZone);
-  const isToday =
-    startOfLocalDay(date, timeZone).getTime() === today.getTime();
+  const isToday = startOfLocalDay(date, timeZone).getTime() === today.getTime();
 
   // Monday-anchored week around the selected day.
   const weekStart = startOfLocalDay(date, timeZone);
@@ -88,7 +87,7 @@ export function TimetableView({
             <select
               value={buildingId ?? ""}
               onChange={(e) => setBuildingId(e.target.value || undefined)}
-              className="rounded-[10px] bg-[var(--surface)] px-3 py-2 text-[13px] font-medium text-[var(--app-ink)]"
+              className="bg-surface text-ink rounded-[10px] px-3 py-2 text-[13px] font-medium"
               style={{ boxShadow: "var(--ring)" }}
             >
               <option value="">All buildings</option>
@@ -98,7 +97,7 @@ export function TimetableView({
                 </option>
               ))}
             </select>
-            <span className="font-[family-name:var(--font-mono)] text-[12px] text-[var(--faint)]">
+            <span className="text-faint font-mono text-[12px]">
               rooms × time
             </span>
           </div>
@@ -116,14 +115,14 @@ export function TimetableView({
           />
         ) : (
           <div
-            className="rounded-[var(--radius-card)] bg-[var(--surface)] p-10 text-center text-[14px] text-[var(--muted)]"
+            className="bg-surface text-muted rounded-[var(--radius-card)] p-10 text-center text-[14px]"
             style={{ boxShadow: "var(--ring)" }}
           >
             No rooms yet. An admin can add them from the Rooms tab.
           </div>
         )}
 
-        <p className="mt-3 text-[12.5px] text-[var(--faint)]">
+        <p className="text-faint mt-3 text-[12.5px]">
           {role === "STUDENT"
             ? "Click a block to see the details."
             : "Click a block for details, or an empty slot to book it."}

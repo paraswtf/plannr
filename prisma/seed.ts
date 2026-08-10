@@ -14,7 +14,7 @@ import {
   RoomFeature,
   RoomType,
 } from "../generated/prisma";
-import { fromWallTime } from "../src/lib/dates";
+import { fromWallTime, toWallTime } from "../src/lib/dates";
 import { buildRRule } from "../src/lib/recurrence";
 import { regenerateOccurrences } from "../src/server/services/occurrences";
 
@@ -22,10 +22,29 @@ const db = new PrismaClient();
 
 const ORG_SLUG = "default";
 const TZ = "Asia/Kolkata";
-
-/** Demo term: a 12-week block starting Monday 5 Jan 2026. */
-const TERM_START = { year: 2026, month: 1, day: 5 };
 const TERM_WEEKS = 12;
+
+/**
+ * The demo term starts on the Monday of the current week, so seeded classes are
+ * visible today rather than sitting in the past. A fixed date would go stale the
+ * moment the calendar moved past it.
+ */
+function currentMonday() {
+  const now = toWallTime(new Date(), TZ);
+  const todayLocal = fromWallTime(
+    { ...now, hour: 0, minute: 0, second: 0 },
+    TZ,
+  );
+  // getDay() is 0 for Sunday; shift so Monday is 0.
+  const offsetToMonday = (todayLocal.getDay() + 6) % 7;
+  const monday = toWallTime(
+    new Date(todayLocal.getTime() - offsetToMonday * 86_400_000),
+    TZ,
+  );
+  return { year: monday.year, month: monday.month, day: monday.day };
+}
+
+const TERM_START = currentMonday();
 
 const ROOMS: Array<{
   code: string;
@@ -139,7 +158,11 @@ const emailFor = (name: string, domain: string) =>
     .replace(/^\.|\.$/g, "")}@${domain}`;
 
 async function main() {
-  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN ?? "example.edu";
+  // Demo people deliberately live on a reserved TLD that can never resolve, and
+  // never on the real Workspace domain. Sign-in links accounts by email, so a
+  // demo row at the real domain could be claimed by whoever actually owns that
+  // address. Real admins come from SEED_ADMIN_EMAILS instead.
+  const domain = "plannr-demo.invalid";
 
   const org = await db.organization.upsert({
     where: { slug: ORG_SLUG },
@@ -216,12 +239,16 @@ async function main() {
     { ...TERM_START, day: TERM_START.day + TERM_WEEKS * 7, hour: 0, minute: 0, second: 0 },
     TZ,
   );
+  // A stable name matters more than a descriptive one: groups are keyed to the
+  // term, so a name that changed between runs would orphan them and quietly
+  // duplicate every group.
+  const termName = "Demo Semester";
   const term = await db.term.upsert({
-    where: { orgId_name: { orgId: org.id, name: "Semester 2026-I" } },
+    where: { orgId_name: { orgId: org.id, name: termName } },
     update: { startDate: termStart, endDate: termEnd },
     create: {
       orgId: org.id,
-      name: "Semester 2026-I",
+      name: termName,
       startDate: termStart,
       endDate: termEnd,
     },
@@ -325,8 +352,9 @@ async function main() {
   console.log(`✓ ${FACULTY.length} faculty, ${STUDENTS.length} students`);
 
   // --- weekly timetable ---------------------------------------------------
-  // Re-seeding replaces the demo classes rather than duplicating them.
-  await db.event.deleteMany({ where: { orgId: org.id, termId: term.id } });
+  // Re-seeding replaces the demo classes rather than duplicating them. Scoped
+  // to CLASS so real room bookings made through the app survive a re-seed.
+  await db.event.deleteMany({ where: { orgId: org.id, kind: EventKind.CLASS } });
 
   const rrule = buildRRule({
     freq: "WEEKLY",
