@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Values only need to be well-formed: nothing in CI talks to Google.
+  AUTH_SECRET: ci-secret-ci-secret-ci-secret-32ch
+  AUTH_GOOGLE_ID: ci-client-id
+  AUTH_GOOGLE_SECRET: ci-client-secret
+  GOOGLE_WORKSPACE_DOMAIN: example.edu
+  DATABASE_URL: postgresql://postgres:password@localhost:5432/plannr_test
+  DIRECT_URL: postgresql://postgres:password@localhost:5432/plannr_test
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: plannr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Applying every migration to an empty database catches a broken or
+      # out-of-order migration chain, which `prisma validate` alone does not.
+      - name: Validate schema and apply migrations
+        run: |
+          npx prisma validate
+          npx prisma migrate deploy
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
