@@ -1,3 +1,5 @@
+import { eventsRouter } from "~/server/api/routers/events";
+import { groupsRouter } from "~/server/api/routers/groups";
 import { buildingsRouter, roomsRouter } from "~/server/api/routers/rooms";
 import { timetableRouter } from "~/server/api/routers/timetable";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
@@ -11,6 +13,8 @@ export const appRouter = createTRPCRouter({
   rooms: roomsRouter,
   buildings: buildingsRouter,
   timetable: timetableRouter,
+  events: eventsRouter,
+  groups: groupsRouter,
 });
 
 // export type definition of API

@@ -5,12 +5,21 @@ import {
   buildRRule,
   describeRRule,
   expandSeries,
+  hasCount,
   MAX_OCCURRENCES,
+  setCount,
   setUntil,
   validateRRule,
 } from "./recurrence";
 
 const IST = DEFAULT_TIMEZONE;
+
+/** Local midnight on the given date, for UNTIL boundaries. */
+const at = (y: number, m: number, d: number) =>
+  fromWallTime(
+    { year: y, month: m, day: d, hour: 0, minute: 0, second: 0 },
+    IST,
+  );
 
 /** 09:00–10:00 IST on the given local date. */
 const lecture = (
@@ -258,6 +267,43 @@ describe("setUntil", () => {
     expect(setUntil("FREQ=WEEKLY;BYDAY=TU;COUNT=8", pivot, IST)).not.toMatch(
       /COUNT/,
     );
+  });
+});
+
+describe("setCount", () => {
+  it("replaces an existing COUNT rather than appending a second one", () => {
+    expect(setCount("FREQ=WEEKLY;BYDAY=TU;COUNT=8", 3)).toBe(
+      "FREQ=WEEKLY;BYDAY=TU;COUNT=3",
+    );
+  });
+
+  it("adds a COUNT when the rule has none", () => {
+    expect(setCount("FREQ=WEEKLY;BYDAY=TU", 4)).toBe(
+      "FREQ=WEEKLY;BYDAY=TU;COUNT=4",
+    );
+  });
+
+  it("keeps a split from producing more meetings than the original series", () => {
+    // The bug this guards: giving the second half of a split the original
+    // COUNT turned a 6-week series into 3 + 6 = 9 meetings.
+    const original = "FREQ=WEEKLY;COUNT=6";
+    const firstHalf = expandSeries(
+      lecture(2026, 10, 13, setUntil(original, at(2026, 11, 2), IST)),
+    );
+    const secondHalf = expandSeries(
+      lecture(2026, 11, 3, setCount(original, 6 - firstHalf.length)),
+    );
+    expect(firstHalf.length + secondHalf.length).toBe(6);
+  });
+});
+
+describe("hasCount", () => {
+  it("distinguishes counted rules from dated ones", () => {
+    expect(hasCount("FREQ=WEEKLY;COUNT=6")).toBe(true);
+    expect(hasCount("COUNT=6")).toBe(true);
+    expect(hasCount("FREQ=WEEKLY;UNTIL=20261215T235959")).toBe(false);
+    // Must not be fooled by a substring of another key.
+    expect(hasCount("FREQ=WEEKLY;BYSETPOS=1")).toBe(false);
   });
 });
 

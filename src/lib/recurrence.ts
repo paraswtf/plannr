@@ -206,6 +206,24 @@ export function setUntil(rrule: string, until: Date, timeZone: string): string {
     .replace(/DTSTART[^;\n]*[;\n]?/, "");
 }
 
+/**
+ * Rewrites a rule's COUNT. Splitting a counted series needs this: the second
+ * half must only carry the occurrences that remain, or the split would create
+ * more meetings than the original series ever had.
+ *
+ * Rules bounded by UNTIL need no equivalent — an absolute end date stays correct
+ * on both sides of a split.
+ */
+export function setCount(rrule: string, count: number): string {
+  const parts = rrule
+    .split(";")
+    .filter((part) => !/^COUNT=/i.test(part) && part.length > 0);
+  parts.push(`COUNT=${count}`);
+  return parts.join(";");
+}
+
+export const hasCount = (rrule: string): boolean => /(^|;)COUNT=/i.test(rrule);
+
 /** Builds a bare RRULE value from the pieces the recurrence editor collects. */
 export function buildRRule(input: {
   freq: "DAILY" | "WEEKLY" | "MONTHLY";

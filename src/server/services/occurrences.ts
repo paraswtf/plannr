@@ -17,7 +17,7 @@ import type {
 } from "../../../generated/prisma";
 import { ExceptionType } from "../../../generated/prisma";
 
-import { expandSeries, setUntil } from "~/lib/recurrence";
+import { expandSeries, hasCount, setCount, setUntil } from "~/lib/recurrence";
 
 /** Prisma client or an interactive transaction — services accept either. */
 export type Db = PrismaClient | Prisma.TransactionClient;
@@ -145,6 +145,21 @@ export async function splitSeriesAt(
   if (!original) throw new Error(`Cannot split: no event ${eventId}`);
   if (!original.rrule) throw new Error("Cannot split a non-recurring event");
 
+  // A counted series must hand the second half only the occurrences that are
+  // left; inheriting the original COUNT would make the split produce more
+  // meetings than the series ever had. UNTIL needs no such adjustment, since an
+  // absolute end date stays true on both sides.
+  const remaining = expandSeries({
+    startTime: original.startTime,
+    endTime: original.endTime,
+    timezone: original.timezone,
+    rrule: original.rrule,
+  }).filter((o) => o.start >= pivotStart).length;
+
+  const inheritedRrule = hasCount(original.rrule)
+    ? setCount(original.rrule, remaining)
+    : original.rrule;
+
   // One minute before the pivot, so the pivot itself belongs to the new half.
   const until = new Date(pivotStart.getTime() - 60_000);
 
@@ -170,7 +185,7 @@ export async function splitSeriesAt(
       startTime,
       endTime: edits.endTime ?? new Date(startTime.getTime() + durationMs),
       timezone: original.timezone,
-      rrule: edits.rrule === undefined ? original.rrule : edits.rrule,
+      rrule: edits.rrule === undefined ? inheritedRrule : edits.rrule,
       notes: edits.notes === undefined ? original.notes : edits.notes,
     },
   });
