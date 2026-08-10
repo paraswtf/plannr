@@ -22,6 +22,9 @@ const selectOccurrence = {
   kind: true,
   status: true,
   event: { select: { title: true, rrule: true, notes: true } },
+  // What the recurrence rule produced, before any exception moved it — the key
+  // an edit to a single occurrence is filed under.
+  exception: { select: { originalStart: true } },
   room: { select: { code: true, buildingId: true } },
   group: { select: { id: true, name: true, label: true } },
   faculty: {
@@ -42,6 +45,7 @@ type OccurrenceRow = {
   kind: string;
   status: string;
   event: { title: string; rrule: string | null; notes: string | null };
+  exception: { originalStart: Date } | null;
   room: { code: string; buildingId: string };
   group: { id: string; name: string; label: string | null } | null;
   faculty: {
@@ -57,6 +61,8 @@ function toDto(row: OccurrenceRow) {
     eventId: row.eventId,
     start: row.start,
     end: row.end,
+    /** Where the rule put this occurrence; an edit to just this one is keyed on it. */
+    originalStart: row.exception?.originalStart ?? row.start,
     roomId: row.roomId,
     roomCode: row.room.code,
     buildingId: row.room.buildingId,

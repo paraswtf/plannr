@@ -3,6 +3,13 @@ import { TZDate } from "@date-fns/tz";
 /** The institution's timezone. Everything user-facing is rendered in this zone. */
 export const DEFAULT_TIMEZONE = "Asia/Kolkata";
 
+/**
+ * What the time pickers snap to: dragging on a calendar and stepping a time
+ * field both move in quarter hours, whatever the org's booking slot length is.
+ * Nothing stores this — a typed time is honoured to the minute.
+ */
+export const SNAP_MINUTES = 15;
+
 /** Calendar fields of an instant, as read in a particular timezone. */
 export interface WallTime {
   year: number;
@@ -100,6 +107,24 @@ export function formatHourLabel(instant: Date, timeZone: string): string {
   return minute === 0
     ? `${h12}${suffix}`
     : `${h12}:${String(minute).padStart(2, "0")}${suffix}`;
+}
+
+/** Formats a length in minutes as "45 min" / "1 hr" / "1 hr 30 min". */
+export function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
+/** Formats an instant as "Mon 11 Aug" — the day a booking lands on. */
+export function formatDayLabel(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone,
+  }).format(instant);
 }
 
 export function addDays(instant: Date, days: number, timeZone: string): Date {

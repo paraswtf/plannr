@@ -85,8 +85,10 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
 
-  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body:
+    var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
   --radius-btn: var(--radius-btn);
@@ -136,6 +138,16 @@ body {
     transform: none;
   }
 }
+@keyframes plrSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 .plr-pop {
   animation: plrPop 0.22s cubic-bezier(0.4, 0, 0.2, 1);
@@ -145,6 +157,9 @@ body {
 }
 .plr-toast {
   animation: plrToast 0.28s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+.plr-slide-in {
+  animation: plrSlideIn 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .plr-scroll {
