@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
+import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import {
@@ -20,8 +21,6 @@ import { ConflictBanner } from "./conflict-banner";
 import { SlotGrid, type BusyInterval } from "./slot-grid";
 
 type GridData = RouterOutputs["timetable"]["grid"];
-type Groups = RouterOutputs["groups"]["list"];
-type Faculty = RouterOutputs["groups"]["facultyList"];
 
 const DURATIONS = [
   { value: 60, label: "1 hr" },
@@ -34,14 +33,10 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
 export function BookRoomView({
   initial,
-  groups,
-  allFaculty,
   permissions,
   preselectedRoomId,
 }: {
   initial: GridData;
-  groups: Groups;
-  allFaculty: Faculty;
   permissions: string;
   preselectedRoomId?: string;
 }) {
@@ -76,16 +71,42 @@ export function BookRoomView({
   const [facultyId, setFacultyId] = useState<string>("");
   const [submitted, setSubmitted] = useState<string | null>(null);
 
-  const group = groups.find((g) => g.id === groupId);
-  // Picking a class narrows the teacher list to whoever actually teaches it,
-  // and a group with a single teacher fills itself in.
-  const facultyOptions = group?.faculty.length ? group.faculty : allFaculty;
+  const [groupQuery, setGroupQuery] = useState("");
+  const [groupPageSize, setGroupPageSize] = useState(20);
+  const [facultyQuery, setFacultyQuery] = useState("");
+  const [facultyPageSize, setFacultyPageSize] = useState(20);
+  const debouncedGroup = useDebounced(groupQuery);
+  const debouncedFaculty = useDebounced(facultyQuery);
+
+  // Both lists are searched a page at a time; the current choice is pinned so
+  // narrowing the search cannot make it vanish from the control.
+  const groupsPage = api.groups.list.useQuery({
+    query: debouncedGroup || undefined,
+    pageSize: groupPageSize,
+    includeIds: groupId ? [groupId] : undefined,
+  });
+  const group = groupsPage.data?.rows.find((g) => g.id === groupId);
+
+  const facultyPage = api.groups.facultyList.useQuery({
+    query: debouncedFaculty || undefined,
+    pageSize: facultyPageSize,
+    includeIds: facultyId ? [facultyId] : undefined,
+  });
+
+  // Picking a class narrows the teacher list to whoever teaches it; with no
+  // class chosen, any faculty member can be searched for.
+  const groupFaculty = group?.faculty ?? [];
+  const facultyOptions: Array<{ id: string; name: string }> =
+    groupFaculty.length ? groupFaculty : (facultyPage.data?.rows ?? []);
   const effectiveFacultyId =
     facultyId && facultyOptions.some((f) => f.id === facultyId)
       ? facultyId
       : facultyOptions.length === 1
         ? facultyOptions[0]!.id
         : "";
+  const selectedFaculty = facultyOptions.find(
+    (f) => f.id === effectiveFacultyId,
+  );
 
   const { data: grid } = api.timetable.grid.useQuery(
     { date: day },
@@ -253,43 +274,75 @@ export function BookRoomView({
                   <span className="text-ink text-[13px] font-semibold">
                     Class / group
                   </span>
-                  <select
-                    value={groupId}
-                    onChange={(e) => {
-                      setGroupId(e.target.value);
+                  <SearchSelect
+                    value={group ? { id: group.id, label: group.label } : null}
+                    onChange={(id) => {
+                      setGroupId(id ?? "");
                       // The teacher list depends on the class, so a stale
                       // choice would silently check the wrong person.
                       setFacultyId("");
                     }}
-                    className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
-                    style={{ boxShadow: "var(--ring)" }}
-                  >
-                    <option value="">No group</option>
-                    {groups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.label} · {g.studentCount}
-                      </option>
-                    ))}
-                  </select>
+                    page={
+                      groupsPage.data && {
+                        ...groupsPage.data,
+                        rows: groupsPage.data.rows.map((g) => ({
+                          id: g.id,
+                          label: g.label,
+                          hint: `${g.courseCode} · ${g.studentCount} students`,
+                        })),
+                      }
+                    }
+                    loading={groupsPage.isLoading}
+                    query={groupQuery}
+                    onQueryChange={setGroupQuery}
+                    onLoadMore={() => setGroupPageSize((n) => n + 20)}
+                    placeholder="Search groups…"
+                    emptyOption="No group"
+                  />
                 </label>
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-ink text-[13px] font-semibold">
                     Faculty
                   </span>
-                  <select
-                    value={effectiveFacultyId}
-                    onChange={(e) => setFacultyId(e.target.value)}
-                    className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
-                    style={{ boxShadow: "var(--ring)" }}
-                  >
-                    <option value="">No faculty</option>
-                    {facultyOptions.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchSelect
+                    value={
+                      selectedFaculty
+                        ? {
+                            id: selectedFaculty.id,
+                            label: selectedFaculty.name,
+                          }
+                        : null
+                    }
+                    onChange={(id) => setFacultyId(id ?? "")}
+                    page={
+                      groupFaculty.length
+                        ? {
+                            rows: groupFaculty.map(
+                              (f: { id: string; name: string }) => ({
+                                id: f.id,
+                                label: f.name,
+                              }),
+                            ),
+                            total: groupFaculty.length,
+                            hasMore: false,
+                          }
+                        : facultyPage.data && {
+                            ...facultyPage.data,
+                            rows: facultyPage.data.rows.map((f) => ({
+                              id: f.id,
+                              label: f.name,
+                              hint: f.department,
+                            })),
+                          }
+                    }
+                    loading={facultyPage.isLoading}
+                    query={facultyQuery}
+                    onQueryChange={setFacultyQuery}
+                    onLoadMore={() => setFacultyPageSize((n) => n + 20)}
+                    placeholder="Search faculty…"
+                    emptyOption="No faculty"
+                  />
                 </label>
               </div>
             )}

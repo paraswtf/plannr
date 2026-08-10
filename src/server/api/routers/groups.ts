@@ -16,6 +16,31 @@ import {
  * hands these lists over.
  */
 
+/**
+ * Every list is paged. Selection widgets ask for a small page and narrow it by
+ * searching rather than pulling the directory down and filtering in the
+ * browser — a cohort of a few thousand students has to stay usable.
+ */
+const pageInput = {
+  query: z.string().trim().max(120).optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(100).default(20),
+};
+
+const paged = <T>(
+  rows: T[],
+  total: number,
+  page: number,
+  pageSize: number,
+) => ({
+  rows,
+  total,
+  page,
+  pageSize,
+  pageCount: Math.max(1, Math.ceil(total / pageSize)),
+  hasMore: page * pageSize < total,
+});
+
 const displayName = (f: {
   shortName: string | null;
   user: { name: string | null };
@@ -26,66 +51,109 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z
         .object({
-          query: z.string().trim().max(120).optional(),
+          ...pageInput,
           courseId: z.string().cuid().optional(),
           termId: z.string().cuid().optional(),
+          /** Keeps chosen options visible even when a search excludes them. */
+          includeIds: z.array(z.string().cuid()).max(100).optional(),
         })
         .default({}),
     )
     .query(async ({ ctx, input }) => {
-      const groups = await ctx.db.group.findMany({
-        where: {
-          orgId: ctx.orgId,
-          ...(input.courseId ? { courseId: input.courseId } : {}),
-          ...(input.termId ? { termId: input.termId } : {}),
-          ...(input.query
-            ? {
-                OR: [
-                  { name: { contains: input.query, mode: "insensitive" } },
-                  { label: { contains: input.query, mode: "insensitive" } },
-                  {
-                    course: {
-                      code: { contains: input.query, mode: "insensitive" },
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.courseId ? { courseId: input.courseId } : {}),
+        ...(input.termId ? { termId: input.termId } : {}),
+        ...(input.query
+          ? {
+              OR: [
+                {
+                  name: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  label: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  course: {
+                    code: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
                     },
                   },
-                ],
-              }
-            : {}),
-        },
-        include: {
-          course: { select: { id: true, code: true, name: true } },
-          term: { select: { id: true, name: true } },
-          _count: { select: { students: true, events: true } },
-          faculty: {
-            include: {
-              faculty: {
-                select: {
-                  id: true,
-                  shortName: true,
-                  user: { select: { name: true } },
                 },
+              ],
+            }
+          : {}),
+      };
+
+      const include = {
+        course: { select: { id: true, code: true, name: true } },
+        term: { select: { id: true, name: true } },
+        _count: { select: { students: true, events: true } },
+        faculty: {
+          include: {
+            faculty: {
+              select: {
+                id: true,
+                shortName: true,
+                user: { select: { name: true } },
               },
             },
           },
         },
-        orderBy: [{ course: { code: "asc" } }, { name: "asc" }],
-      });
+      } as const;
+      const orderBy = [
+        { course: { code: "asc" as const } },
+        { name: "asc" as const },
+      ];
 
-      return groups.map((g) => ({
-        id: g.id,
-        name: g.name,
-        label: g.label ?? g.name,
-        courseId: g.course.id,
-        courseCode: g.course.code,
-        termId: g.term?.id ?? null,
-        termName: g.term?.name ?? null,
-        studentCount: g._count.students,
-        eventCount: g._count.events,
-        faculty: g.faculty.map((a) => ({
-          id: a.faculty.id,
-          name: displayName(a.faculty),
+      const [page, total, pinned] = await Promise.all([
+        ctx.db.group.findMany({
+          where,
+          include,
+          orderBy,
+          skip: (input.page - 1) * input.pageSize,
+          take: input.pageSize,
+        }),
+        ctx.db.group.count({ where }),
+        input.includeIds?.length
+          ? ctx.db.group.findMany({
+              where: { orgId: ctx.orgId, id: { in: input.includeIds } },
+              include,
+              orderBy,
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const seen = new Set(page.map((g) => g.id));
+      const groups = [...page, ...pinned.filter((g) => !seen.has(g.id))];
+
+      return paged(
+        groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          label: g.label ?? g.name,
+          courseId: g.course.id,
+          courseCode: g.course.code,
+          termId: g.term?.id ?? null,
+          termName: g.term?.name ?? null,
+          studentCount: g._count.students,
+          eventCount: g._count.events,
+          faculty: g.faculty.map((a) => ({
+            id: a.faculty.id,
+            name: displayName(a.faculty),
+          })),
         })),
-      }));
+        total,
+        input.page,
+        input.pageSize,
+      );
     }),
 
   byId: permissionProcedure(PermissionFlags.ViewGroups)
@@ -395,34 +463,133 @@ export const groupsRouter = createTRPCRouter({
       });
     }),
 
-  facultyList: protectedProcedure.query(async ({ ctx }) => {
-    const faculty = await ctx.db.facultyProfile.findMany({
-      where: { orgId: ctx.orgId },
-      include: { user: { select: { name: true } } },
-      orderBy: { shortName: "asc" },
-    });
-    return faculty.map((f) => ({
-      id: f.id,
-      name: displayName(f),
-      department: f.department,
-    }));
-  }),
+  facultyList: protectedProcedure
+    .input(
+      z
+        .object({
+          ...pageInput,
+          includeIds: z.array(z.string().cuid()).max(100).optional(),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.query
+          ? {
+              OR: [
+                {
+                  shortName: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  department: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  user: {
+                    name: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      };
+      const include = { user: { select: { name: true } } } as const;
+      const orderBy = { shortName: "asc" as const };
 
-  courseList: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.course.findMany({
-      where: { orgId: ctx.orgId },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: "asc" },
-    });
-  }),
+      const [page, total, pinned] = await Promise.all([
+        ctx.db.facultyProfile.findMany({
+          where,
+          include,
+          orderBy,
+          skip: (input.page - 1) * input.pageSize,
+          take: input.pageSize,
+        }),
+        ctx.db.facultyProfile.count({ where }),
+        input.includeIds?.length
+          ? ctx.db.facultyProfile.findMany({
+              where: { orgId: ctx.orgId, id: { in: input.includeIds } },
+              include,
+              orderBy,
+            })
+          : Promise.resolve([]),
+      ]);
 
-  termList: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.term.findMany({
-      where: { orgId: ctx.orgId },
-      select: { id: true, name: true, startDate: true, endDate: true },
-      orderBy: { startDate: "desc" },
-    });
-  }),
+      const seen = new Set(page.map((f) => f.id));
+      const faculty = [...page, ...pinned.filter((f) => !seen.has(f.id))];
+
+      return paged(
+        faculty.map((f) => ({
+          id: f.id,
+          name: displayName(f),
+          department: f.department,
+        })),
+        total,
+        input.page,
+        input.pageSize,
+      );
+    }),
+
+  courseList: protectedProcedure
+    .input(z.object(pageInput).default({}))
+    .query(async ({ ctx, input }) => {
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.query
+          ? {
+              OR: [
+                {
+                  code: { contains: input.query, mode: "insensitive" as const },
+                },
+                {
+                  name: { contains: input.query, mode: "insensitive" as const },
+                },
+              ],
+            }
+          : {}),
+      };
+      const [rows, total] = await Promise.all([
+        ctx.db.course.findMany({
+          where,
+          select: { id: true, code: true, name: true },
+          orderBy: { code: "asc" },
+          skip: (input.page - 1) * input.pageSize,
+          take: input.pageSize,
+        }),
+        ctx.db.course.count({ where }),
+      ]);
+      return paged(rows, total, input.page, input.pageSize);
+    }),
+
+  termList: protectedProcedure
+    .input(z.object(pageInput).default({}))
+    .query(async ({ ctx, input }) => {
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.query
+          ? { name: { contains: input.query, mode: "insensitive" as const } }
+          : {}),
+      };
+      const [rows, total] = await Promise.all([
+        ctx.db.term.findMany({
+          where,
+          select: { id: true, name: true, startDate: true, endDate: true },
+          orderBy: { startDate: "desc" },
+          skip: (input.page - 1) * input.pageSize,
+          take: input.pageSize,
+        }),
+        ctx.db.term.count({ where }),
+      ]);
+      return paged(rows, total, input.page, input.pageSize);
+    }),
 
   /** The faculty profile of the signed-in user, if they have one. */
   me: protectedProcedure.query(async ({ ctx }) => {

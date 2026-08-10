@@ -9,6 +9,8 @@ import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
+import { AddPersonDialog } from "./add-person-dialog";
+import { ImportDialog } from "./import-dialog";
 import { RoleManager } from "./role-manager";
 import { UserDetailDialog } from "./user-detail-dialog";
 
@@ -25,6 +27,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
   const bits = new PermissionBitField(BigInt(permissions));
   const canManage = bits.has(PermissionFlags.ManageUsers);
   const canManageRoles = bits.has(PermissionFlags.ManageRoles);
+  const canImport = bits.has(PermissionFlags.ImportUsers);
 
   const [tab, setTab] = useState<"people" | "roles">("people");
   const [query, setQuery] = useState("");
@@ -36,6 +39,8 @@ export function PeopleView({ permissions }: { permissions: string }) {
   const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const utils = api.useUtils();
   const roles = api.roles.list.useQuery();
@@ -108,6 +113,32 @@ export function PeopleView({ permissions }: { permissions: string }) {
             value={tab}
             onChange={setTab}
           />
+
+          {tab === "people" && (
+            <div className="flex items-center gap-2.5">
+              {canImport && (
+                <button
+                  type="button"
+                  onClick={() => setImporting(true)}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold"
+                  style={{ boxShadow: "var(--ring)" }}
+                >
+                  <Icon name="upload" size={15} color="var(--slate)" />
+                  Import CSV
+                </button>
+              )}
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => setAdding(true)}
+                  className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+                  style={{ background: "var(--grad-brand)" }}
+                >
+                  + Add person
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {tab === "roles" ? (
@@ -342,6 +373,18 @@ export function PeopleView({ permissions }: { permissions: string }) {
         )}
       </div>
 
+      {adding && (
+        <AddPersonDialog
+          onClose={() => setAdding(false)}
+          onCreated={() => utils.users.invalidate()}
+        />
+      )}
+      {importing && (
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          onImported={() => utils.users.invalidate()}
+        />
+      )}
       {openUserId && (
         <UserDetailDialog
           userId={openUserId}

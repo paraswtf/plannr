@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Dialog } from "~/components/ui/dialog";
+import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { api } from "~/trpc/react";
 import { PermissionEditor } from "./permission-editor";
@@ -25,7 +26,12 @@ export function UserDetailDialog({
   const roles = api.roles.list.useQuery();
 
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [prn, setPrn] = useState("");
+  const [department, setDepartment] = useState("");
+  const [shortName, setShortName] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
   const [extra, setExtra] = useState("0");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -33,9 +39,28 @@ export function UserDetailDialog({
   useEffect(() => {
     if (!user.data) return;
     setName(user.data.name ?? "");
+    setEmail(user.data.email);
+    setPrn(user.data.prn ?? "");
+    setDepartment(user.data.department ?? "");
+    setShortName(user.data.shortName ?? "");
     setRoleIds(user.data.roles.map((r) => r.id));
     setExtra(user.data.extraPermissions);
   }, [user.data]);
+
+  const membership = api.users.groups.useQuery({ id: userId });
+  const [groupQuery, setGroupQuery] = useState("");
+  const [groupPageSize, setGroupPageSize] = useState(20);
+  const allGroups = api.groups.list.useQuery({
+    query: useDebounced(groupQuery) || undefined,
+    pageSize: groupPageSize,
+    // Keeps the person's current groups visible while searching for others.
+    includeIds: groupIds.length ? groupIds : undefined,
+  });
+
+  useEffect(() => {
+    if (!membership.data) return;
+    setGroupIds(membership.data.groups.map((g) => g.id));
+  }, [membership.data]);
 
   const onError = (e: { message: string }) => setError(e.message);
   const refresh = async () => {
@@ -46,6 +71,14 @@ export function UserDetailDialog({
   const update = api.users.update.useMutation({ onSuccess: refresh, onError });
   const setRoles = api.users.setRoles.useMutation({
     onSuccess: refresh,
+    onError,
+  });
+  const setGroups = api.users.setGroups.useMutation({
+    onSuccess: async () => {
+      await utils.users.groups.invalidate();
+      await utils.groups.invalidate();
+      setError(null);
+    },
     onError,
   });
   const setPerms = api.users.setExtraPermissions.useMutation({
@@ -65,12 +98,26 @@ export function UserDetailDialog({
     update.isPending ||
     setRoles.isPending ||
     setPerms.isPending ||
+    setGroups.isPending ||
     remove.isPending;
 
   const rolesChanged =
     data &&
     (roleIds.length !== data.roles.length ||
       roleIds.some((id) => !data.roles.some((r) => r.id === id)));
+
+  const detailsChanged =
+    data &&
+    (name !== (data.name ?? "") ||
+      email !== data.email ||
+      prn !== (data.prn ?? "") ||
+      department !== (data.department ?? "") ||
+      shortName !== (data.shortName ?? ""));
+
+  const currentGroupIds = membership.data?.groups.map((g) => g.id) ?? [];
+  const groupsChanged =
+    groupIds.length !== currentGroupIds.length ||
+    groupIds.some((id) => !currentGroupIds.includes(id));
 
   return (
     <Dialog
@@ -108,14 +155,45 @@ export function UserDetailDialog({
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Email">
-                <div className="text-muted px-1 py-2 text-[13px]">
-                  {data.email}
-                </div>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={!canManage}
+                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  style={{ boxShadow: "var(--ring)" }}
+                />
               </Field>
               <Field label="PRN">
-                <div className="text-muted px-1 py-2 font-mono text-[13px]">
-                  {data.prn ?? "—"}
-                </div>
+                <input
+                  value={prn}
+                  onChange={(e) => setPrn(e.target.value)}
+                  disabled={!canManage}
+                  placeholder="11 digits"
+                  className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+                  style={{ boxShadow: "var(--ring)" }}
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Department">
+                <input
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  disabled={!canManage}
+                  placeholder="Faculty only"
+                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  style={{ boxShadow: "var(--ring)" }}
+                />
+              </Field>
+              <Field label="Short name">
+                <input
+                  value={shortName}
+                  onChange={(e) => setShortName(e.target.value)}
+                  disabled={!canManage}
+                  placeholder="Shown on timetable cards"
+                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  style={{ boxShadow: "var(--ring)" }}
+                />
               </Field>
             </div>
             <div className="flex items-center gap-2">
@@ -127,7 +205,94 @@ export function UserDetailDialog({
                 <Badge tone="neutral">imported, never signed in</Badge>
               )}
               {!data.isActive && <Badge tone="red">disabled</Badge>}
+              {canManage && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    update.mutate({ id: userId, isActive: !data.isActive })
+                  }
+                  className="text-muted ml-auto cursor-pointer text-[12px] font-semibold"
+                >
+                  {data.isActive ? "Disable account" : "Re-enable account"}
+                </button>
+              )}
             </div>
+            {canManage && detailsChanged && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  update.mutate({
+                    id: userId,
+                    name,
+                    email,
+                    // Clearing the box removes the student record entirely.
+                    prn: prn.trim() ? prn.trim() : null,
+                    department: department.trim() || null,
+                    shortName: shortName.trim() || null,
+                  })
+                }
+                className="cursor-pointer self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                style={{ background: "var(--slate)" }}
+              >
+                Save details
+              </button>
+            )}
+          </div>
+
+          <div>
+            <SectionTitle>Groups</SectionTitle>
+            {membership.data && !membership.data.hasStudentProfile ? (
+              <p className="text-muted text-[12.5px]">
+                Give this person a PRN and save, then you can add them to groups
+                — membership is recorded against their student record.
+              </p>
+            ) : (
+              <>
+                <p className="text-muted mb-2.5 text-[12.5px]">
+                  The cohorts whose classes appear on their timetable.
+                </p>
+                <EntityPicker
+                  selected={groupIds.map((id) => ({
+                    id,
+                    label:
+                      allGroups.data?.rows.find((g) => g.id === id)?.label ??
+                      membership.data?.groups.find((g) => g.id === id)?.label ??
+                      "Group",
+                  }))}
+                  onChange={setGroupIds}
+                  page={
+                    allGroups.data && {
+                      ...allGroups.data,
+                      rows: allGroups.data.rows.map((g) => ({
+                        id: g.id,
+                        label: g.label,
+                        hint: `${g.courseCode} · ${g.studentCount} students`,
+                      })),
+                    }
+                  }
+                  loading={allGroups.isLoading}
+                  query={groupQuery}
+                  onQueryChange={setGroupQuery}
+                  onLoadMore={() => setGroupPageSize((n) => n + 20)}
+                  disabled={!canManage}
+                  placeholder="Search groups…"
+                  emptyLabel="Not in any group"
+                />
+                {canManage && groupsChanged && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setGroups.mutate({ id: userId, groupIds })}
+                    className="mt-3 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    style={{ background: "var(--slate)" }}
+                  >
+                    Save groups
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           <div>
@@ -245,17 +410,6 @@ export function UserDetailDialog({
             )}
 
             <span className="flex gap-2">
-              {canManage && name !== (data.name ?? "") && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => update.mutate({ id: userId, name })}
-                  className="cursor-pointer rounded-[8px] px-3.5 py-2 text-[13px] font-semibold text-white"
-                  style={{ background: "var(--slate)" }}
-                >
-                  Save name
-                </button>
-              )}
               <button
                 type="button"
                 onClick={onClose}

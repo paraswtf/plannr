@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import Papa from "papaparse";
 import { z } from "zod";
 
 import {
@@ -14,7 +15,14 @@ import {
   permissionProcedure,
   protectedProcedure,
 } from "~/server/api/trpc";
+import { diffRows, type ExistingUser } from "~/server/services/csv-import/diff";
+import {
+  matchColumn,
+  MAX_IMPORT_ROWS,
+  splitList,
+} from "~/server/services/csv-import/schema";
 import type { Db } from "~/server/services/occurrences";
+import { env } from "~/env";
 
 /**
  * People management.
@@ -260,7 +268,9 @@ export const usersRouter = createTRPCRouter({
       z.object({
         id: z.string().cuid(),
         name: z.string().trim().min(1).max(120).optional(),
+        email: z.string().trim().email().toLowerCase().optional(),
         isActive: z.boolean().optional(),
+        /** null clears the PRN and removes the student profile. */
         prn: z.string().trim().regex(PRN_REGEX).nullish(),
         department: z.string().trim().max(120).nullish(),
         shortName: z.string().trim().max(60).nullish(),
@@ -268,54 +278,152 @@ export const usersRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const target = await loadTarget(ctx.db, ctx.orgId, input.id);
-      // Editing your own name is fine; anything else about yourself is not.
-      const selfEditingName =
-        target.user.id === ctx.actor.id &&
-        input.isActive === undefined &&
-        input.prn === undefined;
-      if (!selfEditingName) {
-        assertMayActOn(
-          { id: ctx.actor.id, permissions: ctx.actor.permissions },
-          { id: target.user.id, permissions: target.permissions },
-        );
+      assertMayActOn(
+        { id: ctx.actor.id, permissions: ctx.actor.permissions },
+        { id: target.user.id, permissions: target.permissions },
+      );
+
+      // Both of these are unique, so check them up front and say which value
+      // clashed rather than surfacing a database constraint error.
+      if (input.email && input.email !== target.user.email) {
+        const clash = await ctx.db.user.findUnique({
+          where: { email: input.email },
+          select: { id: true },
+        });
+        if (clash) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `${input.email} is already used by someone else.`,
+          });
+        }
+      }
+      if (input.prn) {
+        const clash = await ctx.db.studentProfile.findFirst({
+          where: {
+            orgId: ctx.orgId,
+            prn: input.prn,
+            userId: { not: input.id },
+          },
+          select: { user: { select: { name: true, email: true } } },
+        });
+        if (clash) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `PRN ${input.prn} already belongs to ${clash.user.name ?? clash.user.email}.`,
+          });
+        }
       }
 
-      const updated = await ctx.db.user.update({
-        where: { id: input.id },
-        data: {
-          name: input.name,
-          isActive: input.isActive,
-          ...(input.prn !== undefined && input.prn !== null
-            ? {
-                studentProfile: {
-                  upsert: {
-                    create: { orgId: ctx.orgId, prn: input.prn },
-                    update: { prn: input.prn },
-                  },
-                },
-              }
-            : {}),
-          ...(input.department !== undefined || input.shortName !== undefined
-            ? {
-                facultyProfile: {
-                  upsert: {
-                    create: {
-                      orgId: ctx.orgId,
-                      department: input.department ?? null,
-                      shortName: input.shortName ?? null,
-                    },
-                    update: {
-                      department: input.department ?? undefined,
-                      shortName: input.shortName ?? undefined,
-                    },
-                  },
-                },
-              }
-            : {}),
-        },
-        include: userInclude,
+      return ctx.db.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: input.id },
+          data: {
+            name: input.name,
+            email: input.email,
+            isActive: input.isActive,
+          },
+        });
+
+        // A student profile is created, updated or dropped to follow the PRN.
+        if (input.prn === null) {
+          await tx.studentProfile.deleteMany({ where: { userId: input.id } });
+        } else if (input.prn !== undefined) {
+          await tx.studentProfile.upsert({
+            where: { userId: input.id },
+            create: { userId: input.id, orgId: ctx.orgId, prn: input.prn },
+            update: { prn: input.prn },
+          });
+        }
+
+        if (input.department !== undefined || input.shortName !== undefined) {
+          await tx.facultyProfile.upsert({
+            where: { userId: input.id },
+            create: {
+              userId: input.id,
+              orgId: ctx.orgId,
+              department: input.department ?? null,
+              shortName: input.shortName ?? null,
+            },
+            update: {
+              ...(input.department !== undefined
+                ? { department: input.department }
+                : {}),
+              ...(input.shortName !== undefined
+                ? { shortName: input.shortName }
+                : {}),
+            },
+          });
+        }
+
+        const updated = await tx.user.findUniqueOrThrow({
+          where: { id: input.id },
+          include: userInclude,
+        });
+        return serialise(updated);
       });
-      return serialise(updated);
+    }),
+
+  /** The groups a person belongs to, editable from their profile. */
+  groups: permissionProcedure(PermissionFlags.ViewUsers)
+    .input(z.object({ id: z.string().cuid() }))
+    .query(async ({ ctx, input }) => {
+      const profile = await ctx.db.studentProfile.findUnique({
+        where: { userId: input.id },
+        include: {
+          memberships: {
+            include: {
+              group: {
+                select: { id: true, name: true, label: true },
+              },
+            },
+          },
+        },
+      });
+      return {
+        hasStudentProfile: Boolean(profile),
+        groups:
+          profile?.memberships.map((m) => ({
+            id: m.group.id,
+            label: m.group.label ?? m.group.name,
+          })) ?? [],
+      };
+    }),
+
+  setGroups: permissionProcedure(PermissionFlags.ManageGroups)
+    .input(
+      z.object({ id: z.string().cuid(), groupIds: z.array(z.string().cuid()) }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.db.studentProfile.findUnique({
+        where: { userId: input.id },
+        select: { id: true },
+      });
+      if (!profile) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Give this person a PRN first — group membership is recorded against their student record.",
+        });
+      }
+
+      const groups = await ctx.db.group.findMany({
+        where: { id: { in: input.groupIds }, orgId: ctx.orgId },
+        select: { id: true },
+      });
+
+      await ctx.db.$transaction([
+        ctx.db.studentGroupMembership.deleteMany({
+          where: { studentId: profile.id },
+        }),
+        ctx.db.studentGroupMembership.createMany({
+          data: groups.map((g) => ({
+            studentId: profile.id,
+            groupId: g.id,
+            addedById: ctx.actor.id,
+          })),
+        }),
+      ]);
+      return { assigned: groups.length };
     }),
 
   /** Replaces the whole set of roles a person holds. */
@@ -447,6 +555,164 @@ export const usersRouter = createTRPCRouter({
     }),
 
   /**
+   * Dry run of a CSV import: parses, validates and diffs against the database,
+   * changing nothing. The commit re-runs all of it rather than trusting these
+   * results back, so this is purely for the preview table.
+   */
+  importPreview: permissionProcedure(PermissionFlags.ImportUsers)
+    .input(z.object({ csv: z.string().max(2_000_000) }))
+    .query(async ({ ctx, input }) => planImport(ctx, input.csv)),
+
+  importCommit: permissionProcedure(PermissionFlags.ImportUsers)
+    .input(
+      z.object({
+        csv: z.string().max(2_000_000),
+        fileName: z.string().max(200).optional(),
+        /** Create any groups named in the file that do not exist yet. */
+        createMissingGroups: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const plan = await planImport(ctx, input.csv);
+
+      if (plan.summary.error > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `${plan.summary.error} row(s) still have errors. Fix the file and try again.`,
+        });
+      }
+      if (plan.newGroups.length > 0 && !input.createMissingGroups) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Unknown group(s): ${plan.newGroups.join(", ")}. Confirm to create them.`,
+        });
+      }
+
+      const roles = await ctx.db.role.findMany({ where: { orgId: ctx.orgId } });
+      const roleByKey = new Map(
+        roles.filter((r) => r.key).map((r) => [r.key!, r]),
+      );
+
+      // Groups named in the file but not yet present. They need a course, so
+      // they hang off a catch-all one rather than being invented per row.
+      const groupIdByName = new Map<string, string>();
+      for (const g of await ctx.db.group.findMany({
+        where: { orgId: ctx.orgId },
+        select: { id: true, name: true },
+      })) {
+        groupIdByName.set(g.name.toLowerCase(), g.id);
+      }
+
+      if (plan.newGroups.length > 0) {
+        const course = await ctx.db.course.upsert({
+          where: { orgId_code: { orgId: ctx.orgId, code: "UNSORTED" } },
+          update: {},
+          create: {
+            orgId: ctx.orgId,
+            code: "UNSORTED",
+            name: "Imported groups",
+          },
+        });
+        for (const name of plan.newGroups) {
+          const created = await ctx.db.group.create({
+            data: {
+              orgId: ctx.orgId,
+              name,
+              label: name,
+              courseId: course.id,
+            },
+          });
+          groupIdByName.set(name.toLowerCase(), created.id);
+        }
+      }
+
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      // Chunked so one enormous file does not sit in a single long
+      // transaction; each chunk is atomic on its own.
+      const actionable = plan.rows.filter((r) => r.status !== "skip");
+      skipped = plan.rows.length - actionable.length;
+
+      for (let i = 0; i < actionable.length; i += 100) {
+        const chunk = actionable.slice(i, i + 100);
+        await ctx.db.$transaction(async (tx) => {
+          for (const row of chunk) {
+            const roleIds = row.data.roles
+              .map((key) => roleByKey.get(key)?.id)
+              .filter((id): id is string => Boolean(id));
+
+            const user = row.matchedUserId
+              ? await tx.user.update({
+                  where: { id: row.matchedUserId },
+                  data: { name: row.data.name, email: row.data.email },
+                })
+              : await tx.user.create({
+                  data: {
+                    orgId: ctx.orgId,
+                    name: row.data.name,
+                    email: row.data.email,
+                  },
+                });
+            if (row.matchedUserId) updated++;
+            else created++;
+
+            await tx.userRole.deleteMany({ where: { userId: user.id } });
+            await tx.userRole.createMany({
+              data: roleIds.map((roleId) => ({
+                userId: user.id,
+                roleId,
+                assignedById: ctx.actor.id,
+              })),
+            });
+
+            if (row.data.prn) {
+              const profile = await tx.studentProfile.upsert({
+                where: { userId: user.id },
+                create: {
+                  userId: user.id,
+                  orgId: ctx.orgId,
+                  prn: row.data.prn,
+                },
+                update: { prn: row.data.prn },
+              });
+
+              for (const groupName of row.data.groups) {
+                const groupId = groupIdByName.get(groupName.toLowerCase());
+                if (!groupId) continue;
+                await tx.studentGroupMembership.upsert({
+                  where: {
+                    studentId_groupId: { studentId: profile.id, groupId },
+                  },
+                  create: {
+                    studentId: profile.id,
+                    groupId,
+                    addedById: ctx.actor.id,
+                  },
+                  update: {},
+                });
+              }
+            }
+          }
+        });
+      }
+
+      await ctx.db.importBatch.create({
+        data: {
+          orgId: ctx.orgId,
+          createdById: ctx.actor.id,
+          fileName: input.fileName,
+          created,
+          updated,
+          skipped,
+        },
+      });
+
+      return { created, updated, skipped };
+    }),
+
+  /**
    * Resolves pasted emails or PRNs to people, for the bulk-add flows. Reports
    * what it could not find rather than silently dropping it.
    */
@@ -497,6 +763,126 @@ export const usersRouter = createTRPCRouter({
       };
     }),
 });
+
+/**
+ * Parses a CSV and works out what importing it would do. Shared by the preview
+ * and the commit — the commit re-runs it rather than trusting the client to
+ * echo back a plan, which also closes the gap where the database moved on
+ * between the two calls.
+ */
+async function planImport(
+  ctx: { db: Db; orgId: string; bits: PermissionBitField },
+  csv: string,
+) {
+  const parsed = Papa.parse<Record<string, string>>(csv.trim(), {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (h) => matchColumn(h) ?? `ignored:${h}`,
+  });
+
+  if (parsed.errors.length > 0 && parsed.data.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Could not read that CSV: ${parsed.errors[0]!.message}`,
+    });
+  }
+  if (parsed.data.length > MAX_IMPORT_ROWS) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `That file has ${parsed.data.length} rows; the limit is ${MAX_IMPORT_ROWS}.`,
+    });
+  }
+
+  const headers = parsed.meta.fields ?? [];
+  if (!headers.includes("email")) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "The file needs an email column.",
+    });
+  }
+
+  const records = parsed.data.map((values, i) => ({
+    // +2: one for the header row, one because spreadsheets count from 1.
+    line: i + 2,
+    values,
+  }));
+
+  // Only the people the file actually mentions. Loading the whole directory to
+  // diff a twenty-row paste would not survive a real intake.
+  const emailsInFile = records
+    .map((r) => r.values.email?.trim().toLowerCase())
+    .filter((v): v is string => Boolean(v));
+  const prnsInFile = records
+    .map((r) => r.values.prn?.trim())
+    .filter((v): v is string => Boolean(v));
+
+  const [users, roles, groups] = await Promise.all([
+    ctx.db.user.findMany({
+      where: {
+        orgId: ctx.orgId,
+        OR: [
+          { email: { in: emailsInFile } },
+          { studentProfile: { prn: { in: prnsInFile } } },
+        ],
+      },
+      include: {
+        roles: {
+          include: { role: { select: { key: true, permissions: true } } },
+        },
+        studentProfile: {
+          include: {
+            memberships: { include: { group: { select: { name: true } } } },
+          },
+        },
+        _count: { select: { accounts: true } },
+      },
+    }),
+    ctx.db.role.findMany({ where: { orgId: ctx.orgId } }),
+    ctx.db.group.findMany({
+      where: {
+        orgId: ctx.orgId,
+        name: {
+          in: records.flatMap((r) => splitList(r.values.groups)),
+          mode: "insensitive",
+        },
+      },
+      select: { name: true },
+    }),
+  ]);
+
+  const existing: ExistingUser[] = users.map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    prn: u.studentProfile?.prn ?? null,
+    hasSignedIn: u._count.accounts > 0,
+    roleKeys: u.roles
+      .map((r) => r.role.key)
+      .filter((k): k is string => Boolean(k)),
+    groupNames: u.studentProfile?.memberships.map((m) => m.group.name) ?? [],
+  }));
+
+  // An importer can only hand out roles whose permissions they already hold.
+  const assignableRoleKeys = roles
+    .filter(
+      (r) =>
+        r.key &&
+        (ctx.bits.has(PermissionFlags.Administrator) ||
+          (expandPermissions(r.permissions) & ~ctx.bits.effective) === 0n),
+    )
+    .map((r) => r.key!);
+
+  return diffRows({
+    records,
+    domain: env.GOOGLE_WORKSPACE_DOMAIN,
+    existing,
+    knownRoleKeys: roles
+      .map((r) => r.key)
+      .filter((k): k is string => Boolean(k)),
+    knownGroupNames: groups.map((g) => g.name),
+    assignableRoleKeys,
+  });
+}
 
 function buildWhere(
   orgId: string,

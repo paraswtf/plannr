@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
+import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
 import { api } from "~/trpc/react";
 
@@ -20,7 +21,16 @@ export function GroupDetailDialog({
 }) {
   const utils = api.useUtils();
   const group = api.groups.byId.useQuery({ id: groupId });
-  const faculty = api.groups.facultyList.useQuery();
+  const [facultyQuery, setFacultyQuery] = useState("");
+  const [facultyPageSize, setFacultyPageSize] = useState(20);
+  const debouncedFaculty = useDebounced(facultyQuery);
+  const assignedFacultyIds = group.data?.faculty.map((f) => f.id) ?? [];
+  const faculty = api.groups.facultyList.useQuery({
+    query: debouncedFaculty || undefined,
+    pageSize: facultyPageSize,
+    // Pins whoever is already assigned so a search cannot hide them.
+    includeIds: assignedFacultyIds,
+  });
 
   const [tab, setTab] = useState<"students" | "faculty" | "danger">("students");
   const [paste, setPaste] = useState("");
@@ -69,7 +79,6 @@ export function GroupDetailDialog({
   });
 
   const data = group.data;
-  const facultyIds = new Set(data?.faculty.map((f) => f.id) ?? []);
 
   return (
     <Dialog
@@ -245,36 +254,33 @@ export function GroupDetailDialog({
                 Who teaches this group. Scheduling a class for them checks their
                 availability.
               </span>
-              <div className="flex flex-wrap gap-2">
-                {(faculty.data ?? []).map((f) => {
-                  const on = facultyIds.has(f.id);
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      disabled={!canManage}
-                      onClick={() => {
-                        const next = new Set(facultyIds);
-                        if (next.has(f.id)) next.delete(f.id);
-                        else next.add(f.id);
-                        setFaculty.mutate({
-                          groupId,
-                          facultyIds: [...next],
-                        });
-                      }}
-                      className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
-                      style={{
-                        background: on ? "var(--slate)" : "var(--surface)",
-                        color: on ? "#fff" : "var(--muted)",
-                        boxShadow: on ? "none" : "var(--ring)",
-                        cursor: canManage ? "pointer" : "default",
-                      }}
-                    >
-                      {f.name}
-                    </button>
-                  );
-                })}
-              </div>
+              <EntityPicker
+                selected={data.faculty.map((f) => ({
+                  id: f.id,
+                  label: f.name,
+                  hint: f.department,
+                }))}
+                onChange={(facultyIds) =>
+                  setFaculty.mutate({ groupId, facultyIds })
+                }
+                page={
+                  faculty.data && {
+                    ...faculty.data,
+                    rows: faculty.data.rows.map((f) => ({
+                      id: f.id,
+                      label: f.name,
+                      hint: f.department,
+                    })),
+                  }
+                }
+                loading={faculty.isLoading}
+                query={facultyQuery}
+                onQueryChange={setFacultyQuery}
+                onLoadMore={() => setFacultyPageSize((n) => n + 20)}
+                disabled={!canManage}
+                placeholder="Search faculty by name or department…"
+                emptyLabel="No faculty assigned"
+              />
             </div>
           )}
 

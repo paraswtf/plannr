@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Dialog } from "~/components/ui/dialog";
+import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
@@ -17,16 +18,25 @@ export function GroupsView({ permissions }: { permissions: string }) {
   );
 
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [courseId, setCourseId] = useState<string | undefined>();
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const utils = api.useUtils();
-  const groups = api.groups.list.useQuery({
-    query: query || undefined,
-    courseId,
+  const debounced = useDebounced(query);
+  useEffect(() => setPage(1), [debounced, courseId]);
+
+  const groups = api.groups.list.useQuery(
+    { query: debounced || undefined, courseId, page, pageSize: 24 },
+    { placeholderData: (prev) => prev },
+  );
+  // The course filter is itself a list, so it is paged and searchable too.
+  const [courseQuery, setCourseQuery] = useState("");
+  const courses = api.groups.courseList.useQuery({
+    query: useDebounced(courseQuery) || undefined,
+    pageSize: 20,
   });
-  const courses = api.groups.courseList.useQuery();
 
   return (
     <>
@@ -48,21 +58,38 @@ export function GroupsView({ permissions }: { permissions: string }) {
               style={{ boxShadow: "var(--ring)" }}
             />
           </div>
-          <select
-            value={courseId ?? ""}
-            onChange={(e) => setCourseId(e.target.value || undefined)}
-            className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            <option value="">All courses</option>
-            {(courses.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-56">
+            <SearchSelect
+              value={
+                courseId
+                  ? {
+                      id: courseId,
+                      label:
+                        courses.data?.rows.find((c) => c.id === courseId)
+                          ?.code ?? "Course",
+                    }
+                  : null
+              }
+              onChange={(id) => setCourseId(id ?? undefined)}
+              page={
+                courses.data && {
+                  ...courses.data,
+                  rows: courses.data.rows.map((c) => ({
+                    id: c.id,
+                    label: c.code,
+                    hint: c.name,
+                  })),
+                }
+              }
+              loading={courses.isLoading}
+              query={courseQuery}
+              onQueryChange={setCourseQuery}
+              placeholder="Search courses…"
+              emptyOption="All courses"
+            />
+          </div>
           <span className="text-faint ml-auto font-mono text-[12px]">
-            {groups.data?.length ?? 0} groups
+            {groups.data?.total ?? 0} groups
           </span>
           {canManage && (
             <button
@@ -77,7 +104,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
         </div>
 
         <div className="grid [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))] gap-4">
-          {(groups.data ?? []).map((g) => (
+          {(groups.data?.rows ?? []).map((g) => (
             <Card key={g.id} pad={18} className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
                 <span className="font-display text-title text-[16px] font-bold">
@@ -90,7 +117,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
                 <div className="text-muted mb-1.5 text-[12.5px]">Taught by</div>
                 <div className="flex flex-wrap gap-2">
                   {g.faculty.length > 0 ? (
-                    g.faculty.map((f) => (
+                    g.faculty.map((f: { id: string; name: string }) => (
                       <span
                         key={f.id}
                         className="text-muted inline-flex items-center gap-1.5 text-[12.5px]"
@@ -137,12 +164,44 @@ export function GroupsView({ permissions }: { permissions: string }) {
           ))}
         </div>
 
-        {(groups.data ?? []).length === 0 && (
+        {(groups.data?.rows ?? []).length === 0 && (
           <Card>
             <p className="text-muted m-0 text-[14px]">
               {groups.isLoading ? "Loading…" : "No groups match that search."}
             </p>
           </Card>
+        )}
+
+        {(groups.data?.pageCount ?? 1) > 1 && (
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              disabled={page === 1}
+              onClick={() => setPage((n) => n - 1)}
+              className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+              style={{
+                boxShadow: "var(--ring)",
+                opacity: page === 1 ? 0.4 : 1,
+              }}
+            >
+              Previous
+            </button>
+            <span className="text-faint font-mono text-[12px]">
+              page {page} of {groups.data?.pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={!groups.data?.hasMore}
+              onClick={() => setPage((n) => n + 1)}
+              className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+              style={{
+                boxShadow: "var(--ring)",
+                opacity: groups.data?.hasMore ? 1 : 0.4,
+              }}
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
 
@@ -247,7 +306,7 @@ function NewGroupDialog({
             style={{ boxShadow: "var(--ring)" }}
           >
             <option value="">Pick a course…</option>
-            {(courses.data ?? []).map((c) => (
+            {(courses.data?.rows ?? []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code} — {c.name}
               </option>
@@ -280,7 +339,7 @@ function NewGroupDialog({
             style={{ boxShadow: "var(--ring)" }}
           >
             <option value="">No term</option>
-            {(terms.data ?? []).map((t) => (
+            {(terms.data?.rows ?? []).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
