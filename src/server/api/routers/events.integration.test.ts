@@ -56,6 +56,9 @@ let roomA: string;
 let roomB: string;
 let admin: Actor;
 let facultyId: string;
+let groupId: string;
+let courseId: string;
+let termId: string;
 
 beforeEach(async () => {
   const org = await db.organization.upsert({
@@ -131,6 +134,41 @@ beforeEach(async () => {
       where: { userId: facultyUser.id },
       update: {},
       create: { userId: facultyUser.id, orgId, shortName: "Dr. Test" },
+    })
+  ).id;
+
+  courseId = (
+    await db.course.upsert({
+      where: { orgId_code: { orgId, code: "ITEST" } },
+      update: {},
+      create: { orgId, code: "ITEST", name: "Integration Course" },
+    })
+  ).id;
+  termId = (
+    await db.term.upsert({
+      where: { orgId_name: { orgId, name: "Integration Term" } },
+      update: {},
+      create: {
+        orgId,
+        name: "Integration Term",
+        startDate: new Date(`${YEAR}-01-01`),
+        endDate: new Date(`${YEAR}-12-31`),
+      },
+    })
+  ).id;
+  groupId = (
+    await db.group.upsert({
+      where: {
+        courseId_termId_name: { courseId, termId, name: "Test Cohort" },
+      },
+      update: {},
+      create: {
+        orgId,
+        courseId,
+        termId,
+        name: "Test Cohort",
+        label: "Test Cohort",
+      },
     })
   ).id;
 });
@@ -262,6 +300,114 @@ describe("events.create", () => {
         facultyId,
         startTime: at(3, 3, 9),
         endTime: at(3, 3, 10),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("catches a class being scheduled into two rooms at once", async () => {
+    const caller = callerFor(admin);
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Maths",
+      roomId: roomA,
+      groupId,
+      startTime: at(3, 3, 9),
+      endTime: at(3, 3, 10),
+    });
+
+    // Same cohort of students, same hour, different room — they cannot attend
+    // both, so this must be refused even though the room itself is free.
+    await expect(
+      caller.events.create({
+        kind: EventKind.CLASS,
+        title: "Physics",
+        roomId: roomB,
+        groupId,
+        startTime: at(3, 3, 9),
+        endTime: at(3, 3, 10),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("names the group when reporting a group clash", async () => {
+    const caller = callerFor(admin);
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Maths",
+      roomId: roomA,
+      groupId,
+      startTime: at(3, 5, 9),
+      endTime: at(3, 5, 10),
+    });
+
+    const conflicts = await caller.events.checkConflicts({
+      roomId: roomB,
+      groupId,
+      startTime: at(3, 5, 9),
+      endTime: at(3, 5, 10),
+    });
+    const groupClash = conflicts.find((c) => c.type === "GROUP");
+    expect(groupClash?.severity).toBe("hard");
+    expect(groupClash?.message).toContain("Test Cohort");
+  });
+
+  it("lets two different groups use different rooms at the same time", async () => {
+    const caller = callerFor(admin);
+    const other = await db.group.upsert({
+      where: {
+        courseId_termId_name: { courseId, termId, name: "Other Cohort" },
+      },
+      update: {},
+      create: {
+        orgId,
+        courseId,
+        termId,
+        name: "Other Cohort",
+        label: "Other Cohort",
+      },
+    });
+
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Maths",
+      roomId: roomA,
+      groupId,
+      startTime: at(3, 6, 9),
+      endTime: at(3, 6, 10),
+    });
+    await expect(
+      caller.events.create({
+        kind: EventKind.CLASS,
+        title: "Physics",
+        roomId: roomB,
+        groupId: other.id,
+        startTime: at(3, 6, 9),
+        endTime: at(3, 6, 10),
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("catches a recurring class clashing with a teacher's other commitment", async () => {
+    const caller = callerFor(admin);
+    // A one-off meeting three weeks out for this teacher, in another room.
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Department meeting",
+      roomId: roomB,
+      facultyId,
+      startTime: at(3, 24, 9),
+      endTime: at(3, 24, 10),
+    });
+
+    await expect(
+      caller.events.create({
+        kind: EventKind.CLASS,
+        title: "Weekly lecture",
+        roomId: roomA,
+        facultyId,
+        startTime: at(3, 3, 9),
+        endTime: at(3, 3, 10),
+        rrule: "FREQ=WEEKLY;COUNT=6",
       }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });

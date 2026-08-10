@@ -21,6 +21,7 @@ import { SlotGrid, type BusyInterval } from "./slot-grid";
 
 type GridData = RouterOutputs["timetable"]["grid"];
 type Groups = RouterOutputs["groups"]["list"];
+type Faculty = RouterOutputs["groups"]["facultyList"];
 
 const DURATIONS = [
   { value: 60, label: "1 hr" },
@@ -34,11 +35,13 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 export function BookRoomView({
   initial,
   groups,
+  allFaculty,
   role,
   preselectedRoomId,
 }: {
   initial: GridData;
   groups: Groups;
+  allFaculty: Faculty;
   role: Role;
   preselectedRoomId?: string;
 }) {
@@ -65,7 +68,19 @@ export function BookRoomView({
   const [start, setStart] = useState<Date | null>(null);
   const [title, setTitle] = useState(isStudent ? "Group study" : "Extra class");
   const [groupId, setGroupId] = useState<string>("");
+  const [facultyId, setFacultyId] = useState<string>("");
   const [submitted, setSubmitted] = useState<string | null>(null);
+
+  const group = groups.find((g) => g.id === groupId);
+  // Picking a class narrows the teacher list to whoever actually teaches it,
+  // and a group with a single teacher fills itself in.
+  const facultyOptions = group?.faculty.length ? group.faculty : allFaculty;
+  const effectiveFacultyId =
+    facultyId && facultyOptions.some((f) => f.id === facultyId)
+      ? facultyId
+      : facultyOptions.length === 1
+        ? facultyOptions[0]!.id
+        : "";
 
   const { data: grid } = api.timetable.grid.useQuery(
     { date: day },
@@ -86,12 +101,14 @@ export function BookRoomView({
 
   const end = start ? new Date(start.getTime() + duration * 60_000) : null;
 
-  // Live preflight. The server re-checks on write, so this is purely to tell
-  // the user before they commit.
+  // Live preflight across all three dimensions: the room, the teacher, and the
+  // class. The server re-checks on write, so this is purely to tell the user
+  // before they commit.
   const { data: conflicts, isFetching } = api.events.checkConflicts.useQuery(
     {
       roomId,
       groupId: groupId || undefined,
+      facultyId: effectiveFacultyId || undefined,
       startTime: start!,
       endTime: end!,
     },
@@ -225,25 +242,51 @@ export function BookRoomView({
               </div>
             </div>
 
-            {!isStudent && groups.length > 0 && (
-              <label className="flex flex-col gap-1.5">
-                <span className="text-ink text-[13px] font-semibold">
-                  Class / group
-                </span>
-                <select
-                  value={groupId}
-                  onChange={(e) => setGroupId(e.target.value)}
-                  className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
-                  style={{ boxShadow: "var(--ring)" }}
-                >
-                  <option value="">No group</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.label} · {g.studentCount}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {!isStudent && (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-ink text-[13px] font-semibold">
+                    Class / group
+                  </span>
+                  <select
+                    value={groupId}
+                    onChange={(e) => {
+                      setGroupId(e.target.value);
+                      // The teacher list depends on the class, so a stale
+                      // choice would silently check the wrong person.
+                      setFacultyId("");
+                    }}
+                    className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
+                    style={{ boxShadow: "var(--ring)" }}
+                  >
+                    <option value="">No group</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label} · {g.studentCount}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-ink text-[13px] font-semibold">
+                    Faculty
+                  </span>
+                  <select
+                    value={effectiveFacultyId}
+                    onChange={(e) => setFacultyId(e.target.value)}
+                    className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
+                    style={{ boxShadow: "var(--ring)" }}
+                  >
+                    <option value="">No faculty</option>
+                    {facultyOptions.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             )}
 
             <div>
@@ -322,6 +365,7 @@ export function BookRoomView({
                   title: title.trim() || "Booking",
                   roomId,
                   groupId: groupId || undefined,
+                  facultyId: effectiveFacultyId || undefined,
                   startTime: start,
                   endTime: end,
                 })

@@ -15,15 +15,17 @@ export default async function BookPage({
   if (!canOpen(session.user.role, "/book")) redirect("/");
 
   const params = await searchParams;
-  const [initial, groups] = await Promise.all([
+  const [initial, groups, allFaculty] = await Promise.all([
     api.timetable.grid({ date: new Date() }),
     api.groups.list(),
+    api.groups.facultyList(),
   ]);
 
   return (
     <BookRoomView
       initial={initial}
       groups={groups}
+      allFaculty={allFaculty}
       role={session.user.role}
       preselectedRoomId={params.room}
     />
