@@ -11,6 +11,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
+import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 
@@ -124,10 +125,54 @@ export const protectedProcedure = t.procedure
     if (!ctx.session?.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
+    if (!ctx.session.user.isActive) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "This account has been deactivated.",
+      });
+    }
+
+    const user = ctx.session.user;
+    const actor = {
+      id: user.id,
+      orgId: user.orgId,
+      role: user.role,
+      permissions: BigInt(user.permissions),
+    };
+
     return next({
       ctx: {
         // infers the `session` as non-nullable
-        session: { ...ctx.session, user: ctx.session.user },
+        session: { ...ctx.session, user },
+        /** The acting user, plus their resolved permission bits. */
+        actor,
+        bits: PermissionBitField.for(actor),
+        /** Every domain query filters by this. */
+        orgId: user.orgId,
       },
     });
   });
+
+/**
+ * Permission-gated procedure.
+ *
+ * Reads declaratively at the call site:
+ *   `permissionProcedure(PermissionFlags.ManageRooms).mutation(...)`
+ *
+ * Ownership rules ("faculty may edit the classes they teach") are finer-grained
+ * than a flag, so they stay in the procedure body — this only gates the coarse
+ * capability.
+ */
+export const permissionProcedure = (...required: bigint[]) =>
+  protectedProcedure.use(({ ctx, next }) => {
+    if (!ctx.bits.hasAll(...required)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You do not have permission to do that.",
+      });
+    }
+    return next();
+  });
+
+/** Convenience for the admin-only console procedures. */
+export const adminProcedure = permissionProcedure(PermissionFlags.Administrator);

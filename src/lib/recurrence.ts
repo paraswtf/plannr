@@ -11,9 +11,19 @@
  * and returns genuine UTC instants.
  */
 
-import { RRule } from "rrule";
+// `rrule` ships a CommonJS `main`, an ESM `module`, and no `exports` map, so
+// the two toolchains disagree about its shape: bundlers (Next, Vite) resolve
+// the ESM build and see named exports, while Node's ESM loader resolves the
+// CommonJS build and exposes everything under `default`. Reading through both
+// keeps this module working in the app, the tests and the seed script alike.
+import * as rruleModule from "rrule";
 
 import { fromWallTime, toWallTime, type WallTime } from "./dates";
+
+const rruleExports = rruleModule as typeof rruleModule & {
+  default?: typeof rruleModule;
+};
+const RRule = rruleExports.RRule ?? rruleExports.default!.RRule;
 
 /** Refuse to expand a series into more rows than this. */
 export const MAX_OCCURRENCES = 500;
@@ -56,7 +66,7 @@ function fromFakeUtc(fake: Date, timeZone: string): Date {
   return fromWallTime(wall, timeZone);
 }
 
-function buildRule(event: RecurringEventInput): RRule {
+function buildRule(event: RecurringEventInput): InstanceType<typeof RRule> {
   if (!event.rrule) throw new Error("buildRule called on a non-recurring event");
   // The stored string carries no DTSTART; it comes from the event's columns.
   return new RRule({
@@ -97,7 +107,7 @@ export function expandSeries(
       true,
     );
   } else {
-    starts = rule.all((_, i) => i < MAX_OCCURRENCES);
+    starts = rule.all((_date: Date, i: number) => i < MAX_OCCURRENCES);
   }
 
   const occurrences: Occurrence[] = [];
