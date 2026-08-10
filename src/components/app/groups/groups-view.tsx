@@ -12,6 +12,59 @@ import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import { GroupDetailDialog } from "./group-detail-dialog";
 
+/** How a course appears in a search result. */
+const courseCard = (c: {
+  id: string;
+  code: string;
+  name: string;
+  groupCount: number;
+}) => ({
+  id: c.id,
+  label: c.code,
+  card: {
+    label: c.code,
+    avatar: {
+      kind: "initials" as const,
+      text: c.code.slice(0, 2).toUpperCase(),
+    },
+    title: c.code,
+    subtitle: c.name,
+    badges: [
+      {
+        text: `${c.groupCount} ${c.groupCount === 1 ? "group" : "groups"}`,
+        tone: "slate" as const,
+      },
+    ],
+  },
+});
+
+const termCard = (t: {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  isCurrent: boolean;
+}) => {
+  const fmt = (d: Date) =>
+    new Intl.DateTimeFormat("en-IN", {
+      month: "short",
+      year: "numeric",
+    }).format(d);
+  return {
+    id: t.id,
+    label: t.name,
+    card: {
+      label: t.name,
+      avatar: { kind: "icon" as const, name: "calendar" as const },
+      title: t.name,
+      subtitle: `${fmt(t.startDate)} – ${fmt(t.endDate)}`,
+      badges: t.isCurrent
+        ? [{ text: "current", tone: "green" as const, dot: true }]
+        : [],
+    },
+  };
+};
+
 export function GroupsView({ permissions }: { permissions: string }) {
   const canManage = new PermissionBitField(BigInt(permissions)).has(
     PermissionFlags.ManageGroups,
@@ -36,7 +89,11 @@ export function GroupsView({ permissions }: { permissions: string }) {
   const courses = api.groups.courseList.useQuery({
     query: useDebounced(courseQuery) || undefined,
     pageSize: 20,
+    // Without this the chosen course drops out of the rows on a narrowing
+    // search and its label falls back to a placeholder.
+    includeIds: courseId ? [courseId] : undefined,
   });
+  const selectedCourse = courses.data?.rows.find((c) => c.id === courseId);
 
   return (
     <>
@@ -60,25 +117,12 @@ export function GroupsView({ permissions }: { permissions: string }) {
           </div>
           <div className="w-56">
             <SearchSelect
-              value={
-                courseId
-                  ? {
-                      id: courseId,
-                      label:
-                        courses.data?.rows.find((c) => c.id === courseId)
-                          ?.code ?? "Course",
-                    }
-                  : null
-              }
+              value={selectedCourse ? courseCard(selectedCourse) : null}
               onChange={(id) => setCourseId(id ?? undefined)}
               page={
                 courses.data && {
                   ...courses.data,
-                  rows: courses.data.rows.map((c) => ({
-                    id: c.id,
-                    label: c.code,
-                    hint: c.name,
-                  })),
+                  rows: courses.data.rows.map(courseCard),
                 }
               }
               loading={courses.isLoading}
@@ -86,6 +130,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
               onQueryChange={setCourseQuery}
               placeholder="Search courses…"
               emptyOption="All courses"
+              listId="course-filter"
             />
           </div>
           <span className="text-faint ml-auto font-mono text-[12px]">
@@ -229,13 +274,31 @@ function NewGroupDialog({
   onClose: () => void;
   onCreated: () => void | Promise<unknown>;
 }) {
-  const courses = api.groups.courseList.useQuery();
-  const terms = api.groups.termList.useQuery();
+  // Both of these were native selects fed by an unargumented query, so only
+  // the first 20 rows ever appeared — and course is required to create a
+  // group, which made anything past #20 unpickable.
+  const [courseQuery, setCourseQuery] = useState("");
+  const [coursePageSize, setCoursePageSize] = useState(20);
+  const [termQuery, setTermQuery] = useState("");
+  const [termPageSize, setTermPageSize] = useState(20);
   const [name, setName] = useState("");
   const [label, setLabel] = useState("");
   const [courseId, setCourseId] = useState("");
   const [termId, setTermId] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const courses = api.groups.courseList.useQuery({
+    query: useDebounced(courseQuery) || undefined,
+    pageSize: coursePageSize,
+    includeIds: courseId ? [courseId] : undefined,
+  });
+  const terms = api.groups.termList.useQuery({
+    query: useDebounced(termQuery) || undefined,
+    pageSize: termPageSize,
+    includeIds: termId ? [termId] : undefined,
+  });
+  const selectedCourse = courses.data?.rows.find((c) => c.id === courseId);
+  const selectedTerm = terms.data?.rows.find((t) => t.id === termId);
 
   const create = api.groups.create.useMutation({
     onSuccess: async () => {
@@ -299,19 +362,22 @@ function NewGroupDialog({
           </div>
         )}
         <Labelled label="Course">
-          <select
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px]"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            <option value="">Pick a course…</option>
-            {(courses.data?.rows ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            value={selectedCourse ? courseCard(selectedCourse) : null}
+            onChange={(id) => setCourseId(id ?? "")}
+            page={
+              courses.data && {
+                ...courses.data,
+                rows: courses.data.rows.map(courseCard),
+              }
+            }
+            loading={courses.isLoading}
+            query={courseQuery}
+            onQueryChange={setCourseQuery}
+            onLoadMore={() => setCoursePageSize((n) => n + 20)}
+            placeholder="Search courses…"
+            listId="new-group-course"
+          />
         </Labelled>
         <Labelled label="Group name">
           <input
@@ -332,19 +398,23 @@ function NewGroupDialog({
           />
         </Labelled>
         <Labelled label="Term">
-          <select
-            value={termId}
-            onChange={(e) => setTermId(e.target.value)}
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px]"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            <option value="">No term</option>
-            {(terms.data?.rows ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            value={selectedTerm ? termCard(selectedTerm) : null}
+            onChange={(id) => setTermId(id ?? "")}
+            page={
+              terms.data && {
+                ...terms.data,
+                rows: terms.data.rows.map(termCard),
+              }
+            }
+            loading={terms.isLoading}
+            query={termQuery}
+            onQueryChange={setTermQuery}
+            onLoadMore={() => setTermPageSize((n) => n + 20)}
+            placeholder="Search terms…"
+            emptyOption="No term"
+            listId="new-group-term"
+          />
         </Labelled>
       </div>
     </Dialog>

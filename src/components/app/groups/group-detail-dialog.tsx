@@ -7,6 +7,7 @@ import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
 import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
+import { facultyCard } from "~/components/app/people/entity-cards";
 import { api } from "~/trpc/react";
 
 /** Members, teaching staff, and deletion — everything about one group. */
@@ -255,22 +256,21 @@ export function GroupDetailDialog({
                 availability.
               </span>
               <EntityPicker
-                selected={data.faculty.map((f) => ({
-                  id: f.id,
-                  label: f.name,
-                  hint: f.department,
-                }))}
+                selected={data.faculty.map((f) =>
+                  facultyCard({
+                    id: f.id,
+                    name: f.name,
+                    email: f.email,
+                    department: f.department,
+                  }),
+                )}
                 onChange={(facultyIds) =>
                   setFaculty.mutate({ groupId, facultyIds })
                 }
                 page={
                   faculty.data && {
                     ...faculty.data,
-                    rows: faculty.data.rows.map((f) => ({
-                      id: f.id,
-                      label: f.name,
-                      hint: f.department,
-                    })),
+                    rows: faculty.data.rows.map(facultyCard),
                   }
                 }
                 loading={faculty.isLoading}
@@ -279,6 +279,7 @@ export function GroupDetailDialog({
                 onLoadMore={() => setFacultyPageSize((n) => n + 20)}
                 disabled={!canManage}
                 placeholder="Search faculty by name or department…"
+                listId="group-faculty"
                 emptyLabel="No faculty assigned"
               />
             </div>

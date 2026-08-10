@@ -95,7 +95,7 @@ export const groupsRouter = createTRPCRouter({
       const include = {
         course: { select: { id: true, code: true, name: true } },
         term: { select: { id: true, name: true } },
-        _count: { select: { students: true, events: true } },
+        _count: { select: { students: true, events: true, faculty: true } },
         faculty: {
           include: {
             faculty: {
@@ -141,10 +141,12 @@ export const groupsRouter = createTRPCRouter({
           label: g.label ?? g.name,
           courseId: g.course.id,
           courseCode: g.course.code,
+          courseName: g.course.name,
           termId: g.term?.id ?? null,
           termName: g.term?.name ?? null,
           studentCount: g._count.students,
           eventCount: g._count.events,
+          facultyCount: g._count.faculty,
           faculty: g.faculty.map((a) => ({
             id: a.faculty.id,
             name: displayName(a.faculty),
@@ -410,7 +412,7 @@ export const groupsRouter = createTRPCRouter({
           select: {
             name: true,
             label: true,
-            _count: { select: { students: true, events: true } },
+            _count: { select: { students: true, events: true, faculty: true } },
           },
         }),
         ctx.db.eventOccurrence.count({
@@ -502,7 +504,10 @@ export const groupsRouter = createTRPCRouter({
             }
           : {}),
       };
-      const include = { user: { select: { name: true } } } as const;
+      const include = {
+        user: { select: { id: true, name: true, email: true, isActive: true } },
+        _count: { select: { assignments: true } },
+      } as const;
       const orderBy = { shortName: "asc" as const };
 
       const [page, total, pinned] = await Promise.all([
@@ -530,7 +535,11 @@ export const groupsRouter = createTRPCRouter({
         faculty.map((f) => ({
           id: f.id,
           name: displayName(f),
+          fullName: f.user.name,
+          email: f.user.email,
           department: f.department,
+          isActive: f.user.isActive,
+          groupCount: f._count.assignments,
         })),
         total,
         input.page,
@@ -539,7 +548,14 @@ export const groupsRouter = createTRPCRouter({
     }),
 
   courseList: protectedProcedure
-    .input(z.object(pageInput).default({}))
+    .input(
+      z
+        .object({
+          ...pageInput,
+          includeIds: z.array(z.string().cuid()).max(100).optional(),
+        })
+        .default({}),
+    )
     .query(async ({ ctx, input }) => {
       const where = {
         orgId: ctx.orgId,
@@ -556,21 +572,56 @@ export const groupsRouter = createTRPCRouter({
             }
           : {}),
       };
-      const [rows, total] = await Promise.all([
+      const select = {
+        id: true,
+        code: true,
+        name: true,
+        _count: { select: { groups: true } },
+      } as const;
+
+      const [page, total, pinned] = await Promise.all([
         ctx.db.course.findMany({
           where,
-          select: { id: true, code: true, name: true },
+          select,
           orderBy: { code: "asc" },
           skip: (input.page - 1) * input.pageSize,
           take: input.pageSize,
         }),
         ctx.db.course.count({ where }),
+        input.includeIds?.length
+          ? ctx.db.course.findMany({
+              where: { orgId: ctx.orgId, id: { in: input.includeIds } },
+              select,
+              orderBy: { code: "asc" },
+            })
+          : Promise.resolve([]),
       ]);
-      return paged(rows, total, input.page, input.pageSize);
+
+      const seen = new Set(page.map((c) => c.id));
+      const rows = [...page, ...pinned.filter((c) => !seen.has(c.id))];
+
+      return paged(
+        rows.map((c) => ({
+          id: c.id,
+          code: c.code,
+          name: c.name,
+          groupCount: c._count.groups,
+        })),
+        total,
+        input.page,
+        input.pageSize,
+      );
     }),
 
   termList: protectedProcedure
-    .input(z.object(pageInput).default({}))
+    .input(
+      z
+        .object({
+          ...pageInput,
+          includeIds: z.array(z.string().cuid()).max(100).optional(),
+        })
+        .default({}),
+    )
     .query(async ({ ctx, input }) => {
       const where = {
         orgId: ctx.orgId,
@@ -578,17 +629,49 @@ export const groupsRouter = createTRPCRouter({
           ? { name: { contains: input.query, mode: "insensitive" as const } }
           : {}),
       };
-      const [rows, total] = await Promise.all([
+      const select = {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+      } as const;
+
+      const [page, total, pinned] = await Promise.all([
         ctx.db.term.findMany({
           where,
-          select: { id: true, name: true, startDate: true, endDate: true },
+          select,
           orderBy: { startDate: "desc" },
           skip: (input.page - 1) * input.pageSize,
           take: input.pageSize,
         }),
         ctx.db.term.count({ where }),
+        input.includeIds?.length
+          ? ctx.db.term.findMany({
+              where: { orgId: ctx.orgId, id: { in: input.includeIds } },
+              select,
+              orderBy: { startDate: "desc" },
+            })
+          : Promise.resolve([]),
       ]);
-      return paged(rows, total, input.page, input.pageSize);
+
+      const seen = new Set(page.map((t) => t.id));
+      const rows = [...page, ...pinned.filter((t) => !seen.has(t.id))];
+      // Decided here rather than in the browser: the dates are @db.Date, which
+      // a client would read in its own timezone and get wrong at the edges.
+      const today = new Date();
+
+      return paged(
+        rows.map((t) => ({
+          id: t.id,
+          name: t.name,
+          startDate: t.startDate,
+          endDate: t.endDate,
+          isCurrent: t.startDate <= today && today <= t.endDate,
+        })),
+        total,
+        input.page,
+        input.pageSize,
+      );
     }),
 
   /** The faculty profile of the signed-in user, if they have one. */

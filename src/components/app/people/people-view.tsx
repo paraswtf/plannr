@@ -6,7 +6,9 @@ import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Icon } from "~/components/ui/icon";
+import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
+import { roleCard } from "./entity-cards";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import { AddPersonDialog } from "./add-person-dialog";
@@ -43,7 +45,17 @@ export function PeopleView({ permissions }: { permissions: string }) {
   const [importing, setImporting] = useState(false);
 
   const utils = api.useUtils();
+  const [roleQuery, setRoleQuery] = useState("");
   const roles = api.roles.list.useQuery();
+  const debouncedRole = useDebounced(roleQuery);
+  // Roles are user-creatable, so this list grows; it is filtered client-side
+  // because the whole set is small and already loaded for the cards.
+  const roleRows = (roles.data ?? []).filter((r) =>
+    debouncedRole
+      ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
+      : true,
+  );
+  const selectedRole = (roles.data ?? []).find((r) => r.id === roleId);
 
   // Debounced so the list query does not fire on every keystroke.
   useEffect(() => {
@@ -182,22 +194,26 @@ export function PeopleView({ permissions }: { permissions: string }) {
                 </span>
               )}
 
-              <select
-                value={roleId ?? ""}
-                onChange={(e) => {
-                  setRoleId(e.target.value || undefined);
-                  setPage(1);
-                }}
-                className="bg-surface rounded-[10px] px-3 py-2 text-[13px]"
-                style={{ boxShadow: "var(--ring)" }}
-              >
-                <option value="">All roles</option>
-                {(roles.data ?? []).map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.userCount})
-                  </option>
-                ))}
-              </select>
+              <div className="w-52">
+                <SearchSelect
+                  value={selectedRole ? roleCard(selectedRole) : null}
+                  onChange={(id) => {
+                    setRoleId(id ?? undefined);
+                    setPage(1);
+                  }}
+                  page={{
+                    rows: roleRows.map(roleCard),
+                    total: roleRows.length,
+                    hasMore: false,
+                  }}
+                  loading={roles.isLoading}
+                  query={roleQuery}
+                  onQueryChange={setRoleQuery}
+                  placeholder="Search roles…"
+                  emptyOption="All roles"
+                  listId="role-filter"
+                />
+              </div>
 
               <Segmented
                 items={STATUSES}

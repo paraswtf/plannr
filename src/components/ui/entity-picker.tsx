@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { EntityCardBody, type EntityCard } from "./entity-card";
 import { Icon } from "./icon";
+
+export type { EntityCard } from "./entity-card";
+export { initialsOf } from "./entity-card";
 
 export interface PickerOption {
   id: string;
   label: string;
   hint?: string | null;
+  /** Rich result card. Falls back to label/hint when absent. */
+  card?: EntityCard;
 }
 
 export interface PickerPage {
@@ -16,12 +22,56 @@ export interface PickerPage {
   hasMore: boolean;
 }
 
+/** Turns a row into the shape both controls render. */
+const toCard = (o: PickerOption): EntityCard =>
+  o.card ?? { label: o.label, title: o.label, subtitle: o.hint };
+
+/**
+ * Keyboard handling shared by both controls: arrows move the highlight, enter
+ * takes it, escape closes.
+ */
+function useActiveIndex(
+  count: number,
+  onPick: (i: number) => void,
+  onClose: () => void,
+) {
+  const [active, setActive] = useState(0);
+  useEffect(() => setActive(0), [count]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => (count === 0 ? 0 : (i + 1) % count));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => (count === 0 ? 0 : (i - 1 + count) % count));
+    } else if (e.key === "Enter") {
+      if (count > 0) {
+        e.preventDefault();
+        onPick(active);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  return { active, setActive, onKeyDown };
+}
+
+const rowBackground = (selected: boolean, active: boolean) =>
+  selected
+    ? "rgba(68,88,121,0.08)"
+    : active
+      ? "rgba(68,88,121,0.06)"
+      : "transparent";
+
 /**
  * Multi-select over a list too long to render in full.
  *
  * Chosen items always show as chips — the query that feeds this pins them, so
  * a search that excludes them cannot make them silently disappear. Everything
- * else is a page of results narrowed by typing, never the whole directory.
+ * else is a page of result cards narrowed by typing, never the whole directory.
  */
 export function EntityPicker({
   selected,
@@ -34,6 +84,7 @@ export function EntityPicker({
   disabled = false,
   placeholder = "Search…",
   emptyLabel = "Nothing selected",
+  listId,
 }: {
   selected: PickerOption[];
   onChange: (ids: string[]) => void;
@@ -45,9 +96,11 @@ export function EntityPicker({
   disabled?: boolean;
   placeholder?: string;
   emptyLabel?: string;
+  listId?: string;
 }) {
   const selectedIds = selected.map((s) => s.id);
   const [open, setOpen] = useState(false);
+  const rows = page?.rows ?? [];
 
   const toggle = (id: string) => {
     onChange(
@@ -56,6 +109,14 @@ export function EntityPicker({
         : [...selectedIds, id],
     );
   };
+
+  const { active, setActive, onKeyDown } = useActiveIndex(
+    rows.length,
+    (i) => rows[i] && toggle(rows[i].id),
+    () => setOpen(false),
+  );
+
+  const base = listId ?? "entity-picker";
 
   return (
     <div className="flex flex-col gap-2">
@@ -99,7 +160,17 @@ export function EntityPicker({
                 setOpen(true);
               }}
               onFocus={() => setOpen(true)}
+              onKeyDown={onKeyDown}
               placeholder={placeholder}
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={`${base}-list`}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                open && rows[active]
+                  ? `${base}-opt-${rows[active].id}`
+                  : undefined
+              }
               className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13px] outline-none"
               style={{ boxShadow: "var(--ring)" }}
             />
@@ -107,30 +178,36 @@ export function EntityPicker({
 
           {open && (
             <div
-              className="plr-scroll max-h-[210px] overflow-y-auto rounded-[10px]"
+              id={`${base}-list`}
+              role="listbox"
+              aria-multiselectable
+              className="plr-scroll max-h-[280px] overflow-y-auto rounded-[10px]"
               style={{ boxShadow: "var(--ring)" }}
             >
               {loading && !page ? (
                 <p className="text-muted p-3 text-[12.5px]">Searching…</p>
-              ) : page && page.rows.length > 0 ? (
+              ) : rows.length > 0 ? (
                 <>
-                  {page.rows.map((o) => {
+                  {rows.map((o, i) => {
                     const on = selectedIds.includes(o.id);
                     return (
-                      <button
+                      <div
                         key={o.id}
-                        type="button"
+                        id={`${base}-opt-${o.id}`}
+                        role="option"
+                        aria-selected={on}
+                        onMouseEnter={() => setActive(i)}
+                        // Keeps focus in the input so typing continues to work.
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => toggle(o.id)}
-                        className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left"
+                        className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2.5 text-left"
                         style={{
                           boxShadow: "inset 0 -1px 0 var(--hair-soft)",
-                          background: on
-                            ? "rgba(68,88,121,0.06)"
-                            : "transparent",
+                          background: rowBackground(on, i === active),
                         }}
                       >
                         <span
-                          className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[4px]"
+                          className="mt-0.5 flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[4px]"
                           style={{
                             background: on ? "var(--slate)" : "var(--surface)",
                             boxShadow: on ? "none" : "var(--ring)",
@@ -145,26 +222,17 @@ export function EntityPicker({
                             />
                           )}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="text-title block truncate text-[13px] font-semibold">
-                            {o.label}
-                          </span>
-                          {o.hint && (
-                            <span className="text-faint block truncate text-[11.5px]">
-                              {o.hint}
-                            </span>
-                          )}
-                        </span>
-                      </button>
+                        <EntityCardBody card={toCard(o)} />
+                      </div>
                     );
                   })}
-                  {page.hasMore && (
+                  {page?.hasMore && (
                     <button
                       type="button"
                       onClick={onLoadMore}
                       className="text-slate w-full cursor-pointer px-3 py-2 text-[12.5px] font-semibold"
                     >
-                      Load more ({page.total - page.rows.length} more)
+                      Load more ({page.total - rows.length} more)
                     </button>
                   )}
                 </>
@@ -207,6 +275,7 @@ export function SearchSelect({
   disabled = false,
   placeholder = "Search…",
   emptyOption,
+  listId,
 }: {
   value: PickerOption | null;
   onChange: (id: string | null) => void;
@@ -219,15 +288,44 @@ export function SearchSelect({
   placeholder?: string;
   /** Label for a "none" choice, when the field is optional. */
   emptyOption?: string;
+  listId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const rows = page?.rows ?? [];
+
+  const pick = (id: string | null) => {
+    onChange(id);
+    setOpen(false);
+  };
+
+  const { active, setActive, onKeyDown } = useActiveIndex(
+    rows.length,
+    (i) => rows[i] && pick(rows[i].id),
+    () => setOpen(false),
+  );
+
+  // Clicking away closes the popover; without this it survives until the next
+  // toggle, which reads as the control being stuck open.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const base = listId ?? "search-select";
 
   return (
-    <div className="relative">
+    <div className="relative" ref={boxRef}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className="bg-surface flex w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px]"
         style={{
           boxShadow: "var(--ring)",
@@ -253,19 +351,28 @@ export function SearchSelect({
               autoFocus
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder={placeholder}
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={`${base}-list`}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                rows[active] ? `${base}-opt-${rows[active].id}` : undefined
+              }
               className="bg-paper w-full rounded-lg py-1.5 pr-2 pl-8 text-[12.5px] outline-none"
             />
           </div>
 
-          <div className="plr-scroll max-h-[200px] overflow-y-auto">
+          <div
+            id={`${base}-list`}
+            role="listbox"
+            className="plr-scroll max-h-[260px] overflow-y-auto"
+          >
             {emptyOption && (
               <button
                 type="button"
-                onClick={() => {
-                  onChange(null);
-                  setOpen(false);
-                }}
+                onClick={() => pick(null)}
                 className="text-muted w-full cursor-pointer rounded-lg px-2.5 py-1.5 text-left text-[12.5px]"
               >
                 {emptyOption}
@@ -273,41 +380,35 @@ export function SearchSelect({
             )}
             {loading && !page ? (
               <p className="text-muted p-2 text-[12.5px]">Searching…</p>
-            ) : page && page.rows.length > 0 ? (
+            ) : rows.length > 0 ? (
               <>
-                {page.rows.map((o) => (
-                  <button
+                {rows.map((o, i) => (
+                  <div
                     key={o.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(o.id);
-                      setOpen(false);
-                    }}
-                    className="w-full cursor-pointer rounded-lg px-2.5 py-1.5 text-left"
+                    id={`${base}-opt-${o.id}`}
+                    role="option"
+                    aria-selected={o.id === value?.id}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(o.id)}
+                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2"
                     style={{
-                      background:
-                        o.id === value?.id
-                          ? "rgba(68,88,121,0.08)"
-                          : "transparent",
+                      background: rowBackground(
+                        o.id === value?.id,
+                        i === active,
+                      ),
                     }}
                   >
-                    <span className="text-title block truncate text-[12.5px] font-medium">
-                      {o.label}
-                    </span>
-                    {o.hint && (
-                      <span className="text-faint block truncate text-[11px]">
-                        {o.hint}
-                      </span>
-                    )}
-                  </button>
+                    <EntityCardBody card={toCard(o)} />
+                  </div>
                 ))}
-                {page.hasMore && (
+                {page?.hasMore && (
                   <button
                     type="button"
                     onClick={onLoadMore}
                     className="text-slate w-full cursor-pointer px-2.5 py-1.5 text-[12px] font-semibold"
                   >
-                    Load more ({page.total - page.rows.length} more)
+                    Load more ({page.total - rows.length} more)
                   </button>
                 )}
               </>

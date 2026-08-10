@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Dialog } from "~/components/ui/dialog";
+import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
+import { roleCard } from "./entity-cards";
 import { api } from "~/trpc/react";
 
 /** Adds one person. Bulk arrivals go through the CSV import instead. */
@@ -21,12 +23,24 @@ export function AddPersonDialog({
   const [department, setDepartment] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [roleQuery, setRoleQuery] = useState("");
+  const [defaulted, setDefaulted] = useState(false);
 
-  // Default to the student role once the list arrives.
-  if (roles.data && roleIds.length === 0) {
+  // Default to the student role once the list arrives. In an effect rather
+  // than during render, which would be a state update in the render phase.
+  useEffect(() => {
+    if (defaulted || !roles.data) return;
     const student = roles.data.find((r) => r.key === "student");
     if (student) setRoleIds([student.id]);
-  }
+    setDefaulted(true);
+  }, [roles.data, defaulted]);
+
+  const debouncedRole = useDebounced(roleQuery);
+  const roleRows = (roles.data ?? []).filter((r) =>
+    debouncedRole
+      ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
+      : true,
+  );
 
   const create = api.users.create.useMutation({
     onSuccess: async () => {
@@ -141,32 +155,23 @@ export function AddPersonDialog({
 
         <div className="flex flex-col gap-1.5">
           <span className="text-ink text-[13px] font-semibold">Roles</span>
-          <div className="flex flex-wrap gap-2">
-            {(roles.data ?? []).map((r) => {
-              const on = roleIds.includes(r.id);
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() =>
-                    setRoleIds((prev) =>
-                      prev.includes(r.id)
-                        ? prev.filter((x) => x !== r.id)
-                        : [...prev, r.id],
-                    )
-                  }
-                  className="cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
-                  style={{
-                    background: on ? "var(--slate)" : "var(--surface)",
-                    color: on ? "#fff" : "var(--muted)",
-                    boxShadow: on ? "none" : "var(--ring)",
-                  }}
-                >
-                  {r.name}
-                </button>
-              );
-            })}
-          </div>
+          <EntityPicker
+            selected={(roles.data ?? [])
+              .filter((r) => roleIds.includes(r.id))
+              .map(roleCard)}
+            onChange={setRoleIds}
+            page={{
+              rows: roleRows.map(roleCard),
+              total: roleRows.length,
+              hasMore: false,
+            }}
+            loading={roles.isLoading}
+            query={roleQuery}
+            onQueryChange={setRoleQuery}
+            placeholder="Search roles…"
+            emptyLabel="No roles"
+            listId="add-person-roles"
+          />
         </div>
       </div>
     </Dialog>

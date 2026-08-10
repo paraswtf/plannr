@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Dialog } from "~/components/ui/dialog";
 import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
+import { groupCard, roleCard } from "./entity-cards";
 import { Icon } from "~/components/ui/icon";
 import { api } from "~/trpc/react";
 import { PermissionEditor } from "./permission-editor";
@@ -23,7 +24,14 @@ export function UserDetailDialog({
 }) {
   const utils = api.useUtils();
   const user = api.users.byId.useQuery({ id: userId });
+  const [roleQuery, setRoleQuery] = useState("");
   const roles = api.roles.list.useQuery();
+  const debouncedRole = useDebounced(roleQuery);
+  const roleRows = (roles.data ?? []).filter((r) =>
+    debouncedRole
+      ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
+      : true,
+  );
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -265,11 +273,7 @@ export function UserDetailDialog({
                   page={
                     allGroups.data && {
                       ...allGroups.data,
-                      rows: allGroups.data.rows.map((g) => ({
-                        id: g.id,
-                        label: g.label,
-                        hint: `${g.courseCode} · ${g.studentCount} students`,
-                      })),
+                      rows: allGroups.data.rows.map(groupCard),
                     }
                   }
                   loading={allGroups.isLoading}
@@ -301,34 +305,24 @@ export function UserDetailDialog({
               Someone can hold several at once — a lecturer who also coordinates
               gets both sets of permissions.
             </p>
-            <div className="flex flex-wrap gap-2">
-              {(roles.data ?? []).map((r) => {
-                const on = roleIds.includes(r.id);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    disabled={!canManage}
-                    onClick={() =>
-                      setRoleIds((prev) =>
-                        prev.includes(r.id)
-                          ? prev.filter((x) => x !== r.id)
-                          : [...prev, r.id],
-                      )
-                    }
-                    className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
-                    style={{
-                      background: on ? "var(--slate)" : "var(--surface)",
-                      color: on ? "#fff" : "var(--muted)",
-                      boxShadow: on ? "none" : "var(--ring)",
-                      cursor: canManage ? "pointer" : "default",
-                    }}
-                  >
-                    {r.name}
-                  </button>
-                );
-              })}
-            </div>
+            <EntityPicker
+              selected={(roles.data ?? [])
+                .filter((r) => roleIds.includes(r.id))
+                .map(roleCard)}
+              onChange={setRoleIds}
+              page={{
+                rows: roleRows.map(roleCard),
+                total: roleRows.length,
+                hasMore: false,
+              }}
+              loading={roles.isLoading}
+              query={roleQuery}
+              onQueryChange={setRoleQuery}
+              disabled={!canManage}
+              placeholder="Search roles…"
+              emptyLabel="No roles"
+              listId="user-roles"
+            />
             {canManage && rolesChanged && (
               <button
                 type="button"
