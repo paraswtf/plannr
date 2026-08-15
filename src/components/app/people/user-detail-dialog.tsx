@@ -7,6 +7,7 @@ import { Dialog } from "~/components/ui/dialog";
 import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { groupCard, roleCard } from "./entity-cards";
 import { Icon } from "~/components/ui/icon";
+import { NO_ADDRESS, personName } from "~/lib/people";
 import { api } from "~/trpc/react";
 import { PermissionEditor } from "./permission-editor";
 
@@ -47,7 +48,7 @@ export function UserDetailDialog({
   useEffect(() => {
     if (!user.data) return;
     setName(user.data.name ?? "");
-    setEmail(user.data.email);
+    setEmail(user.data.email ?? "");
     setPrn(user.data.prn ?? "");
     setDepartment(user.data.department ?? "");
     setShortName(user.data.shortName ?? "");
@@ -117,7 +118,7 @@ export function UserDetailDialog({
   const detailsChanged =
     data &&
     (name !== (data.name ?? "") ||
-      email !== data.email ||
+      email !== (data.email ?? "") ||
       prn !== (data.prn ?? "") ||
       department !== (data.department ?? "") ||
       shortName !== (data.shortName ?? ""));
@@ -167,9 +168,19 @@ export function UserDetailDialog({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={!canManage}
+                  placeholder={NO_ADDRESS}
                   className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
                   style={{ boxShadow: "var(--ring)" }}
                 />
+                {!data.email && (
+                  // Why the account is disabled, said where the address is
+                  // missing rather than left to be inferred from the badge.
+                  <span className="text-muted text-[11.5px]">
+                    The college has not sent one. They are on the roll and count
+                    everywhere they are listed, but cannot sign in until it
+                    arrives.
+                  </span>
+                )}
               </Field>
               <Field label="PRN">
                 <input
@@ -212,7 +223,14 @@ export function UserDetailDialog({
               ) : (
                 <Badge tone="neutral">imported, never signed in</Badge>
               )}
-              {!data.isActive && <Badge tone="red">disabled</Badge>}
+              {!data.isActive &&
+                (data.email ? (
+                  <Badge tone="red">disabled</Badge>
+                ) : (
+                  // The field above says why; this is the account's state, and
+                  // it is waiting rather than switched off.
+                  <Badge tone="neutral">waiting on an address</Badge>
+                ))}
               {canManage && (
                 <button
                   type="button"
@@ -234,7 +252,10 @@ export function UserDetailDialog({
                   update.mutate({
                     id: userId,
                     name,
-                    email,
+                    // An empty box means the address is still outstanding, not
+                    // that it should be cleared: the placeholder behind it is
+                    // the import's business and nothing here can improve on it.
+                    email: email.trim() || undefined,
                     // Clearing the box removes the student record entirely.
                     prn: prn.trim() ? prn.trim() : null,
                     department: department.trim() || null,
@@ -370,7 +391,7 @@ export function UserDetailDialog({
               confirmDelete ? (
                 <span className="flex items-center gap-2">
                   <span className="text-[12.5px] font-semibold text-[#b02636]">
-                    Remove {data.name ?? data.email}?
+                    Remove {personName(data, data.prn ?? "this person")}?
                   </span>
                   <button
                     type="button"

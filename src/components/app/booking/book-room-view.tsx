@@ -9,11 +9,13 @@ import {
   type GridEvent,
   type GridRange,
 } from "~/components/app/timetable/timetable-grid";
+import { DayNavigator } from "~/components/app/timetable/day-navigator";
 import { Icon } from "~/components/ui/icon";
-import { Segmented } from "~/components/ui/segmented";
+import { Select } from "~/components/ui/select";
 import {
-  addDays,
   decimalHour,
+  formatFullDate,
+  isSameLocalDay,
   localTimeOnDay,
   minutesOfDay,
   SNAP_MINUTES,
@@ -22,10 +24,10 @@ import {
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { BookingDrawer, type BookingSpan } from "./booking-drawer";
+import { unfitRoomIds } from "./room-fit";
+import { useBookingDraft } from "./use-booking-draft";
 
 type GridData = RouterOutputs["timetable"]["grid"];
-
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
 /**
  * Book a room.
@@ -143,6 +145,46 @@ export function BookRoomView({
     return () => clearTimeout(id);
   }, [flash]);
 
+  // Held here rather than in the panel because the calendar reads it too: the
+  // class being booked for is what decides which rooms are too small to offer.
+  const draft = useBookingDraft({
+    isSelfServe,
+    roomId: span?.roomId ?? "",
+    start: span?.start ?? null,
+    end: span?.end ?? null,
+    timeZone,
+    room: rooms.find((r) => r.id === span?.roomId),
+    onCreated: async (result) => {
+      const code = rooms.find((r) => r.id === span?.roomId)?.code ?? "Room";
+      setFlash(
+        result.event.status === "PENDING"
+          ? `${code} requested — waiting for approval`
+          : `${code} booked`,
+      );
+      await utils.timetable.invalidate();
+      router.refresh();
+      // Move on to the slot that follows rather than clearing the panel:
+      // booking a run of periods should not mean starting the form again.
+      setSpan((current) =>
+        current
+          ? proposeSpan({
+              roomId: current.roomId,
+              day,
+              timeZone,
+              dayStart,
+              dayEnd,
+              durationMinutes: Math.round(
+                (current.end.getTime() - current.start.getTime()) / 60_000,
+              ),
+              after: current.end,
+            })
+          : current,
+      );
+    },
+  });
+
+  const unavailableRooms = unfitRoomIds(rooms, draft.needs);
+
   const events: GridEvent[] = (data?.occurrences ?? []).map((o) => ({
     occurrenceId: o.occurrenceId,
     eventId: o.eventId,
@@ -155,16 +197,11 @@ export function BookRoomView({
     isRecurring: o.isRecurring,
   }));
 
-  const isToday =
-    day.getTime() === startOfLocalDay(new Date(), timeZone).getTime();
+  const isToday = isSameLocalDay(day, new Date(), timeZone);
 
-  const monday = addDays(day, -((day.getDay() + 6) % 7), timeZone);
-  const weekDays = DAY_LABELS.map((label, i) => ({
-    value: addDays(monday, i, timeZone).toISOString(),
-    label,
-  }));
-
-  const buildings = new Map(rooms.map((r) => [r.building.id, r.building.name]));
+  // Not from `rooms` — those are what this very filter narrowed, so choosing a
+  // building would leave no way to choose a different one.
+  const buildings = data?.buildings ?? [];
 
   // The grid works in decimal local hours; the panel works in instants. The end
   // is measured from the start rather than read off the clock, so a span
@@ -182,33 +219,20 @@ export function BookRoomView({
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Book a room"
-          subtitle="Sweep a slot on the calendar, or set the times on the right"
+          subtitle={`${formatFullDate(day, timeZone)} · sweep a slot on the calendar, or set the times on the right`}
         />
         <div className="px-9 pt-2 pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <Segmented
-              items={weekDays}
-              value={day.toISOString()}
-              onChange={(value) => setDay(new Date(value))}
+            <DayNavigator date={day} timeZone={timeZone} onChange={setDay} />
+            <Select
+              ariaLabel="Building"
+              value={buildingId ?? ""}
+              options={[
+                { value: "", label: "All buildings" },
+                ...buildings.map((b) => ({ value: b.id, label: b.name })),
+              ]}
+              onChange={(id) => setBuildingId(id || undefined)}
             />
-            <div className="flex items-center gap-3">
-              <select
-                value={buildingId ?? ""}
-                onChange={(e) => setBuildingId(e.target.value || undefined)}
-                className="bg-surface text-ink rounded-[10px] px-3 py-2 text-[13px] font-medium"
-                style={{ boxShadow: "var(--ring)" }}
-              >
-                <option value="">All buildings</option>
-                {[...buildings].map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-faint font-mono text-[12px]">
-                rooms × time
-              </span>
-            </div>
           </div>
 
           {rooms.length > 0 ? (
@@ -236,6 +260,7 @@ export function BookRoomView({
                 })
               }
               selection={selection}
+              unavailableRoomIds={unavailableRooms}
             />
           ) : (
             <div
@@ -257,33 +282,25 @@ export function BookRoomView({
         <BookingDrawer
           span={span}
           rooms={rooms}
+          draft={draft}
           timeZone={timeZone}
           dayStartMinutes={dayStart}
           dayEndMinutes={dayEnd}
-          isSelfServe={isSelfServe}
-          onChange={setSpan}
-          onBooked={async (message) => {
-            setFlash(message);
+          canCancelOthers={bits.hasAny(
+            PermissionFlags.ManageAllEvents,
+            PermissionFlags.ManageOwnEvents,
+          )}
+          onOtherCancelled={async () => {
             await utils.timetable.invalidate();
             router.refresh();
-            // Move on to the slot that follows rather than closing: booking a
-            // run of periods should not mean starting the form again.
-            setSpan((current) =>
-              current
-                ? proposeSpan({
-                    roomId: current.roomId,
-                    day,
-                    timeZone,
-                    dayStart,
-                    dayEnd,
-                    durationMinutes: Math.round(
-                      (current.end.getTime() - current.start.getTime()) /
-                        60_000,
-                    ),
-                    after: current.end,
-                  })
-                : current,
-            );
+          }}
+          onChange={(next) => {
+            setSpan(next);
+            // Retiming onto another date takes the calendar with it; the grid
+            // shows one day, so it would otherwise hide the slot being booked.
+            if (!isSameLocalDay(next.start, day, timeZone)) {
+              setDay(startOfLocalDay(next.start, timeZone));
+            }
           }}
         />
       )}

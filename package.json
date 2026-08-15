@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "next build",
+    "build": "prisma generate && next build",
     "check": "next lint && tsc --noEmit",
     "db:generate": "prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
@@ -23,6 +26,11 @@
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "db:import": "tsx prisma/import-sicsr.ts",
+    "roster": "tsx prisma/build-roster.ts",
+    "db:students": "tsx prisma/import-students.ts",
+    "db:courses": "tsx prisma/build-courses.ts",
+    "db:faculty": "tsx prisma/import-faculty.ts",
     "db:start": "docker compose -f docker-compose.dev.yml up -d",
     "db:stop": "docker compose -f docker-compose.dev.yml down",
     "email:dev": "email dev --dir src/emails"

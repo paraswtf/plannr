@@ -25,6 +25,10 @@ export const PermissionFlags = {
   BookRoom: 1n << 4n,
   /** Approve or reject other people's booking requests. */
   ApproveBookings: 1n << 5n,
+  /** Take the register for a lecture. */
+  MarkAttendance: 1n << 6n,
+  /** Read anyone's attendance, without necessarily being able to take it. */
+  ViewAttendance: 1n << 7n,
 
   // --- Spaces ---
   ViewRooms: 1n << 10n,
@@ -39,7 +43,17 @@ export const PermissionFlags = {
   // --- Academic structure ---
   ViewGroups: 1n << 30n,
   ManageGroups: 1n << 31n,
-  ManageCourses: 1n << 32n,
+  ManageProgrammes: 1n << 32n,
+
+  // --- Schedule planning ---
+  // Bits 50+ deliberately: the numbers here are stored in the database, so a
+  // flag's position may never be reused or shifted once it has shipped.
+  /** "Planner access": read the drafts that have been shared for review. */
+  ViewSchedulePlans: 1n << 50n,
+  /** Build drafts, edit their demand, generate and apply them. */
+  ManageSchedulePlans: 1n << 51n,
+  /** Sign a shared draft off, or send it back for changes. */
+  ApproveSchedulePlans: 1n << 52n,
 
   // --- Organisation ---
   ManageSettings: 1n << 40n,
@@ -72,12 +86,20 @@ export const PERMISSION_IMPLIES: Partial<
   ViewAllEvents: ["ViewOwnEvents"],
   ManageOwnEvents: ["ViewOwnEvents"],
   ApproveBookings: ["ViewAllEvents"],
+  // Taking a register means reading one, and you cannot take one for a lecture
+  // you cannot see or a group you do not know about.
+  MarkAttendance: ["ViewAttendance", "ViewOwnEvents", "ViewGroups"],
   ManageRooms: ["ViewRooms"],
   ManageUsers: ["ViewUsers"],
   ImportUsers: ["ManageUsers"],
   ManageRoles: ["ViewUsers"],
   ManageGroups: ["ViewGroups"],
-  ManageCourses: ["ViewGroups"],
+  ManageProgrammes: ["ViewGroups"],
+  // A plan is built out of groups and rooms and lands on the timetable, so
+  // anyone working on one can already see all three.
+  ViewSchedulePlans: ["ViewGroups", "ViewRooms", "ViewAllEvents"],
+  ManageSchedulePlans: ["ViewSchedulePlans"],
+  ApproveSchedulePlans: ["ViewSchedulePlans"],
 };
 
 /** Metadata for the permission editor, grouped the way the UI lists them. */
@@ -123,6 +145,18 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     name: "ApproveBookings",
     label: "Approve bookings",
     description: "Approve or reject other people's room requests.",
+    category: "Events",
+  },
+  {
+    name: "MarkAttendance",
+    label: "Mark attendance",
+    description: "Take the register for a lecture.",
+    category: "Events",
+  },
+  {
+    name: "ViewAttendance",
+    label: "View attendance",
+    description: "See who was present, without taking the register.",
     category: "Events",
   },
   {
@@ -174,10 +208,29 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     category: "Academic",
   },
   {
-    name: "ManageCourses",
-    label: "Manage courses",
-    description: "Create and edit courses and terms.",
+    name: "ManageProgrammes",
+    label: "Manage programmes",
+    description: "Create and edit programmes and semesters.",
     category: "Academic",
+  },
+  {
+    name: "ViewSchedulePlans",
+    label: "View schedule plans",
+    description: "Open the timetable drafts that have been shared for review.",
+    category: "Planning",
+  },
+  {
+    name: "ManageSchedulePlans",
+    label: "Build schedule plans",
+    description:
+      "Create timetable drafts, generate them, and apply an approved one.",
+    category: "Planning",
+  },
+  {
+    name: "ApproveSchedulePlans",
+    label: "Approve schedule plans",
+    description: "Sign off a shared draft, or send it back for changes.",
+    category: "Planning",
   },
   {
     name: "ManageSettings",
@@ -198,6 +251,7 @@ export const PERMISSION_CATEGORIES = [
   "Spaces",
   "People",
   "Academic",
+  "Planning",
   "Organisation",
 ] as const;
 
@@ -353,7 +407,9 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       F.ManageOwnEvents |
       F.BookRoom |
       F.ViewRooms |
-      F.ViewGroups,
+      F.ViewGroups |
+      // Taking the register is the faculty job the timetable exists to support.
+      F.MarkAttendance,
   },
   {
     key: "coordinator",
@@ -366,8 +422,13 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       F.BookRoom |
       F.ManageRooms |
       F.ManageGroups |
-      F.ManageCourses |
-      F.ViewUsers,
+      F.ManageProgrammes |
+      F.ViewUsers |
+      F.MarkAttendance |
+      // Coordinators draft the timetable. Signing one off is deliberately not
+      // included: approval is for whoever the institution nominates, granted
+      // through a custom role or a personal grant.
+      F.ManageSchedulePlans,
   },
   {
     key: "admin",

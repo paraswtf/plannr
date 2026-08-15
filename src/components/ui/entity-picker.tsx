@@ -14,6 +14,8 @@ export interface PickerOption {
   hint?: string | null;
   /** Rich result card. Falls back to label/hint when absent. */
   card?: EntityCard;
+  /** Listed but not choosable — the hint should say why. */
+  disabled?: boolean;
 }
 
 export interface PickerPage {
@@ -301,7 +303,10 @@ export function SearchSelect({
 
   const { active, setActive, onKeyDown } = useActiveIndex(
     rows.length,
-    (i) => rows[i] && pick(rows[i].id),
+    (i) => {
+      const row = rows[i];
+      if (row && !row.disabled) pick(row.id);
+    },
     () => setOpen(false),
   );
 
@@ -342,6 +347,10 @@ export function SearchSelect({
         <div
           className="bg-surface absolute z-30 mt-1 w-full rounded-[10px] p-1.5"
           style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+          // Callers wrap this control in a <label>, and a <button> is
+          // labelable: without this, picking a row would also forward a click
+          // to the toggle and pop the list straight back open.
+          onClick={(e) => e.preventDefault()}
         >
           <div className="relative mb-1.5">
             <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
@@ -388,15 +397,17 @@ export function SearchSelect({
                     id={`${base}-opt-${o.id}`}
                     role="option"
                     aria-selected={o.id === value?.id}
+                    aria-disabled={o.disabled}
                     onMouseEnter={() => setActive(i)}
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => pick(o.id)}
-                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2"
+                    onClick={() => !o.disabled && pick(o.id)}
+                    className="flex items-start gap-2.5 rounded-lg px-2.5 py-2"
                     style={{
-                      background: rowBackground(
-                        o.id === value?.id,
-                        i === active,
-                      ),
+                      background: o.disabled
+                        ? "transparent"
+                        : rowBackground(o.id === value?.id, i === active),
+                      cursor: o.disabled ? "not-allowed" : "pointer",
+                      opacity: o.disabled ? 0.45 : 1,
                     }}
                   >
                     <EntityCardBody card={toCard(o)} />

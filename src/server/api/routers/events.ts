@@ -37,13 +37,27 @@ const createInput = z.object({
   kind: z.nativeEnum(EventKind).default(EventKind.BOOKING),
   title: z.string().min(1).max(160),
   roomId: z.string().cuid(),
+  /**
+   * Every group attending. A combined lecture lists several; the first is the
+   * one denormalised onto the event and its occurrences, so the existing read
+   * paths keep working unchanged.
+   */
+  groupIds: z.array(z.string().cuid()).max(20).optional(),
   groupId: z.string().cuid().nullish(),
+  /** The subject being taught. A class has one; a room booking does not. */
+  courseId: z.string().cuid().nullish(),
   facultyId: z.string().cuid().nullish(),
-  termId: z.string().cuid().nullish(),
+  semesterId: z.string().cuid().nullish(),
   startTime: z.date(),
   endTime: z.date(),
   rrule: z.string().max(400).nullish(),
   notes: z.string().max(1000).nullish(),
+  /**
+   * Dates of the series to leave out, as the rule would have produced them.
+   * How a clash on three Tuesdays out of twelve is settled without giving up
+   * the other nine.
+   */
+  skipDates: z.array(z.date()).max(100).optional(),
 });
 
 /** Conflicts a client may safely be shown; the raw error carries the same list. */
@@ -91,6 +105,7 @@ export const eventsRouter = createTRPCRouter({
         .pick({
           roomId: true,
           groupId: true,
+          groupIds: true,
           facultyId: true,
           startTime: true,
           endTime: true,
@@ -105,6 +120,7 @@ export const eventsRouter = createTRPCRouter({
           orgId: ctx.orgId,
           roomId: input.roomId,
           groupId: input.groupId,
+          groupIds: input.groupIds,
           facultyId: input.facultyId,
           startTime: input.startTime,
           endTime: input.endTime,
@@ -193,19 +209,63 @@ export const eventsRouter = createTRPCRouter({
           ? EventStatus.PENDING
           : EventStatus.CONFIRMED;
 
+      // One list of groups from here on: whichever way the caller expressed it,
+      // the first is the primary and the rest ride along on the join table.
+      const groupIds = [
+        ...new Set(
+          [
+            ...(input.groupIds ?? []),
+            ...(input.groupId ? [input.groupId] : []),
+          ].filter(Boolean),
+        ),
+      ];
+      const primaryGroupId = groupIds[0] ?? null;
+
+      // A class is a group being taught. Without one it is a room booking with
+      // a lecture's name on it, and nothing downstream — attendance, a group's
+      // own timetable — has anything to attach to.
+      if (isClass && !primaryGroupId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A class needs at least one group attending it.",
+        });
+      }
+
+      if (groupIds.length > 0) {
+        const known = await ctx.db.group.count({
+          where: { id: { in: groupIds }, orgId: ctx.orgId },
+        });
+        if (known !== groupIds.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "One of those groups does not exist.",
+          });
+        }
+      }
+
+      const skipped = new Set(
+        (input.skipDates ?? []).map((date) => date.getTime()),
+      );
+
       return ctx.db.$transaction(async (tx) => {
         // Re-checked inside the transaction: the client's preflight is a
         // courtesy, not a guarantee, and the slot may have gone since.
-        const conflicts = await checkConflicts(tx, {
+        const found = await checkConflicts(tx, {
           orgId: ctx.orgId,
           roomId: input.roomId,
-          groupId: input.groupId,
+          groupId: primaryGroupId,
+          groupIds,
           facultyId: input.facultyId,
           startTime: input.startTime,
           endTime: input.endTime,
           timezone,
           rrule: input.rrule,
         });
+        // A date being skipped is not booked, so whatever it clashed with is
+        // no longer this event's problem.
+        const conflicts = found.filter(
+          (c) => !c.candidate || !skipped.has(c.candidate.start.getTime()),
+        );
         if (settings.blockConflicts && hasHardConflict(conflicts)) {
           throw conflictError(conflicts);
         }
@@ -217,9 +277,10 @@ export const eventsRouter = createTRPCRouter({
             status,
             title: input.title,
             roomId: input.roomId,
-            groupId: input.groupId ?? null,
+            groupId: primaryGroupId,
+            courseId: input.courseId ?? null,
             facultyId: input.facultyId ?? null,
-            termId: input.termId ?? null,
+            semesterId: input.semesterId ?? null,
             createdById: ctx.actor.id,
             startTime: input.startTime,
             endTime: input.endTime,
@@ -228,10 +289,30 @@ export const eventsRouter = createTRPCRouter({
             notes: input.notes ?? null,
           },
         });
+
+        if (groupIds.length > 0) {
+          await tx.eventGroup.createMany({
+            data: groupIds.map((groupId) => ({ eventId: event.id, groupId })),
+          });
+        }
+
+        // Skipped dates are recorded the same way a cancelled occurrence is, so
+        // the series stays one event and the gaps are visible as exceptions.
+        if (skipped.size > 0) {
+          await tx.eventException.createMany({
+            data: [...skipped].map((time) => ({
+              eventId: event.id,
+              originalStart: new Date(time),
+              type: ExceptionType.CANCELLED,
+              reason: "Skipped when the series was booked",
+            })),
+          });
+        }
         await regenerateOccurrences(tx, event.id);
 
         return {
           event,
+          skipped: skipped.size,
           warnings: conflicts.filter((c) => c.severity === "warning"),
         };
       });
@@ -252,6 +333,7 @@ export const eventsRouter = createTRPCRouter({
           endTime: z.date().optional(),
           facultyId: z.string().cuid().nullish(),
           groupId: z.string().cuid().nullish(),
+          courseId: z.string().cuid().nullish(),
           rrule: z.string().max(400).nullish(),
           notes: z.string().max(1000).nullish(),
         }),
@@ -368,6 +450,7 @@ export const eventsRouter = createTRPCRouter({
             endTime: input.patch.endTime,
             facultyId: input.patch.facultyId,
             groupId: input.patch.groupId,
+            courseId: input.patch.courseId,
             rrule: input.patch.rrule,
             notes: input.patch.notes,
           },

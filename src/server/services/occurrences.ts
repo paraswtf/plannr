@@ -180,7 +180,7 @@ export async function splitSeriesAt(
       groupId: edits.groupId === undefined ? original.groupId : edits.groupId,
       facultyId:
         edits.facultyId === undefined ? original.facultyId : edits.facultyId,
-      termId: original.termId,
+      semesterId: original.semesterId,
       createdById: original.createdById,
       startTime,
       endTime: edits.endTime ?? new Date(startTime.getTime() + durationMs),

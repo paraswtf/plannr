@@ -11,13 +11,20 @@ const permsFor = (...keys: string[]) =>
 const hrefs = (permissions: bigint) => navFor(permissions).map((i) => i.href);
 
 describe("navFor", () => {
-  it("shows a student only their own day and booking", () => {
-    expect(hrefs(permsFor("student"))).toEqual(["/today", "/book"]);
+  it("shows a student their own day, their attendance, and booking", () => {
+    // Attendance is on that list because reading your own is not the same
+    // permission as reading everybody's: a student holds ViewOwnEvents, and the
+    // screen decides which half of itself to draw.
+    expect(hrefs(permsFor("student"))).toEqual([
+      "/schedule",
+      "/attendance",
+      "/book",
+    ]);
   });
 
-  it("shows faculty their classes and the full timetable", () => {
+  it("shows faculty their schedule and the full timetable", () => {
     const nav = hrefs(permsFor("faculty"));
-    expect(nav).toContain("/classes");
+    expect(nav).toContain("/schedule");
     expect(nav).toContain("/timetable");
     expect(nav).toContain("/rooms");
     expect(nav).not.toContain("/people");
@@ -36,14 +43,14 @@ describe("navFor", () => {
     const nav = hrefs(permsFor("admin"));
     expect(nav).toContain("/settings");
     expect(nav).toContain("/people");
-    expect(nav).toContain("/today");
+    expect(nav).toContain("/schedule");
   });
 
   it("unions the nav when someone teaches and coordinates", () => {
     // The case that made roles-as-rows necessary: neither role alone shows
     // both "my classes" and the people screens.
     const nav = hrefs(permsFor("faculty", "coordinator"));
-    expect(nav).toContain("/classes");
+    expect(nav).toContain("/schedule");
     expect(nav).toContain("/people");
     expect(nav).toContain("/timetable");
   });
@@ -52,17 +59,17 @@ describe("navFor", () => {
     expect(hrefs(0n)).toEqual([]);
   });
 
-  it("includes Today for anyone who can see their own events", () => {
+  it("includes the schedule for anyone who can see their own events", () => {
     // ManageAllEvents implies ViewOwnEvents, so a coordinator gets it too.
-    expect(hrefs(permsFor("coordinator"))).toContain("/today");
+    expect(hrefs(permsFor("coordinator"))).toContain("/schedule");
   });
 });
 
 describe("homeFor", () => {
   it("sends each role to the first screen it can open", () => {
-    expect(homeFor(permsFor("student"))).toBe("/today");
-    expect(homeFor(permsFor("faculty"))).toBe("/today");
-    expect(homeFor(permsFor("admin"))).toBe("/today");
+    expect(homeFor(permsFor("student"))).toBe("/schedule");
+    expect(homeFor(permsFor("faculty"))).toBe("/schedule");
+    expect(homeFor(permsFor("admin"))).toBe("/schedule");
   });
 
   it("has a fallback for a user with no access at all", () => {
@@ -73,7 +80,7 @@ describe("homeFor", () => {
 describe("canOpen", () => {
   it("keeps students out of the people and settings screens", () => {
     const student = permsFor("student");
-    expect(canOpen(student, "/today")).toBe(true);
+    expect(canOpen(student, "/schedule")).toBe(true);
     expect(canOpen(student, "/people")).toBe(false);
     expect(canOpen(student, "/settings")).toBe(false);
     expect(canOpen(student, "/timetable")).toBe(false);

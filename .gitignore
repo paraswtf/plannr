@@ -8,6 +8,10 @@
 # testing
 /coverage
 
+# college documents and the roster built from them: real students, real
+# addresses, real phone numbers. Kept on disk, never in the repository.
+/data
+
 # database
 /prisma/db.sqlite
 /prisma/db.sqlite-journal

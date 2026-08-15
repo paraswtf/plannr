@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PlannrLogo } from "~/components/ui/brand";
 import { Icon, type IconName } from "~/components/ui/icon";
+import { contactAddress, personName } from "~/lib/people";
 import { navFor } from "~/lib/role-nav";
 
 interface AppShellProps {
@@ -34,16 +36,8 @@ export function AppShell({
         className="bg-surface sticky top-0 flex h-screen w-[244px] shrink-0 flex-col gap-1 px-4 py-6"
         style={{ boxShadow: "inset -1px 0 0 var(--hair)" }}
       >
-        <Link href="/" className="mb-7 flex items-center gap-2.5 px-2">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[15px] font-bold text-white"
-            style={{ background: "var(--grad-brand)" }}
-          >
-            P
-          </span>
-          <span className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
-            Plannr
-          </span>
+        <Link href="/" className="mb-7 flex items-center px-2">
+          <PlannrLogo height={28} wordmarkSize={19} />
         </Link>
 
         <div
@@ -104,14 +98,14 @@ export function AppShell({
             className="mt-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
             style={{ background: "var(--slate)" }}
           >
-            {(user.name ?? user.email).charAt(0).toUpperCase()}
+            {personName(user).charAt(0).toUpperCase()}
           </span>
           <span className="mt-4 min-w-0 flex-1">
             <span className="text-title block truncate text-[13px] font-semibold">
-              {user.name ?? user.email}
+              {personName(user)}
             </span>
             <span className="text-faint block truncate text-[11px]">
-              {user.email}
+              {contactAddress(user.email)}
             </span>
           </span>
           <Link

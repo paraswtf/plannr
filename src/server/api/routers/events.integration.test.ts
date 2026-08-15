@@ -86,14 +86,44 @@ async function makeActor(
   };
 }
 
+/** A second group in the test course, reusable across runs. */
+async function makeGroup(name: string) {
+  return db.group.upsert({
+    where: { programmeId_semesterId_name: { programmeId, semesterId, name } },
+    update: {},
+    create: { orgId, programmeId, semesterId, name },
+  });
+}
+
+/** A student in the main test cohort, reusable across runs. */
+async function makeStudent(email: string, prn: string) {
+  const user = await db.user.upsert({
+    where: { email },
+    update: {},
+    create: { email, name: prn, orgId },
+  });
+  const profile = await db.studentProfile.upsert({
+    where: { userId: user.id },
+    update: { prn },
+    create: { userId: user.id, orgId, prn },
+  });
+  await db.studentGroupMembership.upsert({
+    where: { studentId_groupId: { studentId: profile.id, groupId } },
+    update: {},
+    create: { studentId: profile.id, groupId },
+  });
+  return profile;
+}
+
 let orgId: string;
 let roomA: string;
 let roomB: string;
 let admin: Actor;
 let facultyId: string;
+let facultyActor: Awaited<ReturnType<typeof makeActor>>;
 let groupId: string;
-let courseId: string;
-let termId: string;
+let programmeId: string;
+let semesterId: string;
 
 beforeEach(async () => {
   const org = await db.organization.upsert({
@@ -164,6 +194,7 @@ beforeEach(async () => {
     "Integration Faculty",
     "faculty",
   );
+  facultyActor = teacher;
   facultyId = (
     await db.facultyProfile.upsert({
       where: { userId: teacher.id },
@@ -172,15 +203,15 @@ beforeEach(async () => {
     })
   ).id;
 
-  courseId = (
-    await db.course.upsert({
+  programmeId = (
+    await db.programme.upsert({
       where: { orgId_code: { orgId, code: "ITEST" } },
       update: {},
       create: { orgId, code: "ITEST", name: "Integration Course" },
     })
   ).id;
-  termId = (
-    await db.term.upsert({
+  semesterId = (
+    await db.semester.upsert({
       where: { orgId_name: { orgId, name: "Integration Term" } },
       update: {},
       create: {
@@ -194,13 +225,13 @@ beforeEach(async () => {
   groupId = (
     await db.group.upsert({
       where: {
-        courseId_termId_name: { courseId, termId, name: "Test Cohort" },
+        programmeId_semesterId_name: { programmeId, semesterId, name: "Test Cohort" },
       },
       update: {},
       create: {
         orgId,
-        courseId,
-        termId,
+        programmeId,
+        semesterId,
         name: "Test Cohort",
         label: "Test Cohort",
       },
@@ -234,6 +265,7 @@ describe("events.create", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly lecture",
       roomId: roomA,
       facultyId,
@@ -320,6 +352,7 @@ describe("events.create", () => {
     const caller = callerFor(admin);
     await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "In room A",
       roomId: roomA,
       facultyId,
@@ -330,6 +363,7 @@ describe("events.create", () => {
     await expect(
       caller.events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "In room B at the same time",
         roomId: roomB,
         facultyId,
@@ -390,13 +424,13 @@ describe("events.create", () => {
     const caller = callerFor(admin);
     const other = await db.group.upsert({
       where: {
-        courseId_termId_name: { courseId, termId, name: "Other Cohort" },
+        programmeId_semesterId_name: { programmeId, semesterId, name: "Other Cohort" },
       },
       update: {},
       create: {
         orgId,
-        courseId,
-        termId,
+        programmeId,
+        semesterId,
         name: "Other Cohort",
         label: "Other Cohort",
       },
@@ -427,6 +461,7 @@ describe("events.create", () => {
     // A one-off meeting three weeks out for this teacher, in another room.
     await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Department meeting",
       roomId: roomB,
       facultyId,
@@ -437,6 +472,7 @@ describe("events.create", () => {
     await expect(
       caller.events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Weekly lecture",
         roomId: roomA,
         facultyId,
@@ -462,6 +498,7 @@ describe("events.create", () => {
     await expect(
       caller.events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Weekly",
         roomId: roomA,
         startTime: at(3, 3, 9),
@@ -476,6 +513,7 @@ describe("events.create", () => {
     await expect(
       caller.events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Forever",
         roomId: roomA,
         startTime: at(3, 3, 9),
@@ -504,6 +542,7 @@ describe("events.cancel", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -538,6 +577,7 @@ describe("events.cancel", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -565,6 +605,7 @@ describe("events.cancel", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -593,6 +634,7 @@ describe("events.update", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -627,6 +669,7 @@ describe("events.update", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -663,6 +706,7 @@ describe("events.update", () => {
     const caller = callerFor(admin);
     const { event } = await caller.events.create({
       kind: EventKind.CLASS,
+      groupId,
       title: "Weekly",
       roomId: roomA,
       startTime: at(3, 3, 9),
@@ -726,6 +770,7 @@ describe("permissions", () => {
     await expect(
       caller.events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Not allowed",
         roomId: roomA,
         startTime: at(3, 3, 9),
@@ -773,6 +818,7 @@ describe("permissions", () => {
     await expect(
       callerFor(hybrid).events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Scheduled by a coordinator",
         roomId: roomA,
         startTime: at(4, 7, 9),
@@ -790,11 +836,414 @@ describe("permissions", () => {
     await expect(
       callerFor(teacher).events.create({
         kind: EventKind.CLASS,
+        groupId,
         title: "Not allowed",
         roomId: roomA,
         startTime: at(4, 8, 9),
         endTime: at(4, 8, 10),
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("settling a repeating clash", () => {
+  /**
+   * A weekly series that meets an existing booking on one of its dates should
+   * not be all-or-nothing: the date can be skipped, or the booking already
+   * there can be dropped for that one day.
+   */
+  const seriesArgs = {
+    kind: EventKind.CLASS,
+    title: "Weekly lecture",
+    roomId: "",
+    groupId: "",
+    startTime: at(5, 5, 9),
+    endTime: at(5, 5, 10),
+    rrule: "FREQ=WEEKLY;COUNT=6",
+  };
+
+  it("reports the clashing dates, and only those", async () => {
+    const caller = callerFor(admin);
+    await caller.events.create({
+      kind: EventKind.BOOKING,
+      title: "Blocker",
+      roomId: roomA,
+      startTime: at(5, 19, 9),
+      endTime: at(5, 19, 10),
+    });
+
+    const conflicts = await caller.events.checkConflicts({
+      roomId: roomA,
+      startTime: seriesArgs.startTime,
+      endTime: seriesArgs.endTime,
+      rrule: seriesArgs.rrule,
+    });
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]!.candidate!.start).toEqual(at(5, 19, 9));
+    // The blocking occurrence identifies itself well enough to be cancelled.
+    expect(conflicts[0]!.clashesWith).toMatchObject({
+      title: "Blocker",
+      originalStart: at(5, 19, 9),
+    });
+  });
+
+  it("skipping the clashing date books the rest of the series", async () => {
+    const caller = callerFor(admin);
+    await caller.events.create({
+      kind: EventKind.BOOKING,
+      title: "Blocker",
+      roomId: roomA,
+      startTime: at(5, 19, 9),
+      endTime: at(5, 19, 10),
+    });
+
+    const { event } = await caller.events.create({
+      ...seriesArgs,
+      roomId: roomA,
+      groupId,
+      skipDates: [at(5, 19, 9)],
+    });
+
+    const occurrences = await db.eventOccurrence.findMany({
+      where: { eventId: event.id },
+      orderBy: { start: "asc" },
+    });
+    // Six dates in the rule, one of them skipped rather than booked.
+    expect(occurrences).toHaveLength(6);
+    expect(
+      occurrences.filter((o) => o.status !== "CANCELLED").map((o) => o.start),
+    ).not.toContainEqual(at(5, 19, 9));
+    const skipped = occurrences.find(
+      (o) => o.start.getTime() === at(5, 19, 9).getTime(),
+    );
+    expect(skipped?.status).toBe("CANCELLED");
+  });
+
+  it("skipping a date that does not clash still books every other date", async () => {
+    const caller = callerFor(admin);
+    const { event } = await caller.events.create({
+      ...seriesArgs,
+      roomId: roomA,
+      groupId,
+      skipDates: [at(5, 12, 9)],
+    });
+    const live = await db.eventOccurrence.count({
+      where: { eventId: event.id, status: { not: "CANCELLED" } },
+    });
+    expect(live).toBe(5);
+  });
+
+  it("cancelling the other booking for that one day frees the whole series", async () => {
+    const caller = callerFor(admin);
+    // Both repeat, but they only meet on the first of the blocker's dates.
+    const blocker = await caller.events.create({
+      kind: EventKind.BOOKING,
+      title: "Blocker",
+      roomId: roomA,
+      startTime: at(5, 19, 9),
+      endTime: at(5, 19, 10),
+      rrule: "FREQ=WEEKLY;COUNT=3",
+    });
+    const series = {
+      ...seriesArgs,
+      roomId: roomA,
+      groupId,
+      rrule: "FREQ=WEEKLY;COUNT=3",
+    };
+
+    // The series cannot go in while the blocker holds that date.
+    await expect(caller.events.create(series)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+
+    await caller.events.cancel({
+      id: blocker.event.id,
+      scope: "occurrence",
+      originalStart: at(5, 19, 9),
+      reason: "Freed for the lecture",
+    });
+
+    await expect(caller.events.create(series)).resolves.toBeTruthy();
+
+    // Only that date went: the blocker's other two weeks are untouched.
+    const left = await db.eventOccurrence.count({
+      where: { eventId: blocker.event.id, status: { not: "CANCELLED" } },
+    });
+    expect(left).toBe(2);
+  });
+});
+
+describe("combined lectures and their registers", () => {
+  it("refuses a class with no group attending it", async () => {
+    await expect(
+      callerFor(admin).events.create({
+        kind: EventKind.CLASS,
+        title: "Nobody's lecture",
+        roomId: roomA,
+        startTime: at(6, 2, 9),
+        endTime: at(6, 2, 10),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("a booking needs no group", async () => {
+    await expect(
+      callerFor(admin).events.create({
+        kind: EventKind.BOOKING,
+        title: "Study room",
+        roomId: roomA,
+        startTime: at(6, 2, 9),
+        endTime: at(6, 2, 10),
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("puts every attending group on the lecture, primary first", async () => {
+    const caller = callerFor(admin);
+    const second = await makeGroup("IT-GRP-B");
+
+    const { event } = await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Combined lecture",
+      roomId: roomA,
+      groupIds: [groupId, second.id],
+      startTime: at(6, 3, 9),
+      endTime: at(6, 3, 10),
+    });
+
+    const saved = await db.event.findUniqueOrThrow({
+      where: { id: event.id },
+      include: { groups: true },
+    });
+    // The first is denormalised onto the event and its occurrences; both are on
+    // the join, so either group's timetable finds it.
+    expect(saved.groupId).toBe(groupId);
+    expect(saved.groups.map((g) => g.groupId).sort()).toEqual(
+      [groupId, second.id].sort(),
+    );
+  });
+
+  it("catches a clash against a group that only rides along", async () => {
+    const caller = callerFor(admin);
+    const second = await makeGroup("IT-GRP-C");
+
+    // A combined lecture where the second group is not the primary one.
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Combined lecture",
+      roomId: roomA,
+      groupIds: [groupId, second.id],
+      startTime: at(6, 4, 9),
+      endTime: at(6, 4, 10),
+    });
+
+    // That second group is now busy, even though no occurrence carries its id.
+    await expect(
+      caller.events.create({
+        kind: EventKind.CLASS,
+        title: "Clashing tutorial",
+        roomId: roomB,
+        groupIds: [second.id],
+        startTime: at(6, 4, 9, 30),
+        endTime: at(6, 4, 10, 30),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("offers a register per group and keeps them apart", async () => {
+    const caller = callerFor(admin);
+    const second = await makeGroup("IT-GRP-D");
+    const profile = await makeStudent(
+      "itest-att@plannr-demo.invalid",
+      "ITEST-ATT-1",
+    );
+
+    const { event } = await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Combined lecture",
+      roomId: roomA,
+      groupIds: [groupId, second.id],
+      facultyId,
+      startTime: at(6, 5, 9),
+      endTime: at(6, 5, 10),
+    });
+    const occurrence = await db.eventOccurrence.findFirstOrThrow({
+      where: { eventId: event.id },
+    });
+
+    const sitting = await caller.attendance.forOccurrence({
+      occurrenceId: occurrence.id,
+    });
+    // One sitting, two registers.
+    expect(sitting!.groups).toHaveLength(2);
+    const primary = sitting!.groups.find((g) => g.id === groupId)!;
+    const mine = primary.students.find((s) => s.id === profile.id)!;
+    // Nothing marked yet reads as present — a register lists the absences.
+    expect(mine.status).toBe("PRESENT");
+    expect(mine.marked).toBe(false);
+    expect(primary.markedAt).toBeNull();
+
+    // Only the teacher the lecture is timetabled to may take its register.
+    await callerFor(facultyActor).attendance.mark({
+      occurrenceId: occurrence.id,
+      groupId,
+      records: [{ studentId: profile.id, status: "ABSENT" }],
+    });
+
+    const after = await caller.attendance.forOccurrence({
+      occurrenceId: occurrence.id,
+    });
+    const marked = after!.groups
+      .find((g) => g.id === groupId)!
+      .students.find((s) => s.id === profile.id)!;
+    expect(marked.status).toBe("ABSENT");
+    expect(marked.marked).toBe(true);
+    // The other group's register is untouched by the first being taken.
+    expect(after!.groups.find((g) => g.id === second.id)!.markedAt).toBeNull();
+  });
+
+  it("lets nobody but the timetabled teacher take the register", async () => {
+    const { event } = await callerFor(admin).events.create({
+      kind: EventKind.CLASS,
+      title: "Somebody else's lecture",
+      roomId: roomA,
+      groupIds: [groupId],
+      facultyId,
+      startTime: at(6, 9, 9),
+      endTime: at(6, 9, 10),
+    });
+    const occurrence = await db.eventOccurrence.findFirstOrThrow({
+      where: { eventId: event.id },
+    });
+
+    // An admin schedules the lecture but did not give it: a register is a
+    // statement that a named teacher saw these people, so it is not theirs to
+    // make.
+    await expect(
+      callerFor(admin).attendance.mark({
+        occurrenceId: occurrence.id,
+        groupId,
+        records: [],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      callerFor(facultyActor).attendance.mark({
+        occurrenceId: occurrence.id,
+        groupId,
+        records: [],
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("refuses a register for a lecture with no teacher on it", async () => {
+    const { event } = await callerFor(admin).events.create({
+      kind: EventKind.CLASS,
+      title: "Unstaffed lecture",
+      roomId: roomA,
+      groupIds: [groupId],
+      startTime: at(6, 10, 9),
+      endTime: at(6, 10, 10),
+    });
+    const occurrence = await db.eventOccurrence.findFirstOrThrow({
+      where: { eventId: event.id },
+    });
+
+    await expect(
+      callerFor(facultyActor).attendance.mark({
+        occurrenceId: occurrence.id,
+        groupId,
+        records: [],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("re-marking replaces the register rather than adding to it", async () => {
+    const caller = callerFor(admin);
+    const profile = await makeStudent(
+      "itest-att2@plannr-demo.invalid",
+      "ITEST-ATT-2",
+    );
+
+    const { event } = await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Lecture",
+      roomId: roomA,
+      groupIds: [groupId],
+      facultyId,
+      startTime: at(6, 6, 9),
+      endTime: at(6, 6, 10),
+    });
+    const occurrence = await db.eventOccurrence.findFirstOrThrow({
+      where: { eventId: event.id },
+    });
+
+    await callerFor(facultyActor).attendance.mark({
+      occurrenceId: occurrence.id,
+      groupId,
+      records: [{ studentId: profile.id, status: "ABSENT" }],
+    });
+    const corrected = await callerFor(facultyActor).attendance.mark({
+      occurrenceId: occurrence.id,
+      groupId,
+      records: [{ studentId: profile.id, status: "PRESENT" }],
+    });
+
+    expect(corrected.marked).toBe(1);
+    expect(corrected.present).toBe(1);
+    const records = await db.attendanceRecord.count({
+      where: { session: { occurrenceId: occurrence.id, groupId } },
+    });
+    expect(records).toBe(1);
+  });
+
+  it("a student cannot take a register", async () => {
+    const caller = callerFor(admin);
+    const { event } = await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Lecture",
+      roomId: roomA,
+      groupIds: [groupId],
+      startTime: at(6, 9, 9),
+      endTime: at(6, 9, 10),
+    });
+    const occurrence = await db.eventOccurrence.findFirstOrThrow({
+      where: { eventId: event.id },
+    });
+
+    const student = await makeActor(
+      "itest-student-att@plannr-demo.invalid",
+      "Just a student",
+      "student",
+    );
+    await expect(
+      callerFor(student).attendance.mark({
+        occurrenceId: occurrence.id,
+        groupId,
+        records: [],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("lists a group's lectures, including ones it only rides along on", async () => {
+    const caller = callerFor(admin);
+    const second = await makeGroup("IT-GRP-E");
+
+    await caller.events.create({
+      kind: EventKind.CLASS,
+      title: "Shared lecture",
+      roomId: roomA,
+      groupIds: [groupId, second.id],
+      startTime: at(6, 10, 9),
+      endTime: at(6, 10, 10),
+    });
+
+    const lectures = await caller.groups.lectures({ groupId: second.id });
+    expect(lectures).toHaveLength(1);
+    expect(lectures[0]!.title).toBe("Shared lecture");
+    // It says who else is in the room.
+    expect(lectures[0]!.sharedWith).toContain("Test Cohort");
+    expect(lectures[0]!.attendance).toBeNull();
   });
 });

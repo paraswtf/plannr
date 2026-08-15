@@ -1,5 +1,6 @@
 import type { PickerOption } from "~/components/ui/entity-picker";
 import { initialsOf } from "~/components/ui/entity-picker";
+import { contactAddress } from "~/lib/people";
 import {
   PermissionBitField,
   PERMISSION_CATALOG,
@@ -49,28 +50,34 @@ export const roleCard = (r: {
 export const facultyCard = (f: {
   id: string;
   name: string;
-  email?: string;
+  /** null for anyone the college has sent no address for. */
+  email?: string | null;
   department?: string | null;
   isActive?: boolean;
   groupCount?: number;
-}): PickerOption => ({
-  id: f.id,
-  label: f.name,
-  card: {
+}): PickerOption => {
+  const address = contactAddress(f.email);
+  return {
+    id: f.id,
     label: f.name,
-    avatar: { kind: "initials", text: initialsOf(f.name) },
-    title: f.name,
-    subtitle: f.department ?? "No department",
-    badges:
-      f.isActive === false ? [{ text: "inactive", tone: "red" as const }] : [],
-    meta: [
-      ...(f.email ? [f.email] : []),
-      ...(f.groupCount !== undefined
-        ? [`${f.groupCount} ${f.groupCount === 1 ? "group" : "groups"}`]
-        : []),
-    ],
-  },
-});
+    card: {
+      label: f.name,
+      avatar: { kind: "initials", text: initialsOf(f.name) },
+      title: f.name,
+      subtitle: f.department ?? "No department",
+      badges:
+        f.isActive === false ? [{ text: "inactive", tone: "red" as const }] : [],
+      meta: [
+        // A card is glanced at rather than read, so an address that is not
+        // there is left out rather than announced in the row of counts.
+        ...(address ? [address] : []),
+        ...(f.groupCount !== undefined
+          ? [`${f.groupCount} ${f.groupCount === 1 ? "group" : "groups"}`]
+          : []),
+      ],
+    },
+  };
+};
 
 export const groupCard = (g: {
   id: string;

@@ -1,8 +1,16 @@
+import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { PlannrMark } from "~/components/ui/brand";
 import { env } from "~/env";
 import { homeFor } from "~/lib/role-nav";
 import { auth, signIn } from "~/server/auth";
+
+export const metadata: Metadata = {
+  title: "Sign in",
+  description:
+    "Sign in with your college Google account to reach your timetable, room bookings and attendance.",
+};
 
 const ERROR_MESSAGES: Record<string, string> = {
   AccessDenied: `Plannr is limited to @${env.GOOGLE_WORKSPACE_DOMAIN} accounts. Sign in with your college Google account.`,
@@ -33,11 +41,8 @@ export default async function LoginPage({
         className="bg-surface w-full max-w-[420px] rounded-[var(--radius-card)] p-10"
         style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
       >
-        <div
-          className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl text-xl font-bold text-white"
-          style={{ background: "var(--grad-brand)" }}
-        >
-          P
+        <div className="mb-7 flex">
+          <PlannrMark height={46} alt="Plannr" />
         </div>
 
         <h1 className="font-display text-title text-[30px] leading-tight font-bold tracking-[-0.02em]">

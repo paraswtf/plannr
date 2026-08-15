@@ -9,6 +9,7 @@
 
 import {
   EventKind,
+  GroupKind,
   PrismaClient,
   RoomFeature,
   RoomType,
@@ -139,6 +140,54 @@ const ROOMS: Array<{
     type: RoomType.STUDIO,
     features: [RoomFeature.WHITEBOARD, RoomFeature.TV, RoomFeature.AC],
   },
+  // The rooms below exist to give the size and kit rules something to bite on:
+  // two rooms too small for anything but a tutorial, a computer lab with no
+  // projector, a smart classroom, and a hall that only the biggest class needs.
+  {
+    code: "T-01",
+    building: "Turing Annexe",
+    floor: 0,
+    capacity: 12,
+    type: RoomType.SEMINAR,
+    features: [RoomFeature.WHITEBOARD],
+  },
+  {
+    code: "T-02",
+    building: "Turing Annexe",
+    floor: 0,
+    capacity: 18,
+    type: RoomType.SEMINAR,
+    features: [RoomFeature.WHITEBOARD, RoomFeature.TV],
+  },
+  {
+    code: "K-Lab3",
+    building: "Kepler Building",
+    floor: 2,
+    capacity: 26,
+    type: RoomType.LAB,
+    features: [RoomFeature.COMPUTERS, RoomFeature.WHITEBOARD],
+  },
+  {
+    code: "A-Smart",
+    building: "Ashby Hall",
+    floor: 3,
+    capacity: 42,
+    type: RoomType.LECTURE,
+    features: [
+      RoomFeature.SMART_BOARD,
+      RoomFeature.PROJECTOR,
+      RoomFeature.AC,
+      RoomFeature.MIC,
+    ],
+  },
+  {
+    code: "K-Hall",
+    building: "Kepler Building",
+    floor: 1,
+    capacity: 130,
+    type: RoomType.LECTURE_HALL,
+    features: [RoomFeature.PROJECTOR, RoomFeature.MIC, RoomFeature.AC],
+  },
 ];
 
 const COURSES = [
@@ -148,12 +197,117 @@ const COURSES = [
   { code: "M.Sc CS", name: "M.Sc Computer Science" },
 ];
 
-const GROUPS = [
-  { name: "BCA-A", label: "BCA-A · Sem III", course: "BCA" },
-  { name: "BCA-B", label: "BCA-B · Sem III", course: "BCA" },
-  { name: "BCom-I", label: "B.Com · Sem I", course: "B.Com" },
-  { name: "BBAIT-IV", label: "BBA-IT · Sem IV", course: "BBA-IT" },
-  { name: "MSc-II", label: "M.Sc CS · Sem II", course: "M.Sc CS" },
+/**
+ * Intakes. A batch is the cohort admitted to a course in one year and stays put
+ * for the whole programme; the groups below hang off it.
+ */
+const BATCHES: Array<{
+  name: string;
+  course: string;
+  startYear: number;
+  endYear: number;
+}> = [
+  { name: "24-27 BCA", course: "BCA", startYear: 2024, endYear: 2027 },
+  { name: "23-27 BBA-IT", course: "BBA-IT", startYear: 2023, endYear: 2027 },
+  { name: "25-28 B.Com", course: "B.Com", startYear: 2025, endYear: 2028 },
+  { name: "25-27 M.Sc CS", course: "M.Sc CS", startYear: 2025, endYear: 2027 },
+  // An older intake, to show that batches outlive the current term.
+  { name: "22-25 BCA", course: "BCA", startYear: 2022, endYear: 2025 },
+];
+
+/**
+ * How each intake is split. Divisions partition it — everyone is in exactly one
+ * — while majors, minors and subject groups draw from the same people again,
+ * which is why the sizes below overlap rather than add up.
+ *
+ * `size` is the roll each group is topped up to with placeholder students. Room
+ * capacity is checked against it, so the sizes straddle the rooms above: a
+ * tutorial group fits anywhere, a combined lecture fits only the auditorium, and
+ * most sections rule out the labs and seminar rooms.
+ */
+const GROUPS: Array<{
+  name: string;
+  label: string;
+  course: string;
+  size: number;
+  batch?: string;
+  kind?: GroupKind;
+}> = [
+  {
+    name: "BCA-A",
+    label: "BCA-A · Sem III",
+    course: "BCA",
+    size: 52,
+    batch: "24-27 BCA",
+  },
+  {
+    name: "BCA-B",
+    label: "BCA-B · Sem III",
+    course: "BCA",
+    size: 38,
+    batch: "24-27 BCA",
+  },
+  {
+    name: "BCA-ALL",
+    label: "BCA (all sections) · Sem III",
+    course: "BCA",
+    size: 150,
+    batch: "24-27 BCA",
+    kind: GroupKind.OTHER,
+  },
+  {
+    name: "BCA-DS",
+    label: "BCA · Data Science (major)",
+    course: "BCA",
+    size: 34,
+    batch: "24-27 BCA",
+    kind: GroupKind.MAJOR,
+  },
+  {
+    name: "BCA-STAT",
+    label: "BCA · Statistics (minor)",
+    course: "BCA",
+    size: 21,
+    batch: "24-27 BCA",
+    kind: GroupKind.MINOR,
+  },
+  {
+    name: "BCom-I",
+    label: "B.Com · Sem I",
+    course: "B.Com",
+    size: 96,
+    batch: "25-28 B.Com",
+  },
+  {
+    name: "BBAIT-IV",
+    label: "BBA-IT · Sem IV",
+    course: "BBA-IT",
+    size: 24,
+    batch: "23-27 BBA-IT",
+  },
+  {
+    name: "BBAIT-FIN",
+    label: "BBA-IT · Finance (major)",
+    course: "BBA-IT",
+    size: 14,
+    batch: "23-27 BBA-IT",
+    kind: GroupKind.MAJOR,
+  },
+  {
+    name: "MSc-II",
+    label: "M.Sc CS · Sem II",
+    course: "M.Sc CS",
+    size: 11,
+    batch: "25-27 M.Sc CS",
+  },
+  // An elective open to more than one intake, so it belongs to none of them.
+  {
+    name: "ELEC-AI",
+    label: "Elective · Applied AI",
+    course: "BCA",
+    size: 28,
+    kind: GroupKind.SUBJECT,
+  },
 ];
 
 const FACULTY: Array<{
@@ -167,7 +321,7 @@ const FACULTY: Array<{
     name: "Dr. Meera Rao",
     short: "Dr. Rao",
     dept: "Computer Science",
-    groups: ["BCA-A"],
+    groups: ["BCA-A", "BCA-ALL", "BCA-DS"],
   },
   {
     name: "Dr. S. Deshpande",
@@ -179,7 +333,7 @@ const FACULTY: Array<{
     name: "Ms. P. Joshi",
     short: "Ms. Joshi",
     dept: "Mathematics",
-    groups: ["BCA-A", "BCom-I"],
+    groups: ["BCA-A", "BCom-I", "BCA-STAT"],
   },
   {
     name: "Ms. R. Walhekar",
@@ -191,7 +345,7 @@ const FACULTY: Array<{
     name: "Mr. N. Bose",
     short: "Mr. Bose",
     dept: "Computer Science",
-    groups: ["BCA-B", "MSc-II"],
+    groups: ["BCA-B", "MSc-II", "ELEC-AI"],
   },
   {
     name: "Dr. L. Fernandes",
@@ -203,7 +357,7 @@ const FACULTY: Array<{
     name: "Prof. A. Kulkarni",
     short: "Prof. Kulkarni",
     dept: "Management",
-    groups: ["BBAIT-IV"],
+    groups: ["BBAIT-IV", "BBAIT-FIN"],
   },
   // Teaches and also runs the timetable — the multi-role case the permission
   // model exists for.
@@ -234,6 +388,8 @@ const TIMETABLE: Array<{
   title: string;
   room: string;
   group: string;
+  /** Other groups sitting in on the same lecture. */
+  alsoGroups?: string[];
   faculty: string;
   weekday: number;
   startHour: number;
@@ -401,6 +557,40 @@ const TIMETABLE: Array<{
     startHour: 12,
     endHour: 13,
   },
+  // 150 students: the auditorium is the only room in the building list that
+  // can hold it, which is what makes the greyed-out columns worth having.
+  {
+    title: "Combined Lecture",
+    room: "K-Aud",
+    group: "BCA-ALL",
+    faculty: "Dr. Rao",
+    weekday: 2,
+    startHour: 9,
+    endHour: 10.5,
+  },
+  // One lecture, both divisions in the room: 52 + 38 seats, which only the
+  // bigger halls can take, and two registers when attendance is called.
+  {
+    title: "Research Methods",
+    room: "K-Hall",
+    group: "BCA-A",
+    alsoGroups: ["BCA-B"],
+    faculty: "Dr. Rao",
+    weekday: 3,
+    startHour: 11,
+    endHour: 12,
+  },
+  // Needs the computers, so the labs are the only candidates — and K-Lab3 has
+  // no projector, which the requirement chips can be used to rule out.
+  {
+    title: "Data Structures Lab",
+    room: "K-Lab3",
+    group: "MSc-II",
+    faculty: "Mr. Bose",
+    weekday: 2,
+    startHour: 14,
+    endHour: 16,
+  },
 ];
 
 /** Turns a decimal hour (9.5) into an instant on the term's first week. */
@@ -553,7 +743,7 @@ async function main() {
   // term, so a name that changed between runs would orphan them and quietly
   // duplicate every group.
   const termName = "Demo Semester";
-  const term = await db.term.upsert({
+  const term = await db.semester.upsert({
     where: { orgId_name: { orgId: org.id, name: termName } },
     update: { startDate: termStart, endDate: termEnd },
     create: {
@@ -565,12 +755,12 @@ async function main() {
   });
   await db.orgSettings.update({
     where: { orgId: org.id },
-    data: { activeTermId: term.id },
+    data: { activeSemesterId: term.id },
   });
 
   const courseIds = new Map<string, string>();
   for (const course of COURSES) {
-    const row = await db.course.upsert({
+    const row = await db.programme.upsert({
       where: { orgId_code: { orgId: org.id, code: course.code } },
       update: { name: course.name },
       create: { orgId: org.id, code: course.code, name: course.name },
@@ -578,27 +768,54 @@ async function main() {
     courseIds.set(course.code, row.id);
   }
 
+  const batchIds = new Map<string, string>();
+  for (const batch of BATCHES) {
+    const row = await db.batch.upsert({
+      where: { orgId_name: { orgId: org.id, name: batch.name } },
+      update: {
+        programmeId: courseIds.get(batch.course)!,
+        startYear: batch.startYear,
+        endYear: batch.endYear,
+      },
+      create: {
+        orgId: org.id,
+        programmeId: courseIds.get(batch.course)!,
+        name: batch.name,
+        startYear: batch.startYear,
+        endYear: batch.endYear,
+      },
+    });
+    batchIds.set(batch.name, row.id);
+  }
+
   const groupIds = new Map<string, string>();
   for (const group of GROUPS) {
-    const courseId = courseIds.get(group.course)!;
+    const programmeId = courseIds.get(group.course)!;
+    const shape = {
+      label: group.label,
+      batchId: group.batch ? batchIds.get(group.batch)! : null,
+      kind: group.kind ?? GroupKind.DIVISION,
+    };
     const existing = await db.group.findFirst({
-      where: { courseId, termId: term.id, name: group.name },
+      where: { programmeId, semesterId: term.id, name: group.name },
     });
-    const row =
-      existing ??
-      (await db.group.create({
-        data: {
-          orgId: org.id,
-          courseId,
-          termId: term.id,
-          name: group.name,
-          label: group.label,
-        },
-      }));
+    // Re-seeding re-files existing groups under their batch rather than
+    // leaving the ones created before batches existed unattached.
+    const row = existing
+      ? await db.group.update({ where: { id: existing.id }, data: shape })
+      : await db.group.create({
+          data: {
+            orgId: org.id,
+            programmeId,
+            semesterId: term.id,
+            name: group.name,
+            ...shape,
+          },
+        });
     groupIds.set(group.name, row.id);
   }
   console.log(
-    `✓ term ${term.name}, ${courseIds.size} courses, ${groupIds.size} groups`,
+    `✓ term ${term.name}, ${courseIds.size} courses, ${batchIds.size} batches, ${groupIds.size} groups`,
   );
 
   // --- people -------------------------------------------------------------
@@ -666,7 +883,53 @@ async function main() {
       });
     }
   }
-  console.log(`✓ ${FACULTY.length} faculty, ${STUDENTS.length} students`);
+  // --- rosters ------------------------------------------------------------
+  // Group size is what the room-capacity rule is checked against, so every
+  // group is topped up to a realistic roll. These are ordinary student rows —
+  // counts, membership pages and exports all see the same thing.
+  let filled = 0;
+  for (const group of GROUPS) {
+    const groupId = groupIds.get(group.name)!;
+    const have = await db.studentGroupMembership.count({ where: { groupId } });
+    const slug = group.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    for (let i = have; i < group.size; i++) {
+      const seq = String(i + 1).padStart(3, "0");
+      const email = `${slug}.${seq}@${domain}`;
+      const user = await db.user.upsert({
+        where: { email },
+        update: {},
+        create: {
+          email,
+          name: `${group.name} Student ${seq}`,
+          orgId: org.id,
+        },
+      });
+      await assignRole(user.id, "student");
+      const profile = await db.studentProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: {
+          userId: user.id,
+          orgId: org.id,
+          prn: `${slug.toUpperCase()}-${seq}`,
+        },
+      });
+      await db.studentGroupMembership.upsert({
+        where: { studentId_groupId: { studentId: profile.id, groupId } },
+        update: {},
+        create: { studentId: profile.id, groupId },
+      });
+      filled++;
+    }
+  }
+
+  console.log(
+    `✓ ${FACULTY.length} faculty, ${STUDENTS.length} named students, ${filled} added to fill rosters`,
+  );
+  for (const group of GROUPS) {
+    console.log(`  · ${group.name}: ${group.size} students`);
+  }
 
   // --- weekly timetable ---------------------------------------------------
   // Re-seeding replaces the demo classes rather than duplicating them. Scoped
@@ -685,6 +948,7 @@ async function main() {
     const start = slotStart(entry.weekday, entry.startHour);
     const end = slotStart(entry.weekday, entry.endHour);
 
+    const attending = [entry.group, ...(entry.alsoGroups ?? [])];
     const event = await db.event.create({
       data: {
         orgId: org.id,
@@ -693,11 +957,18 @@ async function main() {
         roomId: roomIds.get(entry.room)!,
         groupId: groupIds.get(entry.group)!,
         facultyId: facultyIds.get(entry.faculty)!,
-        termId: term.id,
+        semesterId: term.id,
         startTime: start,
         endTime: end,
         timezone: TZ,
         rrule,
+        // Every group in the room, primary included, so a combined lecture is
+        // one event rather than one per division.
+        groups: {
+          create: attending.map((name) => ({
+            groupId: groupIds.get(name)!,
+          })),
+        },
       },
     });
     await regenerateOccurrences(db, event.id);

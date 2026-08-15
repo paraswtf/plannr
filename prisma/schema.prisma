@@ -5,14 +5,14 @@
 // resolving `orgId` from the session instead of a constant.
 
 generator client {
-    provider = "prisma-client-js"
-    output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -21,137 +21,145 @@ datasource db {
 // four locked ones. See src/lib/permissions.ts for the bitfield they carry.
 
 enum RoomType {
-    LECTURE
-    LECTURE_HALL
-    LAB
-    SEMINAR
-    AUDITORIUM
-    STUDIO
-    OTHER
+  LECTURE
+  LECTURE_HALL
+  LAB
+  SEMINAR
+  AUDITORIUM
+  STUDIO
+  OTHER
 }
 
 enum RoomFeature {
-    PROJECTOR
-    COMPUTERS
-    AC
-    WHITEBOARD
-    MIC
-    TV
-    STAGE
-    SMART_BOARD
+  PROJECTOR
+  COMPUTERS
+  AC
+  WHITEBOARD
+  MIC
+  TV
+  STAGE
+  SMART_BOARD
 }
 
 enum EventKind {
-    CLASS // timetabled class: a group taught by a faculty member
-    BOOKING // ad-hoc reservation: student study room or faculty request
-    BLOCK // room unavailable: maintenance, exams
+  CLASS // timetabled class: a group taught by a faculty member
+  BOOKING // ad-hoc reservation: student study room or faculty request
+  BLOCK // room unavailable: maintenance, exams
 }
 
 enum EventStatus {
-    CONFIRMED
-    PENDING // student booking awaiting approval
-    REJECTED
-    CANCELLED // whole series cancelled; single occurrences use EventException
+  CONFIRMED
+  PENDING // student booking awaiting approval
+  REJECTED
+  CANCELLED // whole series cancelled; single occurrences use EventException
 }
 
 enum ExceptionType {
-    CANCELLED // occurrence skipped (iCal EXDATE)
-    MODIFIED // occurrence overridden (iCal RECURRENCE-ID)
+  CANCELLED // occurrence skipped (iCal EXDATE)
+  MODIFIED // occurrence overridden (iCal RECURRENCE-ID)
 }
 
 enum EmailType {
-    BOOKING_CONFIRMED
-    BOOKING_CANCELLED
-    BOOKING_APPROVED
-    BOOKING_REJECTED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
 }
 
 enum EmailStatus {
-    PENDING
-    SENT
-    FAILED
+  PENDING
+  SENT
+  FAILED
 }
 
 // ─── Tenancy ────────────────────────────────────────────────────────────────
 
 model Organization {
-    id        String   @id @default(cuid())
-    name      String
-    slug      String   @unique
-    timezone  String   @default("Asia/Kolkata")
-    createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Asia/Kolkata")
+  createdAt DateTime @default(now())
 
-    settings        OrgSettings?
-    users           User[]
-    roles           Role[]
-    buildings       Building[]
-    rooms           Room[]
-    terms           Term[]
-    courses         Course[]
-    groups          Group[]
-    events          Event[]
-    occurrences     EventOccurrence[]
-    studentProfiles StudentProfile[]
-    facultyProfiles FacultyProfile[]
-    importBatches   ImportBatch[]
+  settings        OrgSettings?
+  users           User[]
+  roles           Role[]
+  buildings       Building[]
+  rooms           Room[]
+  semesters       Semester[]
+  programmes      Programme[]
+  courses         Course[]
+  batches         Batch[]
+  groups          Group[]
+  events          Event[]
+  occurrences     EventOccurrence[]
+  studentProfiles StudentProfile[]
+  facultyProfiles FacultyProfile[]
+  attendance      AttendanceSession[]
+  importBatches   ImportBatch[]
+  schedulePlans   SchedulePlan[]
 }
 
 model OrgSettings {
-    id    String       @id @default(cuid())
-    orgId String       @unique
-    org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id    String       @id @default(cuid())
+  orgId String       @unique
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-    /// Booking granularity in minutes (30 or 60). Drives grid snapping.
-    slotMinutes Int @default(60)
-    /// Working window as minutes from local midnight: 480 = 08:00, 1080 = 18:00.
-    dayStartMinutes Int @default(480)
-    dayEndMinutes   Int @default(1080)
-    /// ISO weekdays that are bookable: 1 = Monday … 7 = Sunday.
-    workingDays Int[] @default([1, 2, 3, 4, 5])
+  /// Booking granularity in minutes (30 or 60). Drives grid snapping.
+  slotMinutes     Int   @default(60)
+  /// Working window as minutes from local midnight: 480 = 08:00, 1080 = 18:00.
+  dayStartMinutes Int   @default(480)
+  dayEndMinutes   Int   @default(1080)
+  /// ISO weekdays that are bookable: 1 = Monday … 7 = Sunday.
+  workingDays     Int[] @default([1, 2, 3, 4, 5])
 
-    blockConflicts                 Boolean @default(true)
-    requireApprovalStudentBookings Boolean @default(true)
-    allowStudentSelfBooking        Boolean @default(true)
-    emailNotifications             Boolean @default(true)
-    maxStudentBookingMinutes       Int     @default(120)
+  blockConflicts                 Boolean @default(true)
+  requireApprovalStudentBookings Boolean @default(true)
+  allowStudentSelfBooking        Boolean @default(true)
+  emailNotifications             Boolean @default(true)
+  maxStudentBookingMinutes       Int     @default(120)
 
-    activeTermId String?
+  activeSemesterId String?
 
-    updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 // ─── Auth.js adapter tables + User ──────────────────────────────────────────
 
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String    @unique // lowercased on write; multi-tenant: @@unique([orgId, email])
-    emailVerified DateTime?
-    image         String?
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique // lowercased on write; multi-tenant: @@unique([orgId, email])
+  emailVerified DateTime?
+  image         String?
 
-    orgId String
-    org   Organization @relation(fields: [orgId], references: [id])
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id])
 
-    /// Extra permission bits granted to this person alone, on top of whatever
-    /// their roles carry. See src/lib/permissions.ts.
-    permissions        BigInt  @default(0)
-    isActive           Boolean @default(true)
-    emailNotifications Boolean @default(true)
+  /// Extra permission bits granted to this person alone, on top of whatever
+  /// their roles carry. See src/lib/permissions.ts.
+  permissions        BigInt  @default(0)
+  isActive           Boolean @default(true)
+  emailNotifications Boolean @default(true)
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    roles          UserRole[]
-    accounts       Account[]
-    sessions       Session[]
-    studentProfile StudentProfile?
-    facultyProfile FacultyProfile?
-    createdEvents  Event[]         @relation("EventCreator")
-    importBatches  ImportBatch[]
-    outboxEntries  EmailOutbox[]
+  roles           UserRole[]
+  accounts        Account[]
+  sessions        Session[]
+  studentProfile  StudentProfile?
+  facultyProfile  FacultyProfile?
+  createdEvents   Event[]                @relation("EventCreator")
+  importBatches   ImportBatch[]
+  outboxEntries   EmailOutbox[]
+  schedulePlans   SchedulePlan[]         @relation("PlanCreator")
+  planReviews     SchedulePlanReviewer[]
+  planComments    SchedulePlanComment[]  @relation("PlanCommenter")
+  attendanceTaken AttendanceSession[]    @relation("AttendanceMarker")
 
-    @@index([orgId, name])
-    @@index([orgId, email])
+  @@index([orgId, name])
+  @@index([orgId, email])
 }
 
 /// A named bundle of permissions. The four seeded roles (student, faculty,
@@ -159,329 +167,769 @@ model User {
 /// repermissioned or deleted, because the seed and the docs describe the app in
 /// terms of them. Custom roles have a null key and are fully editable.
 model Role {
-    id    String       @id @default(cuid())
-    orgId String
-    org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-    /// Set only for the built-in roles: "student", "faculty", "coordinator", "admin".
-    key         String?
-    name        String
-    description String?
-    /// Permission bitfield. Implications are applied at check time, not stored.
-    permissions BigInt  @default(0)
-    isSystem    Boolean @default(false)
+  /// Set only for the built-in roles: "student", "faculty", "coordinator", "admin".
+  key         String?
+  name        String
+  description String?
+  /// Permission bitfield. Implications are applied at check time, not stored.
+  permissions BigInt  @default(0)
+  isSystem    Boolean @default(false)
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    users UserRole[]
+  users UserRole[]
 
-    @@unique([orgId, name])
-    @@unique([orgId, key])
-    @@index([orgId])
+  @@unique([orgId, name])
+  @@unique([orgId, key])
+  @@index([orgId])
 }
 
 model UserRole {
-    userId String
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    roleId String
-    role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
-    assignedAt   DateTime @default(now())
-    assignedById String?
+  assignedAt   DateTime @default(now())
+  assignedById String?
 
-    @@id([userId, roleId])
-    @@index([roleId])
+  @@id([userId, roleId])
+  @@index([roleId])
 }
 
 model Account {
-    id                       String  @id @default(cuid())
-    userId                   String
-    type                     String
-    provider                 String
-    providerAccountId        String
-    refresh_token            String?
-    access_token             String?
-    expires_at               Int?
-    token_type               String?
-    scope                    String?
-    id_token                 String?
-    session_state            String?
-    refresh_token_expires_in Int?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  refresh_token_expires_in Int?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@unique([provider, providerAccountId])
-    @@index([userId])
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
+  @@index([userId])
 }
 
 model VerificationToken {
-    identifier String
-    token      String   @unique
-    expires    DateTime
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
-    @@unique([identifier, token])
+  @@unique([identifier, token])
 }
 
 // ─── People ─────────────────────────────────────────────────────────────────
 
 model StudentProfile {
-    id     String       @id @default(cuid())
-    userId String       @unique
-    user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-    orgId  String
-    org    Organization @relation(fields: [orgId], references: [id])
+  id     String       @id @default(cuid())
+  userId String       @unique
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id])
 
-    prn String
+  prn String
 
-    memberships StudentGroupMembership[]
+  memberships StudentGroupMembership[]
+  attendance  AttendanceRecord[]
 
-    @@unique([orgId, prn])
-    @@index([prn])
+  @@unique([orgId, prn])
+  @@index([prn])
 }
 
 model FacultyProfile {
-    id     String       @id @default(cuid())
-    userId String       @unique
-    user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-    orgId  String
-    org    Organization @relation(fields: [orgId], references: [id])
+  id     String       @id @default(cuid())
+  userId String       @unique
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id])
 
-    /// Short display name used on timetable cards, e.g. "Dr. Rao".
-    shortName  String?
-    department String?
+  /// Short display name used on timetable cards, e.g. "Dr. Rao".
+  shortName  String?
+  department String?
 
-    assignments FacultyGroupAssignment[]
-    events      Event[]
-    occurrences EventOccurrence[]
+  assignments FacultyGroupAssignment[]
+  courses     CourseFaculty[]
+  events      Event[]
+  occurrences EventOccurrence[]
 
-    @@index([orgId, department])
+  @@index([orgId, department])
 }
 
 // ─── Spaces ─────────────────────────────────────────────────────────────────
 
 model Building {
-    id    String       @id @default(cuid())
-    orgId String
-    org   Organization @relation(fields: [orgId], references: [id])
-    name  String
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id])
+  name  String
 
-    rooms Room[]
+  rooms Room[]
 
-    @@unique([orgId, name])
+  @@unique([orgId, name])
 }
 
 model Room {
-    id         String       @id @default(cuid())
-    orgId      String
-    org        Organization @relation(fields: [orgId], references: [id])
-    /// Display code, e.g. "A-101".
-    code       String
-    buildingId String
-    building   Building     @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  id         String       @id @default(cuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id])
+  /// Display code, e.g. "A-101".
+  code       String
+  buildingId String
+  building   Building     @relation(fields: [buildingId], references: [id], onDelete: Restrict)
 
-    floor    Int
-    capacity Int
-    type     RoomType
-    features RoomFeature[]
-    isActive Boolean       @default(true)
-    notes    String?
+  floor    Int
+  capacity Int
+  type     RoomType
+  features RoomFeature[]
+  isActive Boolean       @default(true)
+  notes    String?
 
-    events      Event[]
-    occurrences EventOccurrence[]
+  events           Event[]
+  occurrences      EventOccurrence[]
+  planRequirements SchedulePlanRequirement[]
+  planSessions     SchedulePlanSession[]
 
-    @@unique([orgId, code])
-    @@index([buildingId])
-    @@index([orgId, type, capacity])
+  @@unique([orgId, code])
+  @@index([buildingId])
+  @@index([orgId, type, capacity])
 }
 
 // ─── Academic structure ─────────────────────────────────────────────────────
 
-model Term {
-    id        String       @id @default(cuid())
-    orgId     String
-    org       Organization @relation(fields: [orgId], references: [id])
-    name      String
-    startDate DateTime     @db.Date
-    endDate   DateTime     @db.Date
+/**
+ * A semester: one calendar the whole college keeps.
+ * Everything that changes from one to the next hangs off it — which courses run,
+ * which groups exist, who is in them, and every lecture and register. That is
+ * what makes last year still readable: nothing is edited in place at rollover, a
+ * new semester is opened beside it.
+ * A batch is not *in* one semester; it passes through each of them, at a
+ * different semester number each time — see BatchSemester.
+ */
+model Semester {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id])
+  /// As the college says it, e.g. "Autumn 2026".
+  name      String
+  startDate DateTime     @db.Date
+  endDate   DateTime     @db.Date
 
-    groups Group[]
-    events Event[]
+  batches       BatchSemester[]
+  courses       Course[]
+  groups        Group[]
+  events        Event[]
+  schedulePlans SchedulePlan[]
 
-    @@unique([orgId, name])
+  @@unique([orgId, name])
 }
 
-model Course {
-    id     String       @id @default(cuid())
-    orgId  String
-    org    Organization @relation(fields: [orgId], references: [id])
-    code   String
-    name   String
-    groups Group[]
+/**
+ * A programme of study: BCA, BBA-IT, MSc-CA. It admits a batch a year and runs
+ * for a fixed number of years.
+ */
+model Programme {
+  id      String       @id @default(cuid())
+  orgId   String
+  org     Organization @relation(fields: [orgId], references: [id])
+  code    String
+  name    String
+  groups  Group[]
+  batches Batch[]
+  courses Course[]
 
-    @@unique([orgId, code])
+  @@unique([orgId, code])
+}
+
+/**
+ * Which semester number a batch is sitting in during a given semester.
+ * BCA 23-27 is in its seventh in Autumn 2026 and will be in its eighth in the
+ * spring. Keeping it here rather than on the batch is what lets a past semester
+ * still say what it said at the time.
+ */
+model BatchSemester {
+  batchId    String
+  batch      Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  /// Roman, as the college writes it: "VII".
+  number     String
+
+  @@id([batchId, semesterId])
+  @@index([semesterId])
+}
+
+/**
+ * A course: one subject taught in one semester, e.g. "Deep Learning".
+ * It belongs to a semester because a subject is only offered in some of them,
+ * and the people teaching it change; last semester's Deep Learning is a
+ * different row from this one's, which is how the history stays honest.
+ * Who may teach it is a list, not a single name — the office assigns several and
+ * picks one when a lecture is scheduled.
+ */
+model Course {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  semesterId  String
+  semester    Semester     @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  programmeId String?
+  programme   Programme?   @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+
+  /// The paper code the college prints, e.g. "703". Not every course has one.
+  code  String?
+  title String
+
+  faculty CourseFaculty[]
+  groups  GroupCourse[]
+  events  Event[]
+
+  @@unique([semesterId, programmeId, title])
+  @@index([orgId])
+  @@index([semesterId])
+}
+
+/// A teacher the office has cleared to take a course. Several per course.
+model CourseFaculty {
+  courseId  String
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  facultyId String
+  faculty   FacultyProfile @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  addedAt   DateTime       @default(now())
+
+  @@id([courseId, facultyId])
+  @@index([facultyId])
+}
+
+/**
+ * A course a group takes.
+ * This is where a student's timetable and their attendance both come from: the
+ * courses somebody is studying are the courses of the groups they are in, so
+ * choosing an elective is joining a group, and nothing has to be enrolled twice.
+ */
+model GroupCourse {
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  courseId String
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  addedAt  DateTime @default(now())
+
+  @@id([groupId, courseId])
+  @@index([courseId])
+}
+
+/// What a group is for — one intake is split several different ways at once.
+enum GroupKind {
+  /// A division of the batch that attends together, e.g. "A" or "B".
+  DIVISION
+  /// A specialisation the batch splits into, e.g. "Finance".
+  MAJOR
+  /// A second, smaller specialisation.
+  MINOR
+  /// A group drawn from across the batch for one elective — not a Course
+  /// itself, but the set of people who chose it.
+  SUBJECT
+  OTHER
+}
+
+/**
+ * An intake: the cohort admitted to a programme in a given year, e.g. "23-27
+ * BBA-IT". It outlives any one semester, passing through each at a different
+ * number — the divisions, majors and electives it splits into are the groups
+ * that actually sit in rooms.
+ */
+model Batch {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  programmeId String
+  programme   Programme    @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+
+  /// How it is written down, e.g. "23-27 BBA-IT".
+  name      String
+  /// Calendar year the intake started, e.g. 2023.
+  startYear Int
+  /// Calendar year it is expected to finish, e.g. 2027.
+  endYear   Int
+
+  groups    Group[]
+  semesters BatchSemester[]
+
+  @@unique([orgId, name])
+  @@index([orgId, programmeId])
 }
 
 model Group {
-    id       String       @id @default(cuid())
-    orgId    String
-    org      Organization @relation(fields: [orgId], references: [id])
-    courseId String
-    course   Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
-    termId   String?
-    term     Term?        @relation(fields: [termId], references: [id], onDelete: SetNull)
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  programmeId String
+  programme   Programme    @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  semesterId  String?
+  semester    Semester?    @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+  /// The intake this belongs to. Optional: an elective may draw from several.
+  batchId     String?
+  batch       Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
-    /// Section name, e.g. "BCA-A".
-    name  String
-    /// Display label including semester, e.g. "BCA-A · Sem III".
-    label String?
+  /// Section name, e.g. "BCA-A".
+  name  String
+  /// Display label including semester, e.g. "BCA-A · Sem III".
+  label String?
+  /// How the batch is being divided here.
+  kind  GroupKind @default(DIVISION)
 
-    students    StudentGroupMembership[]
-    faculty     FacultyGroupAssignment[]
-    events      Event[]
-    occurrences EventOccurrence[]
+  students           StudentGroupMembership[]
+  faculty            FacultyGroupAssignment[]
+  courses            GroupCourse[]
+  events             Event[]
+  occurrences        EventOccurrence[]
+  planRequirements   SchedulePlanRequirement[]
+  planSessions       SchedulePlanSession[]
+  eventGroups        EventGroup[]
+  attendanceSessions AttendanceSession[]
 
-    @@unique([courseId, termId, name])
-    @@index([orgId])
+  @@unique([programmeId, semesterId, name])
+  @@index([orgId])
+  @@index([batchId])
 }
 
 model StudentGroupMembership {
-    studentId String
-    student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-    groupId   String
-    group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-    addedAt   DateTime       @default(now())
-    addedById String?
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addedAt   DateTime       @default(now())
+  addedById String?
 
-    @@id([studentId, groupId])
-    @@index([groupId])
+  @@id([studentId, groupId])
+  @@index([groupId])
 }
 
 model FacultyGroupAssignment {
-    facultyId String
-    faculty   FacultyProfile @relation(fields: [facultyId], references: [id], onDelete: Cascade)
-    groupId   String
-    group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-    addedAt   DateTime       @default(now())
+  facultyId String
+  faculty   FacultyProfile @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addedAt   DateTime       @default(now())
 
-    @@id([facultyId, groupId])
-    @@index([groupId])
+  @@id([facultyId, groupId])
+  @@index([groupId])
 }
 
 // ─── Events & recurrence ────────────────────────────────────────────────────
 
 model Event {
-    id     String       @id @default(cuid())
-    orgId  String
-    org    Organization @relation(fields: [orgId], references: [id])
-    kind   EventKind
-    status EventStatus  @default(CONFIRMED)
-    title  String
+  id     String       @id @default(cuid())
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id])
+  kind   EventKind
+  status EventStatus  @default(CONFIRMED)
+  title  String
 
-    roomId    String
-    room      Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
-    groupId   String?
-    group     Group?          @relation(fields: [groupId], references: [id], onDelete: Restrict)
-    facultyId String?
-    faculty   FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
-    termId    String?
-    term      Term?           @relation(fields: [termId], references: [id], onDelete: SetNull)
+  roomId     String
+  room       Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  groupId    String?
+  group      Group?          @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  facultyId  String?
+  faculty    FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  semesterId String?
+  semester   Semester?       @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+  /// The subject this lecture teaches. A room booking has none.
+  courseId   String?
+  course     Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
 
-    createdById String?
-    createdBy   User?   @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?   @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-    /// First occurrence as UTC instants — this is DTSTART plus a duration.
-    startTime DateTime
-    endTime   DateTime
-    /// IANA zone the recurrence is expressed in. Occurrences repeat at the same
-    /// *wall clock* time in this zone, not at a fixed UTC offset.
-    timezone  String  @default("Asia/Kolkata")
-    /// Bare RFC 5545 RRULE value with no DTSTART line, e.g.
-    /// "FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215T235959". Null means a one-off.
-    rrule     String?
+  /// First occurrence as UTC instants — this is DTSTART plus a duration.
+  startTime DateTime
+  endTime   DateTime
+  /// IANA zone the recurrence is expressed in. Occurrences repeat at the same
+  /// *wall clock* time in this zone, not at a fixed UTC offset.
+  timezone  String   @default("Asia/Kolkata")
+  /// Bare RFC 5545 RRULE value with no DTSTART line, e.g.
+  /// "FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215T235959". Null means a one-off.
+  rrule     String?
 
-    notes     String?
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    exceptions  EventException[]
-    occurrences EventOccurrence[]
+  exceptions  EventException[]
+  occurrences EventOccurrence[]
+  /// Every group attending. `groupId` above is the first of these and stays
+  /// the one the hot read paths denormalise; a combined lecture lists the
+  /// rest here rather than needing a synthetic "all sections" group.
+  groups      EventGroup[]
 
-    @@index([orgId, roomId])
-    @@index([groupId])
-    @@index([facultyId])
-    @@index([termId])
-    @@index([orgId, kind, status])
+  @@index([orgId, roomId])
+  @@index([groupId])
+  @@index([facultyId])
+  @@index([semesterId])
+  @@index([courseId])
+  @@index([orgId, kind, status])
 }
 
 /// An override for one occurrence of a series, keyed by the occurrence's
 /// original start instant (iCal RECURRENCE-ID). Covers both "skip this one"
 /// (EXDATE) and "this one is different".
 model EventException {
-    id            String        @id @default(cuid())
-    eventId       String
-    event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-    originalStart DateTime
-    type          ExceptionType
+  id            String        @id @default(cuid())
+  eventId       String
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  originalStart DateTime
+  type          ExceptionType
 
-    // Overrides, only meaningful for MODIFIED. Null means "inherit from series".
-    newStartTime DateTime?
-    newEndTime   DateTime?
-    newRoomId    String?
-    newTitle     String?
-    newFacultyId String?
+  // Overrides, only meaningful for MODIFIED. Null means "inherit from series".
+  newStartTime DateTime?
+  newEndTime   DateTime?
+  newRoomId    String?
+  newTitle     String?
+  newFacultyId String?
 
-    reason    String?
-    createdAt DateTime @default(now())
+  reason    String?
+  createdAt DateTime @default(now())
 
-    occurrence EventOccurrence?
+  occurrence EventOccurrence?
 
-    @@unique([eventId, originalStart])
+  @@unique([eventId, originalStart])
 }
 
 /// Materialised expansion of every Event. Rebuilt inside the same transaction
 /// as any write to its Event or that Event's exceptions, so readers never deal
 /// with recurrence rules. Every scheduling query hits this table alone.
 model EventOccurrence {
-    id      String       @id @default(cuid())
-    orgId   String
-    org     Organization @relation(fields: [orgId], references: [id])
-    eventId String
-    event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id      String       @id @default(cuid())
+  orgId   String
+  org     Organization @relation(fields: [orgId], references: [id])
+  eventId String
+  event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-    start DateTime
-    end   DateTime
+  start DateTime
+  end   DateTime
 
-    // Effective values after any exception is applied, denormalised so the hot
-    // queries (grid, conflicts, availability) need no joins.
-    roomId    String
-    room      Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
-    groupId   String?
-    group     Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-    facultyId String?
-    faculty   FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Cascade)
-    kind      EventKind
-    /// CANCELLED rows are kept so the UI can show a ghost and offer restore;
-    /// every scheduling query filters them out.
-    status    EventStatus
+  // Effective values after any exception is applied, denormalised so the hot
+  // queries (grid, conflicts, availability) need no joins.
+  roomId    String
+  room      Room            @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  groupId   String?
+  group     Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  facultyId String?
+  faculty   FacultyProfile? @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  kind      EventKind
+  /// CANCELLED rows are kept so the UI can show a ghost and offer restore;
+  /// every scheduling query filters them out.
+  status    EventStatus
 
-    exceptionId String?         @unique
-    exception   EventException? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
+  exceptionId String?         @unique
+  exception   EventException? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
 
-    @@index([roomId, start])
-    @@index([facultyId, start])
-    @@index([groupId, start])
-    @@index([orgId, start])
-    @@index([eventId])
+  attendance AttendanceSession[]
+
+  @@index([roomId, start])
+  @@index([facultyId, start])
+  @@index([groupId, start])
+  @@index([orgId, start])
+  @@index([eventId])
+}
+
+/// A group that attends an event. One row per group, including the primary one.
+model EventGroup {
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, groupId])
+  @@index([groupId])
+}
+
+// ─── Attendance ─────────────────────────────────────────────────────────────
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+/**
+ * One group's register for one occurrence of a lecture.
+ * Keyed on the occurrence rather than the event, because attendance is taken
+ * per sitting; and on the group as well, because a combined lecture is two
+ * registers taken in the same room at the same time, and each is the concern of
+ * a different set of students.
+ */
+model AttendanceSession {
+  id           String          @id @default(cuid())
+  orgId        String
+  org          Organization    @relation(fields: [orgId], references: [id])
+  occurrenceId String
+  occurrence   EventOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  groupId      String
+  group        Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  markedById String?
+  markedBy   User?    @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  markedAt   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  notes      String?
+
+  records AttendanceRecord[]
+
+  @@unique([occurrenceId, groupId])
+  @@index([orgId, markedAt])
+  @@index([groupId])
+}
+
+model AttendanceRecord {
+  sessionId String
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId String
+  student   StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status    AttendanceStatus  @default(PRESENT)
+  note      String?
+
+  @@id([sessionId, studentId])
+  @@index([studentId])
+}
+
+// ─── Schedule builder ───────────────────────────────────────────────────────
+
+/**
+ * A plan never touches `Event`. It is a *weekly pattern* — its sessions carry a
+ * weekday and minutes from midnight, not instants — and only becomes real
+ * classes when someone applies it, which is the single operation in this
+ * section that writes to the live timetable.
+ */
+enum PlanStatus {
+  /// Visible to its creator alone.
+  DRAFT
+  /// Shared: anyone with planner access can read it, reviewers can respond.
+  IN_REVIEW
+  /// Every invited reviewer approved. Only now may it be applied.
+  APPROVED
+  /// A reviewer asked for changes; revise it into a fresh draft.
+  CHANGES_REQUESTED
+  /// Written to the live timetable. Frozen from here on.
+  APPLIED
+  ARCHIVED
+}
+
+enum PlanDecision {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+model SchedulePlan {
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name   String
+  status PlanStatus @default(DRAFT)
+  notes  String?
+
+  semesterId String?
+  semester   Semester? @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+
+  /**
+   * Revision chain. Feedback belongs to one draft: revising copies the demand
+   * and the placements into a new row and leaves the comments and approvals
+   * behind, so an approval can never be inherited by a plan nobody read.
+   * `rootId` is the first draft in the chain, which makes "every version of
+   * this plan" a single indexed query.
+   */
+  version  Int           @default(1)
+  rootId   String?
+  parentId String?       @unique
+  parent   SchedulePlan? @relation("PlanRevision", fields: [parentId], references: [id], onDelete: SetNull)
+  revision SchedulePlan? @relation("PlanRevision")
+
+  createdById String?
+  createdBy   User?   @relation("PlanCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// The Monday the weekly pattern hangs off, and how far it repeats once
+  /// applied. Dates in the org's timezone; the time of day comes from sessions.
+  weekStart   DateTime  @db.Date
+  repeatUntil DateTime? @db.Date
+
+  /**
+   * The scheduling rules this plan was built against, copied from OrgSettings
+   * when it was created. Snapshotted rather than read live, so that shortening
+   * the working day cannot silently invalidate a plan already under review.
+   */
+  slotMinutes     Int
+  dayStartMinutes Int
+  dayEndMinutes   Int
+  workingDays     Int[]
+
+  /// Most sessions one group may be given in a day. 0 means no cap.
+  maxPerDay            Int     @default(0)
+  /// Prefer to put a subject's weekly sessions on different days.
+  spreadAcrossDays     Boolean @default(true)
+  /// Treat what is already timetabled as occupied when placing.
+  respectLiveTimetable Boolean @default(true)
+
+  sharedAt    DateTime?
+  generatedAt DateTime?
+  appliedAt   DateTime?
+  /// Plain id: who applied it is an audit fact, not a live relationship.
+  appliedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements SchedulePlanRequirement[]
+  sessions     SchedulePlanSession[]
+  reviewers    SchedulePlanReviewer[]
+  comments     SchedulePlanComment[]
+
+  @@index([orgId, status])
+  @@index([orgId, rootId])
+  @@index([createdById])
+}
+
+/// One line of demand: "BCA-A needs 3 Data Structures lectures a week, taught by
+/// Dr. Rao, in a room with a projector".
+model SchedulePlanRequirement {
+  id     String       @id @default(cuid())
+  planId String
+  plan   SchedulePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// What is being taught. Becomes the class title.
+  subject         String
+  sessionsPerWeek Int
+  durationMinutes Int    @default(60)
+
+  /**
+   * Who has to be free for it. Ids rather than a join table on purpose: a plan
+   * is a proposal about the future, and someone leaving must not silently
+   * rewrite one already under review. Names are resolved on read, and an id
+   * that no longer resolves is reported rather than quietly dropped.
+   */
+  facultyIds String[]
+
+  /// What the room has to be. All empty means anything free will do.
+  requiredFeatures RoomFeature[]
+  roomType         RoomType?
+  minCapacity      Int?
+  preferredRoomId  String?
+  preferredRoom    Room?         @relation(fields: [preferredRoomId], references: [id], onDelete: SetNull)
+
+  /// Line of the uploaded file this came from, for error reporting.
+  sourceLine Int?
+  notes      String?
+  position   Int     @default(0)
+
+  sessions SchedulePlanSession[]
+
+  @@index([planId, position])
+  @@index([groupId])
+}
+
+/**
+ * One proposed lecture. `dayOfWeek` and `startMinutes` are null when the solver
+ * could not fit it — an unplaced session is kept, with a reason, because "these
+ * four will not fit" is the most useful thing a plan can tell a scheduler.
+ */
+model SchedulePlanSession {
+  id     String       @id @default(cuid())
+  planId String
+  plan   SchedulePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  requirementId String?
+  requirement   SchedulePlanRequirement? @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  title      String
+  groupId    String
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  facultyIds String[]
+
+  /// ISO weekday, 1 = Monday … 7 = Sunday, and minutes from local midnight.
+  dayOfWeek       Int?
+  startMinutes    Int?
+  durationMinutes Int
+
+  roomId String?
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  /// Why it could not be placed, or why it is flagged.
+  reason String?
+  /// Hand-placed: regenerating leaves it exactly where it is.
+  pinned Boolean @default(false)
+
+  /// The class this became. A plain id, so cancelling that class later does
+  /// not erase the record of what the plan did.
+  appliedEventId String?
+
+  comments SchedulePlanComment[]
+
+  @@index([planId, dayOfWeek, startMinutes])
+  @@index([requirementId])
+  @@index([groupId])
+}
+
+/// Someone asked to sign a draft off. One row per invited reviewer per draft.
+model SchedulePlanReviewer {
+  planId String
+  plan   SchedulePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  decision  PlanDecision @default(PENDING)
+  decidedAt DateTime?
+  /// What they said when they decided, shown beside the decision.
+  note      String?
+  invitedAt DateTime     @default(now())
+
+  @@id([planId, userId])
+  @@index([userId])
+}
+
+/// Feedback on a draft, optionally pinned to one proposed session.
+model SchedulePlanComment {
+  id     String       @id @default(cuid())
+  planId String
+  plan   SchedulePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   SchedulePlanSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation("PlanCommenter", fields: [authorId], references: [id], onDelete: SetNull)
+
+  body       String
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([planId, createdAt])
+  @@index([sessionId])
 }
 
 // ─── Operations ─────────────────────────────────────────────────────────────
@@ -490,39 +938,39 @@ model EventOccurrence {
 /// booking they notify about, then dispatched after the response and swept by
 /// a cron retry. Guarantees at-least-once delivery with only Postgres.
 model EmailOutbox {
-    id      String @id @default(cuid())
-    toEmail String
-    userId  String?
-    user    User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id      String  @id @default(cuid())
+  toEmail String
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-    type    EmailType
-    payload Json
+  type    EmailType
+  payload Json
 
-    status    EmailStatus @default(PENDING)
-    attempts  Int         @default(0)
-    lastError String?
-    createdAt DateTime    @default(now())
-    sentAt    DateTime?
+  status    EmailStatus @default(PENDING)
+  attempts  Int         @default(0)
+  lastError String?
+  createdAt DateTime    @default(now())
+  sentAt    DateTime?
 
-    @@index([status, createdAt])
+  @@index([status, createdAt])
 }
 
 /// Audit trail for CSV bulk imports.
 model ImportBatch {
-    id    String       @id @default(cuid())
-    orgId String
-    org   Organization @relation(fields: [orgId], references: [id])
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id])
 
-    createdById String?
-    createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-    fileName String?
-    created  Int
-    updated  Int
-    skipped  Int
-    errors   Json?
+  fileName String?
+  created  Int
+  updated  Int
+  skipped  Int
+  errors   Json?
 
-    createdAt DateTime @default(now())
+  createdAt DateTime @default(now())
 
-    @@index([orgId, createdAt])
+  @@index([orgId, createdAt])
 }

@@ -23,18 +23,38 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/today", label: "Today", icon: "home", requires: ["ViewOwnEvents"] },
+  // One screen for "what am I doing", whichever way you are involved: every
+  // other permission implies ViewOwnEvents, so everybody reaches it and the
+  // screen itself decides what to show them. It stays first because homeFor
+  // lands people on the first thing they can open.
   {
-    href: "/classes",
-    label: "My classes",
+    href: "/schedule",
+    label: "Schedule",
     icon: "calendar",
-    requires: ["ManageOwnEvents"],
+    requires: ["ViewOwnEvents"],
   },
   {
     href: "/timetable",
     label: "Timetable",
     icon: "grid",
     requires: ["ViewAllEvents"],
+  },
+  // Two screens in one, and the looser of the two requirements is the one that
+  // has to be listed: a student reads their own attendance without holding
+  // ViewAttendance, which is the permission for reading other people's. The page
+  // decides which half to draw, and /attendance/<id> — the register itself —
+  // sits behind this prefix but checks ViewAttendance for itself.
+  {
+    href: "/attendance",
+    label: "Attendance",
+    icon: "checkCircle",
+    requires: ["ViewOwnEvents", "ViewAttendance"],
+  },
+  {
+    href: "/planner",
+    label: "Schedule builder",
+    icon: "sparkles",
+    requires: ["ViewSchedulePlans"],
   },
   { href: "/rooms", label: "Rooms", icon: "door", requires: ["ViewRooms"] },
   { href: "/book", label: "Book a room", icon: "plus", requires: ["BookRoom"] },
@@ -44,6 +64,28 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Groups",
     icon: "layers",
     requires: ["ViewGroups"],
+  },
+  // The subjects taught this semester. It shares ViewGroups rather than owning
+  // a permission because the questions it answers — who may teach this, which
+  // groups sit for it — are asked about other people, and ViewGroups is already
+  // the right to read the institution rather than only your own place in it. A
+  // student therefore does not get this screen: their own courses reach them
+  // through /schedule and /attendance, neither of which needs ViewGroups.
+  {
+    href: "/courses",
+    label: "Courses",
+    icon: "book",
+    requires: ["ViewGroups"],
+  },
+  // The shape of the institution in one picture, for whoever has to arrange it.
+  // Read-only, and it spans the two halves of that job — programmes and their
+  // intakes on one side, the groups and courses hung off them on the other — so
+  // either permission is enough to look at it.
+  {
+    href: "/setup",
+    label: "Setup",
+    icon: "building",
+    requires: ["ManageGroups", "ManageProgrammes"],
   },
   {
     href: "/settings",

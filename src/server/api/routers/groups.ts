@@ -1,12 +1,15 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { contactAddress, contactAddresses } from "~/lib/people";
 import { PermissionFlags } from "~/lib/permissions";
 import {
   createTRPCRouter,
   permissionProcedure,
   protectedProcedure,
 } from "~/server/api/trpc";
+import { OCCUPYING_STATUSES } from "~/server/services/conflicts";
+import { GroupKind } from "../../../../generated/prisma";
 
 /**
  * Class groups: the cohorts that attend classes.
@@ -52,8 +55,10 @@ export const groupsRouter = createTRPCRouter({
       z
         .object({
           ...pageInput,
-          courseId: z.string().cuid().optional(),
-          termId: z.string().cuid().optional(),
+          programmeId: z.string().cuid().optional(),
+          semesterId: z.string().cuid().optional(),
+          batchId: z.string().cuid().optional(),
+          kind: z.nativeEnum(GroupKind).optional(),
           /** Keeps chosen options visible even when a search excludes them. */
           includeIds: z.array(z.string().cuid()).max(100).optional(),
         })
@@ -62,8 +67,10 @@ export const groupsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const where = {
         orgId: ctx.orgId,
-        ...(input.courseId ? { courseId: input.courseId } : {}),
-        ...(input.termId ? { termId: input.termId } : {}),
+        ...(input.programmeId ? { programmeId: input.programmeId } : {}),
+        ...(input.semesterId ? { semesterId: input.semesterId } : {}),
+        ...(input.batchId ? { batchId: input.batchId } : {}),
+        ...(input.kind ? { kind: input.kind } : {}),
         ...(input.query
           ? {
               OR: [
@@ -80,8 +87,16 @@ export const groupsRouter = createTRPCRouter({
                   },
                 },
                 {
-                  course: {
+                  programme: {
                     code: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+                {
+                  batch: {
+                    name: {
                       contains: input.query,
                       mode: "insensitive" as const,
                     },
@@ -93,8 +108,9 @@ export const groupsRouter = createTRPCRouter({
       };
 
       const include = {
-        course: { select: { id: true, code: true, name: true } },
-        term: { select: { id: true, name: true } },
+        programme: { select: { id: true, code: true, name: true } },
+        semester: { select: { id: true, name: true } },
+        batch: { select: { id: true, name: true } },
         _count: { select: { students: true, events: true, faculty: true } },
         faculty: {
           include: {
@@ -109,7 +125,7 @@ export const groupsRouter = createTRPCRouter({
         },
       } as const;
       const orderBy = [
-        { course: { code: "asc" as const } },
+        { programme: { code: "asc" as const } },
         { name: "asc" as const },
       ];
 
@@ -139,11 +155,14 @@ export const groupsRouter = createTRPCRouter({
           id: g.id,
           name: g.name,
           label: g.label ?? g.name,
-          courseId: g.course.id,
-          courseCode: g.course.code,
-          courseName: g.course.name,
-          termId: g.term?.id ?? null,
-          termName: g.term?.name ?? null,
+          kind: g.kind,
+          programmeId: g.programme.id,
+          courseCode: g.programme.code,
+          courseName: g.programme.name,
+          semesterId: g.semester?.id ?? null,
+          termName: g.semester?.name ?? null,
+          batchId: g.batch?.id ?? null,
+          batchName: g.batch?.name ?? null,
           studentCount: g._count.students,
           eventCount: g._count.events,
           facultyCount: g._count.faculty,
@@ -164,8 +183,8 @@ export const groupsRouter = createTRPCRouter({
       const group = await ctx.db.group.findFirst({
         where: { id: input.id, orgId: ctx.orgId },
         include: {
-          course: { select: { id: true, code: true, name: true } },
-          term: { select: { id: true, name: true } },
+          programme: { select: { id: true, code: true, name: true } },
+          semester: { select: { id: true, name: true } },
           _count: { select: { events: true } },
           students: {
             include: {
@@ -199,21 +218,22 @@ export const groupsRouter = createTRPCRouter({
         id: group.id,
         name: group.name,
         label: group.label ?? group.name,
-        course: group.course,
-        term: group.term,
+        programme: group.programme,
+        semester: group.semester,
         eventCount: group._count.events,
         students: group.students.map((m) => ({
           id: m.student.id,
           userId: m.student.user.id,
           name: m.student.user.name,
-          email: m.student.user.email,
+          /** null for a student the college has sent no address for. */
+          email: contactAddress(m.student.user.email),
           prn: m.student.prn,
           addedAt: m.addedAt,
         })),
         faculty: group.faculty.map((a) => ({
           id: a.faculty.id,
           name: displayName(a.faculty),
-          email: a.faculty.user.email,
+          email: contactAddress(a.faculty.user.email),
           department: a.faculty.department,
         })),
       };
@@ -224,13 +244,15 @@ export const groupsRouter = createTRPCRouter({
       z.object({
         name: z.string().trim().min(1).max(60),
         label: z.string().trim().max(120).optional(),
-        courseId: z.string().cuid(),
-        termId: z.string().cuid().optional(),
+        programmeId: z.string().cuid(),
+        semesterId: z.string().cuid().optional(),
+        batchId: z.string().cuid().optional(),
+        kind: z.nativeEnum(GroupKind).default(GroupKind.DIVISION),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const course = await ctx.db.course.findFirst({
-        where: { id: input.courseId, orgId: ctx.orgId },
+      const course = await ctx.db.programme.findFirst({
+        where: { id: input.programmeId, orgId: ctx.orgId },
         select: { id: true },
       });
       if (!course) {
@@ -242,8 +264,8 @@ export const groupsRouter = createTRPCRouter({
 
       const clash = await ctx.db.group.findFirst({
         where: {
-          courseId: input.courseId,
-          termId: input.termId ?? null,
+          programmeId: input.programmeId,
+          semesterId: input.semesterId ?? null,
           name: input.name,
         },
         select: { id: true },
@@ -260,8 +282,10 @@ export const groupsRouter = createTRPCRouter({
           orgId: ctx.orgId,
           name: input.name,
           label: input.label ?? input.name,
-          courseId: input.courseId,
-          termId: input.termId,
+          programmeId: input.programmeId,
+          semesterId: input.semesterId,
+          batchId: input.batchId,
+          kind: input.kind,
         },
       });
     }),
@@ -272,13 +296,21 @@ export const groupsRouter = createTRPCRouter({
         id: z.string().cuid(),
         name: z.string().trim().min(1).max(60).optional(),
         label: z.string().trim().max(120).nullish(),
-        termId: z.string().cuid().nullish(),
+        semesterId: z.string().cuid().nullish(),
+        batchId: z.string().cuid().nullish(),
+        kind: z.nativeEnum(GroupKind).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { count } = await ctx.db.group.updateMany({
         where: { id: input.id, orgId: ctx.orgId },
-        data: { name: input.name, label: input.label, termId: input.termId },
+        data: {
+          name: input.name,
+          label: input.label,
+          semesterId: input.semesterId,
+          batchId: input.batchId,
+          kind: input.kind,
+        },
       });
       if (count === 0) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.db.group.findUniqueOrThrow({ where: { id: input.id } });
@@ -303,9 +335,10 @@ export const groupsRouter = createTRPCRouter({
       if (!group) throw new TRPCError({ code: "NOT_FOUND" });
 
       const cleaned = [...new Set(input.identifiers.filter(Boolean))];
-      const emails = cleaned
-        .filter((v) => v.includes("@"))
-        .map((v) => v.toLowerCase());
+      // A placeholder address identifies nobody: it is never shown, so it can
+      // never have been copied off a screen into this box, and a student who
+      // has one is added by their PRN like everyone else.
+      const emails = contactAddresses(cleaned.filter((v) => v.includes("@")));
       const prns = cleaned.filter((v) => !v.includes("@"));
 
       const profiles = await ctx.db.studentProfile.findMany({
@@ -536,7 +569,7 @@ export const groupsRouter = createTRPCRouter({
           id: f.id,
           name: displayName(f),
           fullName: f.user.name,
-          email: f.user.email,
+          email: contactAddress(f.user.email),
           department: f.department,
           isActive: f.user.isActive,
           groupCount: f._count.assignments,
@@ -547,7 +580,252 @@ export const groupsRouter = createTRPCRouter({
       );
     }),
 
-  courseList: protectedProcedure
+  /**
+   * The intakes, newest first, with what each has been divided into. Small
+   * enough to send whole — an institution has tens of these, not thousands.
+   */
+  batchList: permissionProcedure(PermissionFlags.ViewGroups)
+    .input(
+      z
+        .object({
+          query: z.string().trim().max(120).optional(),
+          programmeId: z.string().cuid().optional(),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const batches = await ctx.db.batch.findMany({
+        where: {
+          orgId: ctx.orgId,
+          ...(input.programmeId ? { programmeId: input.programmeId } : {}),
+          ...(input.query
+            ? {
+                OR: [
+                  {
+                    name: {
+                      contains: input.query,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    programme: {
+                      code: {
+                        contains: input.query,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        include: {
+          programme: { select: { id: true, code: true, name: true } },
+          groups: {
+            select: {
+              id: true,
+              name: true,
+              label: true,
+              kind: true,
+              _count: { select: { students: true, events: true } },
+            },
+            orderBy: [{ kind: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ startYear: "desc" }, { name: "asc" }],
+      });
+
+      return batches.map((batch) => ({
+        id: batch.id,
+        name: batch.name,
+        startYear: batch.startYear,
+        endYear: batch.endYear,
+        programmeId: batch.programme.id,
+        courseCode: batch.programme.code,
+        courseName: batch.programme.name,
+        groups: batch.groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          label: g.label ?? g.name,
+          kind: g.kind,
+          studentCount: g._count.students,
+          eventCount: g._count.events,
+        })),
+        // Divisions partition the intake, so their sum is the intake's size;
+        // majors, minors and electives draw from the same people again.
+        studentCount: batch.groups
+          .filter((g) => g.kind === GroupKind.DIVISION)
+          .reduce((total, g) => total + g._count.students, 0),
+      }));
+    }),
+
+  /**
+   * A group's scheduled lectures, newest window first.
+   *
+   * Reads occurrences rather than events, so a weekly class appears as the
+   * dates it actually sits — which is what a register is taken against. Picks up
+   * combined lectures through the join as well as the group's own.
+   */
+  lectures: permissionProcedure(PermissionFlags.ViewGroups)
+    .input(
+      z.object({
+        groupId: z.string().cuid(),
+        from: z.date().optional(),
+        to: z.date().optional(),
+        limit: z.number().int().min(1).max(200).default(60),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const occurrences = await ctx.db.eventOccurrence.findMany({
+        where: {
+          orgId: ctx.orgId,
+          status: { in: [...OCCUPYING_STATUSES] },
+          ...(input.from ? { start: { gte: input.from } } : {}),
+          ...(input.to ? { end: { lte: input.to } } : {}),
+          OR: [
+            { groupId: input.groupId },
+            { event: { groups: { some: { groupId: input.groupId } } } },
+          ],
+        },
+        select: {
+          id: true,
+          start: true,
+          end: true,
+          kind: true,
+          eventId: true,
+          room: { select: { code: true } },
+          event: {
+            select: {
+              title: true,
+              rrule: true,
+              groups: {
+                select: { group: { select: { id: true, name: true } } },
+              },
+            },
+          },
+          faculty: {
+            select: { shortName: true, user: { select: { name: true } } },
+          },
+          attendance: {
+            where: { groupId: input.groupId },
+            select: {
+              markedAt: true,
+              records: { select: { status: true } },
+            },
+          },
+        },
+        orderBy: { start: "asc" },
+        take: input.limit,
+      });
+
+      return occurrences.map((o) => {
+        const register = o.attendance[0];
+        return {
+          occurrenceId: o.id,
+          eventId: o.eventId,
+          title: o.event.title,
+          kind: o.kind,
+          start: o.start,
+          end: o.end,
+          roomCode: o.room.code,
+          facultyName: o.faculty?.shortName ?? o.faculty?.user.name ?? null,
+          isRecurring: o.event.rrule !== null,
+          /** Other groups in the room for the same lecture. */
+          sharedWith: o.event.groups
+            .map((g) => g.group)
+            .filter((g) => g.id !== input.groupId)
+            .map((g) => g.name),
+          attendance: register
+            ? {
+                markedAt: register.markedAt,
+                total: register.records.length,
+                present: register.records.filter((r) => r.status === "PRESENT")
+                  .length,
+              }
+            : null,
+        };
+      });
+    }),
+
+  createBatch: permissionProcedure(PermissionFlags.ManageGroups)
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(80),
+        programmeId: z.string().cuid(),
+        startYear: z.number().int().min(1900).max(2200),
+        endYear: z.number().int().min(1900).max(2200),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.endYear < input.startYear) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A batch cannot finish before it starts.",
+        });
+      }
+      const course = await ctx.db.programme.findFirst({
+        where: { id: input.programmeId, orgId: ctx.orgId },
+        select: { id: true },
+      });
+      if (!course) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Unknown course.",
+        });
+      }
+      const clash = await ctx.db.batch.findFirst({
+        where: { orgId: ctx.orgId, name: input.name },
+        select: { id: true },
+      });
+      if (clash) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `There is already a batch called "${input.name}".`,
+        });
+      }
+      return ctx.db.batch.create({
+        data: { ...input, orgId: ctx.orgId },
+      });
+    }),
+
+  updateBatch: permissionProcedure(PermissionFlags.ManageGroups)
+    .input(
+      z.object({
+        id: z.string().cuid(),
+        name: z.string().trim().min(1).max(80).optional(),
+        programmeId: z.string().cuid().optional(),
+        startYear: z.number().int().min(1900).max(2200).optional(),
+        endYear: z.number().int().min(1900).max(2200).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...patch } = input;
+      const { count } = await ctx.db.batch.updateMany({
+        where: { id, orgId: ctx.orgId },
+        data: patch,
+      });
+      if (count === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      return ctx.db.batch.findUniqueOrThrow({ where: { id } });
+    }),
+
+  /**
+   * Removes the intake itself. Its groups survive — they hold the timetable and
+   * the membership — and simply stop belonging to a batch.
+   */
+  deleteBatch: permissionProcedure(PermissionFlags.ManageGroups)
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const batch = await ctx.db.batch.findFirst({
+        where: { id: input.id, orgId: ctx.orgId },
+        select: { id: true, _count: { select: { groups: true } } },
+      });
+      if (!batch) throw new TRPCError({ code: "NOT_FOUND" });
+
+      await ctx.db.batch.delete({ where: { id: batch.id } });
+      return { deleted: true, orphanedGroups: batch._count.groups };
+    }),
+
+  programmeList: protectedProcedure
     .input(
       z
         .object({
@@ -576,20 +854,20 @@ export const groupsRouter = createTRPCRouter({
         id: true,
         code: true,
         name: true,
-        _count: { select: { groups: true } },
+        _count: { select: { groups: true, batches: true } },
       } as const;
 
       const [page, total, pinned] = await Promise.all([
-        ctx.db.course.findMany({
+        ctx.db.programme.findMany({
           where,
           select,
           orderBy: { code: "asc" },
           skip: (input.page - 1) * input.pageSize,
           take: input.pageSize,
         }),
-        ctx.db.course.count({ where }),
+        ctx.db.programme.count({ where }),
         input.includeIds?.length
-          ? ctx.db.course.findMany({
+          ? ctx.db.programme.findMany({
               where: { orgId: ctx.orgId, id: { in: input.includeIds } },
               select,
               orderBy: { code: "asc" },
@@ -606,11 +884,135 @@ export const groupsRouter = createTRPCRouter({
           code: c.code,
           name: c.name,
           groupCount: c._count.groups,
+          batchCount: c._count.batches,
         })),
         total,
         input.page,
         input.pageSize,
       );
+    }),
+
+  /**
+   * The broadest way an institution divides its students: a programme like
+   * "BCA". Everything else hangs off one — an intake belongs to a course, and
+   * so does every group under it — which is why a course cannot be deleted
+   * while anything still refers to it.
+   */
+  createCourse: permissionProcedure(PermissionFlags.ManageProgrammes)
+    .input(
+      z.object({
+        code: z.string().trim().min(1).max(32),
+        name: z.string().trim().min(1).max(120),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const clash = await ctx.db.programme.findFirst({
+        where: {
+          orgId: ctx.orgId,
+          code: { equals: input.code, mode: "insensitive" },
+        },
+        select: { code: true },
+      });
+      if (clash) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `There is already a course coded "${clash.code}".`,
+        });
+      }
+      return ctx.db.programme.create({
+        data: { orgId: ctx.orgId, code: input.code, name: input.name },
+      });
+    }),
+
+  updateCourse: permissionProcedure(PermissionFlags.ManageProgrammes)
+    .input(
+      z.object({
+        id: z.string().cuid(),
+        code: z.string().trim().min(1).max(32).optional(),
+        name: z.string().trim().min(1).max(120).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...patch } = input;
+      if (patch.code) {
+        const clash = await ctx.db.programme.findFirst({
+          where: {
+            orgId: ctx.orgId,
+            id: { not: id },
+            code: { equals: patch.code, mode: "insensitive" },
+          },
+          select: { code: true },
+        });
+        if (clash) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `There is already a course coded "${clash.code}".`,
+          });
+        }
+      }
+      const { count } = await ctx.db.programme.updateMany({
+        where: { id, orgId: ctx.orgId },
+        data: patch,
+      });
+      if (count === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      return ctx.db.programme.findUniqueOrThrow({ where: { id } });
+    }),
+
+  /** What still points at this course, so the UI can say why it is stuck. */
+  programmeDeleteImpact: permissionProcedure(PermissionFlags.ManageProgrammes)
+    .input(z.object({ id: z.string().cuid() }))
+    .query(async ({ ctx, input }) => {
+      const course = await ctx.db.programme.findFirst({
+        where: { id: input.id, orgId: ctx.orgId },
+        select: {
+          code: true,
+          name: true,
+          _count: { select: { groups: true, batches: true } },
+        },
+      });
+      if (!course) throw new TRPCError({ code: "NOT_FOUND" });
+      return {
+        code: course.code,
+        name: course.name,
+        groupCount: course._count.groups,
+        batchCount: course._count.batches,
+      };
+    }),
+
+  /**
+   * Only ever removes an empty course.
+   *
+   * Cascading would take the groups with it, and a group owns its student
+   * membership and its place on the timetable — far too much to lose behind a
+   * single confirm. Move or delete those first.
+   */
+  deleteCourse: permissionProcedure(PermissionFlags.ManageProgrammes)
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const course = await ctx.db.programme.findFirst({
+        where: { id: input.id, orgId: ctx.orgId },
+        select: {
+          id: true,
+          code: true,
+          _count: { select: { groups: true, batches: true } },
+        },
+      });
+      if (!course) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const { groups, batches } = course._count;
+      if (groups > 0 || batches > 0) {
+        const blockers = [
+          groups > 0 && `${groups} ${groups === 1 ? "group" : "groups"}`,
+          batches > 0 && `${batches} ${batches === 1 ? "batch" : "batches"}`,
+        ].filter(Boolean);
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `${course.code} still has ${blockers.join(" and ")}. Move or delete them before deleting the course.`,
+        });
+      }
+
+      await ctx.db.programme.delete({ where: { id: course.id } });
+      return { deleted: true };
     }),
 
   termList: protectedProcedure
@@ -637,16 +1039,16 @@ export const groupsRouter = createTRPCRouter({
       } as const;
 
       const [page, total, pinned] = await Promise.all([
-        ctx.db.term.findMany({
+        ctx.db.semester.findMany({
           where,
           select,
           orderBy: { startDate: "desc" },
           skip: (input.page - 1) * input.pageSize,
           take: input.pageSize,
         }),
-        ctx.db.term.count({ where }),
+        ctx.db.semester.count({ where }),
         input.includeIds?.length
-          ? ctx.db.term.findMany({
+          ? ctx.db.semester.findMany({
               where: { orgId: ctx.orgId, id: { in: input.includeIds } },
               select,
               orderBy: { startDate: "desc" },

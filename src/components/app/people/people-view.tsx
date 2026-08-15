@@ -8,11 +8,14 @@ import { Card } from "~/components/ui/card";
 import { Icon } from "~/components/ui/icon";
 import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
+import { Select } from "~/components/ui/select";
 import { roleCard } from "./entity-cards";
+import { personName } from "~/lib/people";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import { AddPersonDialog } from "./add-person-dialog";
 import { ImportDialog } from "./import-dialog";
+import { PersonAddress } from "./person-address";
 import { RoleManager } from "./role-manager";
 import { UserDetailDialog } from "./user-detail-dialog";
 
@@ -226,24 +229,22 @@ export function PeopleView({ permissions }: { permissions: string }) {
               />
 
               <div className="ml-auto flex items-center gap-3">
-                <label className="text-faint flex items-center gap-2 text-[12px]">
+                <div className="text-faint flex items-center gap-2 text-[12px]">
                   Show
-                  <select
+                  <Select
+                    ariaLabel="Rows per page"
+                    size="sm"
                     value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
+                    options={PAGE_SIZES.map((n) => ({
+                      value: n,
+                      label: String(n),
+                    }))}
+                    onChange={(n) => {
+                      setPageSize(n);
                       setPage(1);
                     }}
-                    className="bg-surface rounded-[8px] px-2 py-1 text-[12px]"
-                    style={{ boxShadow: "var(--ring)" }}
-                  >
-                    {PAGE_SIZES.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
                 <span className="text-faint font-mono text-[12px]">
                   {list.data?.total ?? 0} total
                 </span>
@@ -307,7 +308,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
                             type="checkbox"
                             checked={selected.has(u.id)}
                             onChange={() => toggleOne(u.id)}
-                            aria-label={`Select ${u.email}`}
+                            aria-label={`Select ${personName(u, u.prn ?? "this person")}`}
                           />
                         </Td>
                       )}
@@ -317,15 +318,13 @@ export function PeopleView({ permissions }: { permissions: string }) {
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
                             style={{ background: "var(--slate)" }}
                           >
-                            {(u.name ?? u.email).charAt(0).toUpperCase()}
+                            {personName(u, "?").charAt(0).toUpperCase()}
                           </span>
                           <span className="min-w-0">
                             <span className="text-title block truncate font-semibold">
                               {u.name ?? "—"}
                             </span>
-                            <span className="text-faint block truncate text-[12px]">
-                              {u.email}
-                            </span>
+                            <PersonAddress email={u.email} />
                           </span>
                         </span>
                       </Td>
@@ -351,7 +350,12 @@ export function PeopleView({ permissions }: { permissions: string }) {
                         </span>
                       </Td>
                       <Td>
-                        {!u.isActive ? (
+                        {!u.isActive && !u.email ? (
+                          // Shut out by the college's paperwork rather than by
+                          // anybody here, which is not the same as disabled and
+                          // should not be read in red across 133 rows.
+                          <Badge tone="neutral">waiting on an address</Badge>
+                        ) : !u.isActive ? (
                           <Badge tone="red" dot>
                             disabled
                           </Badge>

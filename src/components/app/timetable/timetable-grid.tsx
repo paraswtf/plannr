@@ -40,6 +40,13 @@ export interface GridEvent {
   title: string;
   subtitle?: string | null;
   isRecurring?: boolean;
+  kind?: string;
+  roomCode?: string;
+  facultyName?: string | null;
+  /** Every group attending — more than one for a combined lecture. */
+  groupNames?: string[];
+  /** Whether a register has already been taken for this sitting. */
+  attendanceMarked?: boolean;
 }
 
 /** A span of one room's column, in decimal local hours. */
@@ -67,6 +74,11 @@ interface TimetableGridProps {
   onRangeSelect?: (range: GridRange) => void;
   /** The span to draw as chosen — the parent owns it once it has been taken. */
   selection?: GridRange | null;
+  /**
+   * Rooms that cannot take what is being booked — too small, or missing the kit
+   * asked for. Drawn as struck out, and neither sweepable nor droppable.
+   */
+  unavailableRoomIds?: ReadonlySet<string>;
   /** Minutes a drag snaps to. */
   snapMinutes?: number;
 }
@@ -119,6 +131,7 @@ export function TimetableGrid({
   onEventMove,
   onRangeSelect,
   selection,
+  unavailableRoomIds,
   snapMinutes = SNAP_MINUTES,
 }: TimetableGridProps) {
   const now = useNow(30_000);
@@ -196,12 +209,16 @@ export function TimetableGrid({
     return column ? stepFromTop(clientY, column.top) : 0;
   };
 
-  /** The column and step under the pointer, for drags allowed to change room. */
+  /**
+   * The column and step under the pointer, for drags allowed to change room.
+   * A room that cannot take the booking is not a drop target, so dragging over
+   * one leaves the block where it was rather than following the pointer in.
+   */
   const pointAt = (clientX: number, clientY: number) => {
     const column =
       columnsRef.current.find((c) => clientX >= c.left && clientX < c.right) ??
       columnsRef.current[0];
-    if (!column) return null;
+    if (!column || unavailableRoomIds?.has(column.roomId)) return null;
     return { roomId: column.roomId, step: stepFromTop(clientY, column.top) };
   };
 
@@ -328,14 +345,22 @@ export function TimetableGrid({
           }}
         >
           <div />
-          {rooms.map((room) => (
-            <div
-              key={room.id}
-              className="font-display text-title px-2 py-3 text-center text-[13px] font-bold"
-            >
-              {room.code}
-            </div>
-          ))}
+          {rooms.map((room) => {
+            const unavailable = unavailableRoomIds?.has(room.id);
+            return (
+              <div
+                key={room.id}
+                title={unavailable ? "Does not fit this booking" : undefined}
+                className="font-display px-2 py-3 text-center text-[13px] font-bold"
+                style={{
+                  color: unavailable ? "var(--faint)" : "var(--app-title)",
+                  textDecoration: unavailable ? "line-through" : undefined,
+                }}
+              >
+                {room.code}
+              </div>
+            );
+          })}
         </div>
 
         {/* Body */}
@@ -360,6 +385,7 @@ export function TimetableGrid({
           </div>
 
           {rooms.map((room) => {
+            const unavailable = unavailableRoomIds?.has(room.id) ?? false;
             const creating =
               drag?.kind === "range" && drag.roomId === room.id ? drag : null;
             const moving = drag?.kind === "move" && drag.moved ? drag : null;
@@ -382,7 +408,14 @@ export function TimetableGrid({
                 key={room.id}
                 data-room-id={room.id}
                 className="relative"
-                style={{ boxShadow: "inset 1px 0 0 var(--hair-soft)" }}
+                style={{
+                  boxShadow: "inset 1px 0 0 var(--hair-soft)",
+                  // Hatched rather than merely pale: a room that cannot take
+                  // this booking should not read as one that is simply free.
+                  backgroundImage: unavailable
+                    ? "repeating-linear-gradient(45deg, rgba(68,88,121,0.06) 0 5px, transparent 5px 11px)"
+                    : undefined,
+                }}
               >
                 {/*
                  * Hour lines, with a fainter one on the half hour so a
@@ -417,7 +450,7 @@ export function TimetableGrid({
                  * would cost the page its vertical scroll, so a tap picks a
                  * single step instead.
                  */}
-                {onRangeSelect && (
+                {onRangeSelect && !unavailable && (
                   <div
                     className="absolute inset-0"
                     style={{ cursor: "cell", touchAction: "pan-y" }}
@@ -722,14 +755,20 @@ function RangeBlock({
         />
       )}
 
+      {/*
+       * Centred, so it sits clear of the grab bars on both edges rather than
+       * being struck through by the top one.
+       */}
       {roomForLabel && (
         <span
-          className="pointer-events-none relative block truncate text-center font-mono text-[10.5px] leading-[15px] font-bold"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center px-2"
           style={{
             color: tone === "pending" ? "var(--slate)" : "var(--faint)",
           }}
         >
-          {tone === "pending" ? label : "+ book"}
+          <span className="truncate font-mono text-[10.5px] font-bold">
+            {tone === "pending" ? label : "+ book"}
+          </span>
         </span>
       )}
 

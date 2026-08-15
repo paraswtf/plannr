@@ -1,3 +1,4 @@
+import { contactAddress, NO_ADDRESS, personName } from "~/lib/people";
 import {
   MAX_IMPORT_ROWS,
   rowSchema,
@@ -157,14 +158,14 @@ export function diffRows(input: DiffInput): DiffResult {
     let matched: ExistingUser | undefined;
     if (emailMatch && prnMatch && emailMatch.id !== prnMatch.id) {
       errors.push(
-        `Email belongs to ${emailMatch.name ?? emailMatch.email} but PRN belongs to ${prnMatch.name ?? prnMatch.email}`,
+        `Email belongs to ${personName(emailMatch)} but PRN belongs to ${personName(prnMatch)}`,
       );
     } else if (emailMatch) {
       matched = emailMatch;
     } else if (prnMatch) {
       if (prnMatch.hasSignedIn) {
         errors.push(
-          `PRN belongs to ${prnMatch.email}, who has already signed in — change their email manually`,
+          `PRN belongs to ${personName(prnMatch)}, who has already signed in — change their email manually`,
         );
       } else {
         matched = prnMatch;
@@ -202,7 +203,12 @@ export function diffRows(input: DiffInput): DiffResult {
       changes.push(`PRN: ${matched.prn ?? "—"} → ${data.prn}`);
     }
     if (matched.email !== data.email) {
-      changes.push(`email: ${matched.email} → ${data.email}`);
+      // A student whose address the college finally sent is the ordinary case
+      // here, and "no address yet → theirs" is what that is; printing the
+      // placeholder would read as one address being swapped for another.
+      changes.push(
+        `email: ${contactAddress(matched.email) ?? NO_ADDRESS} → ${data.email}`,
+      );
     }
     if (!sameSet(data.roles, matched.roleKeys)) {
       changes.push(

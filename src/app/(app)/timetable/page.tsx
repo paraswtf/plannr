@@ -1,9 +1,16 @@
+import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { TimetableView } from "~/components/app/timetable/timetable-view";
 import { canOpen } from "~/lib/role-nav";
 import { auth } from "~/server/auth";
 import { api } from "~/trpc/server";
+
+export const metadata: Metadata = {
+  title: "Timetable",
+  description:
+    "The whole campus timetable, room by room and hour by hour, with clashes called out.",
+};
 
 export default async function TimetablePage({
   searchParams,

@@ -26,6 +26,11 @@ export interface ClashingOccurrence {
   title: string;
   start: Date;
   end: Date;
+  /**
+   * Where the rule put this occurrence, before any exception moved it. Editing
+   * or cancelling just this one date is filed under it.
+   */
+  originalStart: Date;
   roomId: string;
   roomCode: string;
   groupLabel: string | null;
@@ -50,6 +55,11 @@ export interface ConflictCandidate {
   orgId: string;
   roomId: string;
   groupId?: string | null;
+  /**
+   * Every group attending, for a lecture given to more than one. Any of them
+   * being busy is a clash, the same as the single case.
+   */
+  groupIds?: string[];
   facultyId?: string | null;
   startTime: Date;
   endTime: Date;
@@ -146,11 +156,27 @@ export async function checkConflicts(
     slots[0]!.end,
   );
 
-  const dimensions: Array<Record<string, string>> = [
+  const groupIds = [
+    ...new Set(
+      [...(candidate.groupIds ?? []), candidate.groupId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    ),
+  ];
+
+  const dimensions: Array<Record<string, unknown>> = [
     { roomId: candidate.roomId },
   ];
   if (candidate.facultyId) dimensions.push({ facultyId: candidate.facultyId });
-  if (candidate.groupId) dimensions.push({ groupId: candidate.groupId });
+  if (groupIds.length > 0) {
+    // The occurrence's own group covers the ordinary case; the join reaches the
+    // other groups of a combined lecture, whose occurrences carry only the
+    // primary one.
+    dimensions.push({ groupId: { in: groupIds } });
+    dimensions.push({
+      event: { groups: { some: { groupId: { in: groupIds } } } },
+    });
+  }
 
   const existing = await db.eventOccurrence.findMany({
     where: {
@@ -169,6 +195,7 @@ export async function checkConflicts(
     orderBy: { start: "asc" },
     include: {
       event: { select: { title: true } },
+      exception: { select: { originalStart: true } },
       room: { select: { code: true } },
       group: { select: { label: true, name: true } },
       faculty: {
@@ -205,6 +232,7 @@ export async function checkConflicts(
       title: row.event.title,
       start: row.start,
       end: row.end,
+      originalStart: row.exception?.originalStart ?? row.start,
       roomId: row.roomId,
       roomCode: row.room.code,
       groupLabel: row.group?.label ?? row.group?.name ?? null,

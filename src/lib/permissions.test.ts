@@ -49,7 +49,7 @@ describe("permission implications", () => {
   it("applies implications for rooms, groups and courses", () => {
     expect(new PermissionBitField(F.ManageRooms).has(F.ViewRooms)).toBe(true);
     expect(new PermissionBitField(F.ManageGroups).has(F.ViewGroups)).toBe(true);
-    expect(new PermissionBitField(F.ManageCourses).has(F.ViewGroups)).toBe(
+    expect(new PermissionBitField(F.ManageProgrammes).has(F.ViewGroups)).toBe(
       true,
     );
     expect(new PermissionBitField(F.ApproveBookings).has(F.ViewAllEvents)).toBe(

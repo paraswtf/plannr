@@ -7,16 +7,22 @@ import {
   BookingDrawer,
   type BookingSpan,
 } from "~/components/app/booking/booking-drawer";
+import { unfitRoomIds } from "~/components/app/booking/room-fit";
+import { useBookingDraft } from "~/components/app/booking/use-booking-draft";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
-import { Segmented } from "~/components/ui/segmented";
+import { Select } from "~/components/ui/select";
 import {
-  addDays,
   decimalHour,
+  formatFullDate,
+  formatHourLabel,
+  isSameLocalDay,
   localTimeOnDay,
   startOfLocalDay,
 } from "~/lib/dates";
+import { DayNavigator } from "./day-navigator";
+import { EventDrawer } from "./event-drawer";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import {
@@ -28,8 +34,6 @@ import {
 import type { RouterOutputs } from "~/trpc/react";
 
 type GridData = RouterOutputs["timetable"]["grid"];
-
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function TimetableView({
   initialDate,
@@ -64,6 +68,10 @@ export function TimetableView({
     PermissionFlags.ManageAllEvents,
     PermissionFlags.ManageOwnEvents,
   );
+  const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
+  // The block that was clicked. Someone who can only take registers never sees
+  // this — they are sent to the register itself.
+  const [opened, setOpened] = useState<GridEvent | null>(null);
 
   const { data } = api.timetable.grid.useQuery(
     { date, buildingId },
@@ -83,6 +91,35 @@ export function TimetableView({
   const dayEndMinutes = settings?.dayEndMinutes ?? 1080;
   const startHour = dayStartMinutes / 60;
   const endHour = dayEndMinutes / 60;
+  const rooms = data?.rooms ?? [];
+
+  // The draft is held here rather than in the drawer because the grid reads it
+  // too: the class being scheduled is what decides which rooms are too small.
+  const draft = useBookingDraft({
+    isSelfServe,
+    roomId: span?.roomId ?? "",
+    start: span?.start ?? null,
+    end: span?.end ?? null,
+    timeZone,
+    room: rooms.find((r) => r.id === span?.roomId),
+    onCreated: async (result) => {
+      const when = span
+        ? `${formatHourLabel(span.start, timeZone)}–${formatHourLabel(span.end, timeZone)}`
+        : "";
+      const code = rooms.find((r) => r.id === span?.roomId)?.code ?? "Room";
+      setSpan(null);
+      setFlash({
+        text:
+          result.event.status === "PENDING"
+            ? `${code} requested for ${when} — waiting for approval`
+            : `${code} booked for ${when}`,
+      });
+      await utils.timetable.invalidate();
+      router.refresh();
+    },
+  });
+
+  const unavailableRooms = unfitRoomIds(rooms, draft.needs);
 
   useEffect(() => {
     if (!flash) return;
@@ -98,25 +135,60 @@ export function TimetableView({
     end: o.end,
     originalStart: o.originalStart,
     title: o.title,
-    subtitle: o.groupLabel,
+    // A combined lecture names every group rather than only the first.
+    subtitle: o.groupNames.join(", ") || o.groupLabel,
     isRecurring: o.isRecurring,
+    kind: o.kind,
+    roomCode: o.roomCode,
+    facultyName: o.facultyName,
+    groupNames: o.groupNames,
   }));
 
-  const today = startOfLocalDay(new Date(), timeZone);
-  const isToday = startOfLocalDay(date, timeZone).getTime() === today.getTime();
+  /**
+   * What a click on a block does depends on what you are here for. A scheduler
+   * gets the lecture and its actions; someone whose only business is the
+   * register goes straight to it.
+   */
+  const openEvent = (event: GridEvent) => {
+    if (!canMoveEvents && canMarkAttendance) {
+      router.push(`/attendance/${event.occurrenceId}`);
+      return;
+    }
+    setOpened(event);
+  };
 
-  // Monday-anchored week around the selected day.
-  const weekStart = startOfLocalDay(date, timeZone);
-  const weekdayIndex = (weekStart.getDay() + 6) % 7;
-  const monday = addDays(weekStart, -weekdayIndex, timeZone);
-  const weekDays = DAY_NAMES.slice(0, 5).map((label, i) => ({
-    value: addDays(monday, i, timeZone).toISOString(),
-    label,
-  }));
+  const isToday = isSameLocalDay(date, new Date(), timeZone);
 
-  const buildings = new Map(
-    (data?.rooms ?? []).map((r) => [r.building.id, r.building.name]),
-  );
+  /** Keeps the URL on the day being shown, so a reload or a shared link lands there. */
+  const writeDateToUrl = (day: Date) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("date", day.toISOString());
+    window.history.replaceState(null, "", url);
+  };
+
+  /** Moving the day drops the drafted span — it belongs to the day it was drawn on. */
+  const goToDay = (next: Date) => {
+    setDate(next);
+    setSpan(null);
+    writeDateToUrl(next);
+  };
+
+  /**
+   * The panel can retime a booking onto another date, and the calendar shows
+   * one day, so the screen follows it rather than leaving the block behind.
+   */
+  const changeSpan = (next: BookingSpan) => {
+    setSpan(next);
+    if (!isSameLocalDay(next.start, date, timeZone)) {
+      const day = startOfLocalDay(next.start, timeZone);
+      setDate(day);
+      writeDateToUrl(day);
+    }
+  };
+
+  // From the response's own unfiltered list, never from the rooms on screen:
+  // those are what the filter narrowed.
+  const buildings = data?.buildings ?? [];
 
   // The drawer works in instants; the grid works in decimal local hours. The
   // end is measured from the start rather than read off the clock, so a span
@@ -183,39 +255,23 @@ export function TimetableView({
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Timetable"
-          subtitle={`${data?.rooms.length ?? 0} rooms · ${events.length} scheduled`}
+          subtitle={`${formatFullDate(date, timeZone)} · ${data?.rooms.length ?? 0} rooms · ${events.length} scheduled`}
         />
         <div className="px-9 pt-2 pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <Segmented
-              items={weekDays}
-              value={startOfLocalDay(date, timeZone).toISOString()}
-              onChange={(value) => {
-                setDate(new Date(value));
+            <DayNavigator date={date} timeZone={timeZone} onChange={goToDay} />
+            <Select
+              ariaLabel="Building"
+              value={buildingId ?? ""}
+              options={[
+                { value: "", label: "All buildings" },
+                ...buildings.map((b) => ({ value: b.id, label: b.name })),
+              ]}
+              onChange={(id) => {
+                setBuildingId(id || undefined);
                 setSpan(null);
               }}
             />
-            <div className="flex items-center gap-3">
-              <select
-                value={buildingId ?? ""}
-                onChange={(e) => {
-                  setBuildingId(e.target.value || undefined);
-                  setSpan(null);
-                }}
-                className="bg-surface text-ink rounded-[10px] px-3 py-2 text-[13px] font-medium"
-                style={{ boxShadow: "var(--ring)" }}
-              >
-                <option value="">All buildings</option>
-                {[...buildings].map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-faint font-mono text-[12px]">
-                rooms × time
-              </span>
-            </div>
           </div>
 
           {data && data.rooms.length > 0 ? (
@@ -228,7 +284,11 @@ export function TimetableView({
               showNowLine={isToday}
               onRangeSelect={canBook ? takeRange : undefined}
               onEventMove={canMoveEvents ? takeMove : undefined}
+              onEventClick={
+                canMoveEvents || canMarkAttendance ? openEvent : undefined
+              }
               selection={selection}
+              unavailableRoomIds={unavailableRooms}
             />
           ) : (
             <div
@@ -253,15 +313,28 @@ export function TimetableView({
         <BookingDrawer
           span={span}
           rooms={data.rooms}
+          draft={draft}
           timeZone={timeZone}
           dayStartMinutes={dayStartMinutes}
           dayEndMinutes={dayEndMinutes}
-          isSelfServe={isSelfServe}
-          onChange={setSpan}
+          canCancelOthers={canMoveEvents}
+          onChange={changeSpan}
           onClose={() => setSpan(null)}
-          onBooked={async (message) => {
-            setSpan(null);
-            setFlash({ text: message });
+          onOtherCancelled={async () => {
+            await utils.timetable.invalidate();
+            router.refresh();
+          }}
+        />
+      )}
+
+      {opened && (
+        <EventDrawer
+          event={opened}
+          timeZone={timeZone}
+          canEdit={canMoveEvents}
+          canMarkAttendance={canMarkAttendance}
+          onClose={() => setOpened(null)}
+          onChanged={async () => {
             await utils.timetable.invalidate();
             router.refresh();
           }}

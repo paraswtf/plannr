@@ -7,17 +7,24 @@ import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
 import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
+import Link from "next/link";
+import { DEFAULT_TIMEZONE, formatDayLabel, formatHourLabel } from "~/lib/dates";
 import { facultyCard } from "~/components/app/people/entity-cards";
+import { PersonAddress } from "~/components/app/people/person-address";
+import { personName } from "~/lib/people";
 import { api } from "~/trpc/react";
 
 /** Members, teaching staff, and deletion — everything about one group. */
 export function GroupDetailDialog({
   groupId,
   canManage,
+  canMarkAttendance = false,
   onClose,
 }: {
   groupId: string;
   canManage: boolean;
+  /** Whether the lectures list links through to the register. */
+  canMarkAttendance?: boolean;
   onClose: () => void;
 }) {
   const utils = api.useUtils();
@@ -33,7 +40,9 @@ export function GroupDetailDialog({
     includeIds: assignedFacultyIds,
   });
 
-  const [tab, setTab] = useState<"students" | "faculty" | "danger">("students");
+  const [tab, setTab] = useState<
+    "students" | "lectures" | "faculty" | "danger"
+  >("students");
   const [paste, setPaste] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<string | null>(null);
@@ -94,8 +103,8 @@ export function GroupDetailDialog({
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="orange">{data.course.code}</Badge>
-            {data.term && <Badge tone="neutral">{data.term.name}</Badge>}
+            <Badge tone="orange">{data.programme.code}</Badge>
+            {data.semester && <Badge tone="neutral">{data.semester.name}</Badge>}
             <Badge tone="green" dot>
               {data.students.length} students
             </Badge>
@@ -107,6 +116,7 @@ export function GroupDetailDialog({
           <Segmented
             items={[
               { value: "students" as const, label: "Students" },
+              { value: "lectures" as const, label: "Lectures" },
               { value: "faculty" as const, label: "Faculty" },
               ...(canManage
                 ? [{ value: "danger" as const, label: "Delete" }]
@@ -233,11 +243,9 @@ export function GroupDetailDialog({
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="text-title block truncate text-[13.5px] font-semibold">
-                          {s.name ?? s.email}
+                          {personName(s, s.prn)}
                         </span>
-                        <span className="text-faint block truncate text-[12px]">
-                          {s.email}
-                        </span>
+                        <PersonAddress email={s.email} />
                       </span>
                       <span className="text-muted font-mono text-[12px]">
                         {s.prn}
@@ -247,6 +255,13 @@ export function GroupDetailDialog({
                 )}
               </div>
             </>
+          )}
+
+          {tab === "lectures" && (
+            <GroupLectures
+              groupId={groupId}
+              canMarkAttendance={canMarkAttendance}
+            />
           )}
 
           {tab === "faculty" && (
@@ -329,5 +344,75 @@ export function GroupDetailDialog({
         </div>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * What this group is timetabled for, and whether the register has been taken.
+ *
+ * Reads sittings rather than events: a weekly class is twelve lines here, which
+ * is the grain attendance is kept at.
+ */
+function GroupLectures({
+  groupId,
+  canMarkAttendance,
+}: {
+  groupId: string;
+  canMarkAttendance: boolean;
+}) {
+  const lectures = api.groups.lectures.useQuery({ groupId, limit: 60 });
+  const rows = lectures.data ?? [];
+
+  if (lectures.isLoading) {
+    return <p className="text-muted m-0 text-[13.5px]">Loading…</p>;
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="text-muted m-0 text-[13.5px]">
+        Nothing timetabled for this group yet. Schedule a class from the
+        timetable and pick this group.
+      </p>
+    );
+  }
+
+  return (
+    <div className="plr-scroll flex max-h-[46vh] flex-col gap-1.5 overflow-y-auto">
+      {rows.map((lecture) => (
+        <div
+          key={lecture.occurrenceId}
+          className="bg-surface flex flex-wrap items-center gap-2.5 rounded-[10px] px-3 py-2"
+          style={{ boxShadow: "var(--ring)" }}
+        >
+          <span className="text-title min-w-[92px] font-mono text-[12px] font-bold">
+            {formatDayLabel(lecture.start, DEFAULT_TIMEZONE)}
+          </span>
+          <span className="text-muted font-mono text-[12px]">
+            {formatHourLabel(lecture.start, DEFAULT_TIMEZONE)}
+          </span>
+          <span className="text-title min-w-0 flex-1 truncate text-[13px] font-semibold">
+            {lecture.title}
+          </span>
+          <Badge tone="slate">{lecture.roomCode}</Badge>
+          {lecture.sharedWith.length > 0 && (
+            <Badge tone="orange">with {lecture.sharedWith.join(", ")}</Badge>
+          )}
+          {lecture.attendance ? (
+            <Badge tone="green" dot>
+              {lecture.attendance.present}/{lecture.attendance.total}
+            </Badge>
+          ) : (
+            <span className="text-faint text-[11.5px]">no register</span>
+          )}
+          {canMarkAttendance && (
+            <Link
+              href={`/attendance/${lecture.occurrenceId}`}
+              className="text-slate text-[12.5px] font-bold"
+            >
+              {lecture.attendance ? "Update" : "Take"} →
+            </Link>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

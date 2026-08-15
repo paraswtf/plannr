@@ -1,8 +1,15 @@
+import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { GroupsView } from "~/components/app/groups/groups-view";
 import { canOpen } from "~/lib/role-nav";
 import { auth } from "~/server/auth";
+
+export const metadata: Metadata = {
+  title: "Groups",
+  description:
+    "Batches, divisions and course groups, and who belongs to each one.",
+};
 
 export default async function GroupsPage() {
   const session = await auth();

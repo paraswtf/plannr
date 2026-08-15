@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { PermissionFlags } from "~/lib/permissions";
@@ -150,6 +151,42 @@ export const roomsRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Adds a whole floor's worth at once. Codes are checked up front rather than
+   * left to the unique constraint, so a clash names itself instead of failing
+   * the batch with a database error.
+   */
+  createMany: permissionProcedure(PermissionFlags.ManageRooms)
+    .input(z.object({ rooms: z.array(roomInput).min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const codes = input.rooms.map((room) => room.code);
+      const repeated = [
+        ...new Set(codes.filter((code, i) => codes.indexOf(code) !== i)),
+      ];
+      if (repeated.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Repeated in this batch: ${repeated.join(", ")}`,
+        });
+      }
+
+      const taken = await ctx.db.room.findMany({
+        where: { orgId: ctx.orgId, code: { in: codes } },
+        select: { code: true },
+      });
+      if (taken.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Already in use: ${taken.map((r) => r.code).join(", ")}`,
+        });
+      }
+
+      const { count } = await ctx.db.room.createMany({
+        data: input.rooms.map((room) => ({ ...room, orgId: ctx.orgId })),
+      });
+      return { created: count };
+    }),
+
   update: permissionProcedure(PermissionFlags.ManageRooms)
     .input(roomInput.partial().extend({ id: z.string().cuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -197,6 +234,17 @@ export const roomsRouter = createTRPCRouter({
         data: { isActive: false },
       });
       return { archived: true };
+    }),
+
+  /** Puts an archived room back into service. */
+  restore: permissionProcedure(PermissionFlags.ManageRooms)
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.room.updateMany({
+        where: { id: input.id, orgId: ctx.orgId },
+        data: { isActive: true },
+      });
+      return { restored: true };
     }),
 
   delete: permissionProcedure(PermissionFlags.ManageRooms)

@@ -316,3 +316,64 @@ describe("describeRRule", () => {
     expect(describeRRule("nonsense")).toBe("custom repeat");
   });
 });
+
+/**
+ * The booking form lets a series be ended either way and switches between them
+ * by converting one into the other. That only holds up if a count and the date
+ * its last occurrence falls on describe the same series.
+ */
+describe("ending a series by date or by count", () => {
+  const start = lecture(2026, 3, 3); // a Tuesday
+
+  const datesFor = (rrule: string) =>
+    expandSeries({ ...start, rrule }).map((o) => localHours(o.start));
+
+  it("a count and the date of its last occurrence agree", () => {
+    for (const count of [1, 2, 6, 12]) {
+      const byCount = expandSeries({
+        ...start,
+        rrule: buildRRule({ freq: "WEEKLY", count, timeZone: IST }),
+      });
+      expect(byCount).toHaveLength(count);
+
+      // Switching the form to "on date" hands UNTIL the last occurrence.
+      const last = byCount[byCount.length - 1]!.start;
+      const byUntil = buildRRule({
+        freq: "WEEKLY",
+        until: last,
+        timeZone: IST,
+      });
+      expect(datesFor(byUntil)).toEqual(
+        byCount.map((o) => localHours(o.start)),
+      );
+    }
+  });
+
+  it("a date and the number of dates it yields agree", () => {
+    const byUntil = buildRRule({
+      freq: "WEEKLY",
+      until: at(2026, 4, 7),
+      timeZone: IST,
+    });
+    const dates = datesFor(byUntil);
+
+    // Switching the form to "after N" hands COUNT the number it just showed.
+    const byCount = buildRRule({
+      freq: "WEEKLY",
+      count: dates.length,
+      timeZone: IST,
+    });
+    expect(datesFor(byCount)).toEqual(dates);
+  });
+
+  it("holds for daily series too", () => {
+    const byCount = expandSeries({
+      ...start,
+      rrule: buildRRule({ freq: "DAILY", count: 5, timeZone: IST }),
+    });
+    const last = byCount[byCount.length - 1]!.start;
+    expect(
+      datesFor(buildRRule({ freq: "DAILY", until: last, timeZone: IST })),
+    ).toEqual(byCount.map((o) => localHours(o.start)));
+  });
+});

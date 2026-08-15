@@ -3,6 +3,12 @@ import Papa from "papaparse";
 import { z } from "zod";
 
 import {
+  addressSearch,
+  contactAddress,
+  contactAddresses,
+  personName,
+} from "~/lib/people";
+import {
   ACT_ON_DENIAL_MESSAGE,
   canActOn,
   expandPermissions,
@@ -67,7 +73,8 @@ const serialise = (u: UserRow) => {
   return {
     id: u.id,
     name: u.name,
-    email: u.email,
+    /** null for the students the college has not sent an address for yet. */
+    email: contactAddress(u.email),
     isActive: u.isActive,
     createdAt: u.createdAt,
     roles: u.roles.map((r) => ({
@@ -309,10 +316,19 @@ export const usersRouter = createTRPCRouter({
         if (clash) {
           throw new TRPCError({
             code: "CONFLICT",
-            message: `PRN ${input.prn} already belongs to ${clash.user.name ?? clash.user.email}.`,
+            message: `PRN ${input.prn} already belongs to ${personName(clash.user)}.`,
           });
         }
       }
+
+      // Somebody with no address was shut out by the college's paperwork, not
+      // by anyone here, so supplying one opens the account — the same rule the
+      // student import follows. An account disabled on purpose keeps its state
+      // through an address change, because that is a decision somebody made.
+      const opened =
+        contactAddress(input.email) && !contactAddress(target.user.email)
+          ? true
+          : undefined;
 
       return ctx.db.$transaction(async (tx) => {
         await tx.user.update({
@@ -320,7 +336,7 @@ export const usersRouter = createTRPCRouter({
           data: {
             name: input.name,
             email: input.email,
-            isActive: input.isActive,
+            isActive: input.isActive ?? opened,
           },
         });
 
@@ -526,7 +542,7 @@ export const usersRouter = createTRPCRouter({
       });
 
       const deletable: string[] = [];
-      const skipped: Array<{ id: string; email: string; reason: string }> = [];
+      const skipped: Array<{ id: string; who: string; reason: string }> = [];
 
       for (const target of targets) {
         const permissions = target.roles.reduce(
@@ -540,7 +556,7 @@ export const usersRouter = createTRPCRouter({
         if (denial) {
           skipped.push({
             id: target.id,
-            email: target.email,
+            who: personName(target),
             reason: ACT_ON_DENIAL_MESSAGE[denial],
           });
         } else {
@@ -604,7 +620,7 @@ export const usersRouter = createTRPCRouter({
       }
 
       if (plan.newGroups.length > 0) {
-        const course = await ctx.db.course.upsert({
+        const course = await ctx.db.programme.upsert({
           where: { orgId_code: { orgId: ctx.orgId, code: "UNSORTED" } },
           update: {},
           create: {
@@ -619,7 +635,7 @@ export const usersRouter = createTRPCRouter({
               orgId: ctx.orgId,
               name,
               label: name,
-              courseId: course.id,
+              programmeId: course.id,
             },
           });
           groupIdByName.set(name.toLowerCase(), created.id);
@@ -722,9 +738,10 @@ export const usersRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const cleaned = [...new Set(input.identifiers.filter(Boolean))];
-      const emails = cleaned
-        .filter((v) => v.includes("@"))
-        .map((v) => v.toLowerCase());
+      // A placeholder address is nobody's identifier: it is never shown, so it
+      // cannot have been read off a screen, and matching one would let a paste
+      // reach a student by a string that says they have no address.
+      const emails = contactAddresses(cleaned.filter((v) => v.includes("@")));
       const prns = cleaned.filter((v) => !v.includes("@"));
 
       const found = await ctx.db.user.findMany({
@@ -756,7 +773,7 @@ export const usersRouter = createTRPCRouter({
         matched: found.map((u) => ({
           id: u.id,
           name: u.name,
-          email: u.email,
+          email: contactAddress(u.email),
           prn: u.studentProfile?.prn ?? null,
         })),
         unmatched,
@@ -903,7 +920,7 @@ function buildWhere(
       ? {
           OR: [
             { name: { contains: q, mode: "insensitive" as const } },
-            { email: { contains: q, mode: "insensitive" as const } },
+            addressSearch(q),
             { studentProfile: { prn: { contains: q } } },
           ],
         }
