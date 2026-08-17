@@ -77,7 +77,7 @@ export function DemandImportDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{ background: "var(--slate)" }}
           >
             Done
@@ -87,7 +87,7 @@ export function DemandImportDialog({
             <button
               type="button"
               onClick={onClose}
-              className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+              className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
               style={{ boxShadow: "var(--ring)" }}
             >
               Cancel
@@ -96,7 +96,7 @@ export function DemandImportDialog({
               type="button"
               disabled={!plan || blocked || commit.isPending}
               onClick={() => commit.mutate({ planId, csv, replace })}
-              className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
               style={{
                 background: "var(--grad-brand)",
                 opacity: !plan || blocked || commit.isPending ? 0.5 : 1,
@@ -134,7 +134,7 @@ export function DemandImportDialog({
           <>
             <div className="flex flex-wrap items-center gap-3">
               <label
-                className="flex cursor-pointer items-center gap-2 rounded-[10px] px-3.5 py-2 text-[13px] font-semibold"
+                className="flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 <Icon name="upload" size={15} color="var(--slate)" />
@@ -161,7 +161,7 @@ export function DemandImportDialog({
                   setFileName("example.csv");
                   setDone(null);
                 }}
-                className="text-slate ml-auto cursor-pointer text-[12.5px] font-semibold"
+                className="text-slate flex min-h-10 cursor-pointer items-center text-[12.5px] font-semibold sm:ml-auto lg:min-h-0"
               >
                 Use an example
               </button>
@@ -184,8 +184,8 @@ export function DemandImportDialog({
               />
               <span className="text-faint text-[11.5px]">
                 Only <b>group</b> and <b>subject</b> are required. Sessions
-                defaults to 1 and length to an hour. Separate several teachers or
-                features with <b>|</b> or a comma. Column names are matched
+                defaults to 1 and length to an hour. Separate several teachers
+                or features with <b>|</b> or a comma. Column names are matched
                 loosely — &ldquo;Lectures per week&rdquo; and &ldquo;Taught
                 by&rdquo; both work.
               </span>
@@ -216,7 +216,7 @@ export function DemandImportDialog({
                       <button
                         type="button"
                         onClick={() => setErrorsOnly((v) => !v)}
-                        className="text-slate ml-auto cursor-pointer text-[12.5px] font-semibold"
+                        className="text-slate flex min-h-10 cursor-pointer items-center text-[12.5px] font-semibold sm:ml-auto lg:min-h-0"
                       >
                         {errorsOnly ? "Show all rows" : "Show errors only"}
                       </button>
@@ -245,18 +245,22 @@ export function DemandImportDialog({
                       className="mt-0.5"
                     />
                     <span className="text-ink text-[12.5px]">
-                      Replace the demand already in this plan, rather than adding
-                      to it. Any timetable generated from it will need
+                      Replace the demand already in this plan, rather than
+                      adding to it. Any timetable generated from it will need
                       regenerating.
                     </span>
                   </label>
                 )}
 
+                {/* Both axes scroll inside this box. The preview is a check
+                    that the file parsed, so the seven columns are worth
+                    reaching sideways for rather than folding into cards nobody
+                    will read twice. */}
                 <div
-                  className="plr-scroll max-h-[340px] overflow-y-auto rounded-[10px]"
+                  className="plr-scroll max-h-[260px] overflow-auto rounded-[10px] sm:max-h-[340px]"
                   style={{ boxShadow: "var(--ring)" }}
                 >
-                  <table className="w-full border-collapse">
+                  <table className="w-full min-w-[640px] border-collapse">
                     <thead className="bg-surface sticky top-0">
                       <tr>
                         <Th>Line</Th>
@@ -281,11 +285,14 @@ export function DemandImportDialog({
                         >
                           <Td mono>{row.line}</Td>
                           <Td>
-                            {row.requirement?.groupLabel ?? row.raw.group ?? "—"}
+                            {row.requirement?.groupLabel ??
+                              row.raw.group ??
+                              "—"}
                           </Td>
                           <Td>{row.requirement?.subject ?? row.raw.subject}</Td>
                           <Td mono>
-                            {row.requirement?.sessionsPerWeek ?? row.raw.sessions}
+                            {row.requirement?.sessionsPerWeek ??
+                              row.raw.sessions}
                           </Td>
                           <Td mono>
                             {row.requirement

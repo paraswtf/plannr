@@ -148,6 +148,12 @@ export function EventDrawer({
             <span className="text-ink text-[13px] font-semibold">
               Cancel this lecture
             </span>
+            {/*
+             * Three labelled scopes are wider than the panel is on a phone.
+             * The strip scrolls inside itself, so it needs no help here — a
+             * scroller wrapped around it would only clip the chosen pill's
+             * shadow, at every width.
+             */}
             {event.isRecurring && (
               <Segmented
                 items={SCOPES}
@@ -160,13 +166,16 @@ export function EventDrawer({
               <button
                 type="button"
                 onClick={() => setConfirmCancel(true)}
-                className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636]"
+                className="min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0 lg:py-1.5"
                 style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
               >
                 Cancel…
               </button>
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              // The question and its two answers only sit on one line where the
+              // panel is wide; on a phone the sentence would be squeezed to a
+              // word per line to make room for them.
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <span className="text-ink text-[12.5px]">
                   {event.isRecurring && scope !== "occurrence"
                     ? scope === "series"
@@ -178,7 +187,7 @@ export function EventDrawer({
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(false)}
-                    className="text-muted cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                    className="text-muted min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
                   >
                     Keep
                   </button>
@@ -192,7 +201,7 @@ export function EventDrawer({
                         originalStart: event.originalStart,
                       })
                     }
-                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold text-white lg:min-h-0 lg:py-1.5"
                     style={{ background: "var(--red)" }}
                   >
                     {cancel.isPending ? "Cancelling…" : "Cancel it"}

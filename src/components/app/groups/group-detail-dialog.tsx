@@ -104,7 +104,9 @@ export function GroupDetailDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="orange">{data.programme.code}</Badge>
-            {data.semester && <Badge tone="neutral">{data.semester.name}</Badge>}
+            {data.semester && (
+              <Badge tone="neutral">{data.semester.name}</Badge>
+            )}
             <Badge tone="green" dot>
               {data.students.length} students
             </Badge>
@@ -113,6 +115,8 @@ export function GroupDetailDialog({
             )}
           </div>
 
+          {/* Four tabs are wider than the dialog is on a phone; the strip
+              scrolls inside itself rather than stretching the dialog. */}
           <Segmented
             items={[
               { value: "students" as const, label: "Students" },
@@ -168,7 +172,10 @@ export function GroupDetailDialog({
                     onChange={(e) => setPaste(e.target.value)}
                     rows={3}
                     placeholder="Paste emails or PRNs, one per line or comma separated"
-                    className="bg-surface w-full resize-y rounded-[10px] px-3 py-2 font-mono text-[12.5px] outline-none"
+                    // 16px on a phone: below that, Safari zooms the page in as
+                    // the field takes focus, which on a dialog leaves it half
+                    // off screen.
+                    className="bg-surface w-full resize-y rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[12.5px]"
                     style={{ boxShadow: "var(--ring)" }}
                   />
                   <button
@@ -183,7 +190,7 @@ export function GroupDetailDialog({
                           .filter(Boolean),
                       })
                     }
-                    className="self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="min-h-10 self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                     style={{
                       background: "var(--slate)",
                       opacity: paste.trim() ? 1 : 0.5,
@@ -204,7 +211,7 @@ export function GroupDetailDialog({
                       studentIds: [...selected],
                     })
                   }
-                  className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                  className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                   style={{ background: "var(--red)" }}
                 >
                   <Icon name="trash" size={13} color="#fff" />
@@ -224,7 +231,7 @@ export function GroupDetailDialog({
                   data.students.map((s) => (
                     <label
                       key={s.id}
-                      className="flex items-center gap-3 px-3 py-2.5"
+                      className="flex min-h-11 items-center gap-3 px-3 py-2.5"
                       style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)" }}
                     >
                       {canManage && (
@@ -239,6 +246,7 @@ export function GroupDetailDialog({
                               return next;
                             })
                           }
+                          className="h-4.5 w-4.5 shrink-0"
                         />
                       )}
                       <span className="min-w-0 flex-1">
@@ -247,7 +255,7 @@ export function GroupDetailDialog({
                         </span>
                         <PersonAddress email={s.email} />
                       </span>
-                      <span className="text-muted font-mono text-[12px]">
+                      <span className="text-muted shrink-0 font-mono text-[12px]">
                         {s.prn}
                       </span>
                     </label>
@@ -334,7 +342,7 @@ export function GroupDetailDialog({
                     ? remove.mutate({ id: groupId, confirmCascade: true })
                     : setConfirmDelete(true)
                 }
-                className="cursor-pointer self-start rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white"
+                className="min-h-10 cursor-pointer self-start rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white lg:min-h-0"
                 style={{ background: "var(--red)" }}
               >
                 {confirmDelete ? `Yes, delete ${data.label}` : "Delete group"}
@@ -406,7 +414,7 @@ function GroupLectures({
           {canMarkAttendance && (
             <Link
               href={`/attendance/${lecture.occurrenceId}`}
-              className="text-slate text-[12.5px] font-bold"
+              className="text-slate inline-flex min-h-10 items-center text-[12.5px] font-bold lg:min-h-0"
             >
               {lecture.attendance ? "Update" : "Take"} →
             </Link>

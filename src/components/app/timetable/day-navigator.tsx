@@ -70,7 +70,7 @@ export function DayNavigator({
           type="button"
           disabled={isToday}
           onClick={() => onChange(startOfLocalDay(new Date(), timeZone))}
-          className="rounded-[10px] px-3 py-2 text-[12.5px] font-semibold"
+          className="h-10 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
           style={{
             background: "rgba(68,88,121,0.07)",
             color: "var(--slate)",
@@ -82,16 +82,31 @@ export function DayNavigator({
         </button>
       </div>
 
-      <Segmented
-        items={strip}
-        value={day.toISOString()}
-        onChange={(value) => onChange(new Date(value))}
-        size="sm"
-      />
+      {/*
+       * A week of dated tabs is wider than a phone, and already scrolls inside
+       * itself. All this wrapper does is give it a line of its own below sm —
+       * sharing one with the day controls would leave it a couple of
+       * centimetres to scroll in. Wrapping it in a second scroller would only
+       * clip the chosen pill's shadow, which is what the strip's own vertical
+       * padding is there to protect.
+       */}
+      <div className="w-full sm:w-auto">
+        <Segmented
+          items={strip}
+          value={day.toISOString()}
+          onChange={(value) => onChange(new Date(value))}
+          size="sm"
+        />
+      </div>
     </div>
   );
 }
 
+/**
+ * One day back or forward. A 34px chip is comfortable under a mouse and mean
+ * under a thumb, so it only shrinks to that where there is a sidebar to prove
+ * we are on a desktop; everywhere else it is a 40px target.
+ */
 function Step({
   icon,
   label,
@@ -106,7 +121,7 @@ function Step({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-[10px]"
+      className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
       style={{ background: "rgba(68,88,121,0.07)" }}
     >
       <Icon name={icon} size={14} color="var(--slate)" stroke={2.2} />

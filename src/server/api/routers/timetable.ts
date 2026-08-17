@@ -422,6 +422,10 @@ export const timetableRouter = createTRPCRouter({
          * somebody arriving at their schedule is actually asking is "where do I
          * have to be next", and on a Friday evening the answer is not Friday.
          *
+         * A class you are in the middle of, or one that ended less than
+         * `GRACE_AFTER_CLASS_MS` ago, is the next class for this purpose; see
+         * `nextClassMoment`.
+         *
          * Deciding it here rather than in the browser is what keeps it to one
          * round trip: the page is rendered on the server, and a client that had
          * to ask for the day first would render today, then jump.
@@ -569,11 +573,33 @@ export const timetableRouter = createTRPCRouter({
 });
 
 /**
+ * How long a class goes on counting as the class you are at after it has ended.
+ *
+ * Walking out of a room is not the moment a lecture stops being the thing you
+ * are dealing with: attendance is taken on the way out, and "what was that,
+ * and where is the next one" is asked in the corridor afterwards. Moving the
+ * screen to Monday the second a Friday afternoon class finishes would take the
+ * day away mid-sentence, so the last sitting holds the day for half an hour
+ * before the next one claims it.
+ *
+ * Half an hour is the length of the gap between two back-to-back classes plus
+ * room to walk: long enough to cover the moment you would still ask about the
+ * one that just ended, short enough that an evening is never spent looking at
+ * a day that is over.
+ */
+const GRACE_AFTER_CLASS_MS = 30 * 60_000;
+
+/**
  * When the next class this person is involved in happens, or now if there is none.
  *
  * "Next" is measured by the end rather than the start, so a lecture already
  * running still counts as the one you are going to. Anchoring on the start
  * would send somebody sitting in a Tuesday afternoon lecture to Wednesday.
+ *
+ * The end is then given `GRACE_AFTER_CLASS_MS` of slack, so a sitting that has
+ * just finished still answers the question — which is what keeps the screen on
+ * today for the half hour after the last class of the day instead of jumping
+ * to tomorrow the instant it ends.
  *
  * Ordered by start, though: among everything not yet finished, the next one is
  * the one that begins soonest, which is not the same as the one that ends
@@ -581,6 +607,10 @@ export const timetableRouter = createTRPCRouter({
  *
  * Returns a moment rather than a day because the caller knows the timezone the
  * day should be cut on, and doing that arithmetic twice is how the two disagree.
+ * One consequence of that division is worth naming: the grace is measured in
+ * elapsed time, not in days, so a class ending at 23:50 holds *its* day until
+ * 00:20 — the screen opens on yesterday for those twenty minutes, which is the
+ * day of the class the reader was actually at.
  */
 async function nextClassMoment(
   db: Db,
@@ -594,7 +624,7 @@ async function nextClassMoment(
     where: {
       orgId,
       status: { in: [...OCCUPYING_STATUSES] },
-      end: { gt: now },
+      end: { gt: new Date(now.getTime() - GRACE_AFTER_CLASS_MS) },
       OR: belongs,
     },
     select: { start: true },

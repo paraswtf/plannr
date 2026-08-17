@@ -56,7 +56,9 @@ export function GroupsView({ permissions }: { permissions: string }) {
     // search and its label falls back to a placeholder.
     includeIds: programmeId ? [programmeId] : undefined,
   });
-  const selectedProgramme = courses.data?.rows.find((c) => c.id === programmeId);
+  const selectedProgramme = courses.data?.rows.find(
+    (c) => c.id === programmeId,
+  );
 
   return (
     <>
@@ -64,19 +66,24 @@ export function GroupsView({ permissions }: { permissions: string }) {
         title="Groups"
         subtitle="The three ways students are divided: programmes, the intakes admitted to them, and the groups those split into"
       />
-      <div className="px-9 pt-2 pb-10">
+      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <Segmented
-            items={[
-              { value: "groups" as const, label: "Groups" },
-              { value: "batches" as const, label: "Batches" },
-              { value: "programmes" as const, label: "Programmes" },
-            ]}
-            value={tab}
-            onChange={setTab}
-            size="sm"
-          />
-          <div className="relative w-64">
+          {/* Three tabs just overrun a 390px screen. The strip scrolls inside
+              itself, so all it wants here is a line of its own; a second
+              scroll box around it would clip the active pill's shadow. */}
+          <div className="w-full sm:w-auto">
+            <Segmented
+              items={[
+                { value: "groups" as const, label: "Groups" },
+                { value: "batches" as const, label: "Batches" },
+                { value: "programmes" as const, label: "Programmes" },
+              ]}
+              value={tab}
+              onChange={setTab}
+              size="sm"
+            />
+          </div>
+          <div className="relative w-full sm:w-64">
             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
               <Icon name="search" size={15} color="var(--faint)" />
             </span>
@@ -84,14 +91,19 @@ export function GroupsView({ permissions }: { permissions: string }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={`Search ${tab}…`}
-              className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13.5px] outline-none"
+              // 16px on a phone: below that, Safari zooms the page in as the
+              // field takes focus, and a zoomed page is one that scrolls
+              // sideways.
+              className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             />
           </div>
           {tab === "groups" && (
-            <div className="w-56">
+            <div className="w-full sm:w-56">
               <SearchSelect
-                value={selectedProgramme ? programmeCard(selectedProgramme) : null}
+                value={
+                  selectedProgramme ? programmeCard(selectedProgramme) : null
+                }
                 onChange={(id) => setCourseId(id ?? undefined)}
                 page={
                   courses.data && {
@@ -117,7 +129,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="min-h-10 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
               style={{ background: "var(--grad-brand)" }}
             >
               + New group
@@ -135,7 +147,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
           <ProgrammesPanel query={debounced} canManage={canManageProgrammes} />
         ) : (
           <>
-            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))] gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(320px,1fr))]">
               {(groups.data?.rows ?? []).map((g) => (
                 <Card key={g.id} pad={18} className="flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
@@ -199,7 +211,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
                     <button
                       type="button"
                       onClick={() => setOpenId(g.id)}
-                      className="text-slate cursor-pointer text-[13px] font-bold"
+                      className="text-slate inline-flex min-h-10 cursor-pointer items-center text-[13px] font-bold lg:min-h-0"
                     >
                       Manage →
                     </button>
@@ -219,12 +231,12 @@ export function GroupsView({ permissions }: { permissions: string }) {
             )}
 
             {(groups.data?.pageCount ?? 1) > 1 && (
-              <div className="mt-5 flex items-center justify-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
                   disabled={page === 1}
                   onClick={() => setPage((n) => n - 1)}
-                  className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                   style={{
                     boxShadow: "var(--ring)",
                     opacity: page === 1 ? 0.4 : 1,
@@ -239,7 +251,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
                   type="button"
                   disabled={!groups.data?.hasMore}
                   onClick={() => setPage((n) => n + 1)}
-                  className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                   style={{
                     boxShadow: "var(--ring)",
                     opacity: groups.data?.hasMore ? 1 : 0.4,
@@ -309,7 +321,9 @@ function NewGroupDialog({
     pageSize: termPageSize,
     includeIds: semesterId ? [semesterId] : undefined,
   });
-  const selectedProgramme = courses.data?.rows.find((c) => c.id === programmeId);
+  const selectedProgramme = courses.data?.rows.find(
+    (c) => c.id === programmeId,
+  );
   const selectedTerm = terms.data?.rows.find((t) => t.id === semesterId);
 
   const create = api.groups.create.useMutation({
@@ -333,7 +347,7 @@ function NewGroupDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -351,7 +365,7 @@ function NewGroupDialog({
                 kind,
               })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: ready ? 1 : 0.5,
@@ -398,7 +412,9 @@ function NewGroupDialog({
             listId="new-group-course"
           />
         </Labelled>
-        <div className="grid grid-cols-2 gap-3">
+        {/* Both of these are popovers that need room for a hint line, so on a
+            phone they take a row each rather than halving a 294px dialog. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Labelled label="Batch">
             <Select
               ariaLabel="Batch"
@@ -438,7 +454,9 @@ function NewGroupDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. BCA-C"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Labelled>
@@ -447,7 +465,7 @@ function NewGroupDialog({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="e.g. BCA-C · Sem III"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Labelled>

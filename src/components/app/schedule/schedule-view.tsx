@@ -55,7 +55,8 @@ export function ScheduleView({
    * The screen opens on the day of the next class, which on a Friday evening is
    * Monday — a jump nobody asked for and, unexplained, one that reads as the
    * app having lost today. Saying so is only honest until they move the day
-   * themselves, after which it is their choice and needs no caption.
+   * themselves — with `Today`, the arrows, the date or a tab — after which it
+   * is their choice and needs no caption.
    */
   const [moved, setMoved] = useState(false);
   const goTo = (day: Date) => {
@@ -143,7 +144,19 @@ export function ScheduleView({
   const openable = canEdit || canMarkAttendance;
 
   return (
-    <div className="flex min-h-screen items-start">
+    // The drawer is a column beside the day from `lg`, and below it falls in
+    // underneath: it is an ordinary item in this box, not a sheet over the
+    // page, so the box has to stop being a row or the two would share one line
+    // and the day would collapse to nothing beside a full-width panel.
+    //
+    // `min-h-screen` comes in with the docking, for the same reason it does on
+    // the timetable: below lg it would add the hamburger bar's height to a full
+    // screen and leave a phone scrolling past the end of the day.
+    <div className="flex flex-col lg:min-h-screen lg:flex-row lg:items-start">
+      {/*
+        The day keeps its place at every width — it is what the drawer opens
+        beside on a laptop, and what it opens under on a phone.
+      */}
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Schedule"
@@ -151,8 +164,14 @@ export function ScheduleView({
             viewingAs ? `${viewingAs.name}'s day` : null,
             // Why the screen is not on today. Drops away the moment the day is
             // stepped by hand, because from then on it is not a surprise.
+            //
+            // Backwards is the half-hour grace after a class that ended near
+            // midnight still holding its own day: rare, but "the next class"
+            // would be a plain untruth about a day that has already happened.
             !moved && !isSameLocalDay(date, now, timeZone)
-              ? "Opened on the next class"
+              ? date > now
+                ? "Opened on the next class"
+                : "Opened on your last class"
               : null,
             // The count is the previous day's until the new one lands, and
             // "4 classes" above an empty calendar is the same lie in words.
@@ -165,12 +184,12 @@ export function ScheduleView({
             .filter(Boolean)
             .join(" · ")}
         />
-        <div className="px-9 pt-3 pb-10">
+        <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <DayNavigator date={date} timeZone={timeZone} onChange={goTo} />
 
             {(views.length > 1 || canViewOthers) && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 <span className="text-faint font-mono text-[12px]">view as</span>
                 <Select
                   value={
@@ -201,7 +220,7 @@ export function ScheduleView({
                 />
 
                 {(pickingPerson || viewingAs) && (
-                  <div className="w-[260px]">
+                  <div className="w-full sm:w-[260px]">
                     <SearchSelect
                       value={
                         viewingAs
@@ -266,7 +285,7 @@ export function ScheduleView({
               <button
                 type="button"
                 onClick={() => void refetch()}
-                className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                 style={{ background: "rgba(68,88,121,0.07)", color: "var(--slate)" }}
               >
                 Try again now

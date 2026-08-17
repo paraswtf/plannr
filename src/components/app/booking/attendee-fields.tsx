@@ -11,7 +11,7 @@ import type { BookingDraft } from "./use-booking-draft";
  */
 export function AttendeeFields({
   draft,
-  className = "grid grid-cols-2 gap-3",
+  className = "grid gap-3 sm:grid-cols-2",
 }: {
   draft: BookingDraft;
   className?: string;

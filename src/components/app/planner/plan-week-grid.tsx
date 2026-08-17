@@ -66,7 +66,8 @@ function packColumns(sessions: PlanGridSession[]): Array<{
       a.title.localeCompare(b.title),
   );
 
-  const out: Array<{ session: PlanGridSession; lane: number; lanes: number }> = [];
+  const out: Array<{ session: PlanGridSession; lane: number; lanes: number }> =
+    [];
   let cluster: typeof out = [];
   let clusterEnd = -1;
   let laneEnds: number[] = [];
@@ -144,11 +145,20 @@ export function PlanWeekGrid({
   }, [sessions]);
 
   return (
+    // A working week is wider than a phone whatever is done to it, so the grid
+    // scrolls inside its own card and the page never moves. How narrow a day
+    // may get is a custom property rather than a number here, because it is the
+    // one measurement that has to change with the screen — 104px still fits a
+    // subject code and a room, and puts three days in view at once.
     <div
-      className="bg-surface plr-scroll overflow-x-auto rounded-[var(--radius-card)]"
+      className="bg-surface plr-scroll overflow-x-auto rounded-[var(--radius-card)] [--plan-day-w:104px] sm:[--plan-day-w:126px] lg:[--plan-day-w:150px]"
       style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
     >
-      <div style={{ minWidth: GUTTER + days.length * 150 }}>
+      <div
+        style={{
+          minWidth: `calc(${GUTTER}px + ${days.length} * var(--plan-day-w))`,
+        }}
+      >
         {/* Day headings */}
         <div
           className="flex"
@@ -212,7 +222,9 @@ export function PlanWeekGrid({
                       top: top(block.startMinutes),
                       height: Math.max(
                         10,
-                        ((block.endMinutes - block.startMinutes) / 60) * rowHeight - 2,
+                        ((block.endMinutes - block.startMinutes) / 60) *
+                          rowHeight -
+                          2,
                       ),
                       background:
                         "repeating-linear-gradient(45deg, rgba(68,88,121,0.07) 0 6px, transparent 6px 12px)",

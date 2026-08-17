@@ -3,7 +3,11 @@
 import { useState } from "react";
 
 import { Dialog } from "~/components/ui/dialog";
-import { EntityPicker, initialsOf, useDebounced } from "~/components/ui/entity-picker";
+import {
+  EntityPicker,
+  initialsOf,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { api } from "~/trpc/react";
 
 /**
@@ -65,7 +69,7 @@ export function ShareDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -80,7 +84,7 @@ export function ShareDialog({
                 message: message.trim() || undefined,
               })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{
               background: "var(--grad-brand)",
               opacity: ready ? 1 : 0.5,

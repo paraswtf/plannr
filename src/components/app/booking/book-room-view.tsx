@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PageHeader } from "~/components/app/shell/page-header";
@@ -33,10 +33,10 @@ type GridData = RouterOutputs["timetable"]["grid"];
  * Book a room.
  *
  * The same rooms × time calendar as the Timetable screen, with one difference:
- * the booking panel is docked open permanently instead of appearing on a drag.
+ * the booking panel is docked open permanently instead of appearing on a pick.
  * Booking is the whole point of this screen, so there is nothing sensible to
- * dismiss the panel to. A slot is chosen by sweeping the grid or by nudging the
- * times in the panel, and whichever you do, the grid draws it.
+ * dismiss the panel to. A slot is chosen on the grid or by nudging the times in
+ * the panel, and whichever you do, the grid draws it.
  */
 export function BookRoomView({
   initial,
@@ -145,6 +145,31 @@ export function BookRoomView({
     return () => clearTimeout(id);
   }, [flash]);
 
+  const panelRef = useRef<HTMLElement>(null);
+  // Counts picks made on the calendar. The panel here is permanent, so there is
+  // no opening to watch for — and the span itself changes for reasons the panel
+  // caused, which are exactly the ones that must not move the page.
+  const [picks, setPicks] = useState(0);
+
+  /**
+   * Below `lg` the panel is a screen further down, so a pick on the calendar
+   * re-times something the reader cannot see and the tap reads as having done
+   * nothing. Take them to it.
+   *
+   * Gated on the pointer as well as the width, and not because thumbs are
+   * bigger: a mouse reports the range live all the way through a drag, so
+   * scrolling on each of those reports would pull the grid out from under the
+   * cursor mid-sweep. Touch cannot drag this grid at all — every pick it makes
+   * is one settled tap — which makes the input device, not the window width,
+   * the thing that decides whether this is safe to do.
+   */
+  useEffect(() => {
+    if (picks === 0) return;
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [picks]);
+
   // Held here rather than in the panel because the calendar reads it too: the
   // class being booked for is what decides which rooms are too small to offer.
   const draft = useBookingDraft({
@@ -215,17 +240,22 @@ export function BookRoomView({
   };
 
   return (
-    <div className="flex items-start">
+    // Calendar and panel are columns beside each other only where there is
+    // width for both; below that the panel is the next thing down the page.
+    <div className="flex flex-col lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Book a room"
-          subtitle={`${formatFullDate(day, timeZone)} · sweep a slot on the calendar, or set the times on the right`}
+          // No "on the right": the panel is only beside the calendar from lg,
+          // and below that it is underneath it.
+          subtitle={`${formatFullDate(day, timeZone)} · pick a slot on the calendar, or set the times in the booking panel`}
         />
-        <div className="px-9 pt-2 pb-10">
+        <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <DayNavigator date={day} timeZone={timeZone} onChange={setDay} />
             <Select
               ariaLabel="Building"
+              className="w-full sm:w-auto"
               value={buildingId ?? ""}
               options={[
                 { value: "", label: "All buildings" },
@@ -244,7 +274,7 @@ export function BookRoomView({
               endHour={dayEnd / 60}
               snapMinutes={SNAP_MINUTES}
               showNowLine={isToday}
-              onRangeSelect={(range) =>
+              onRangeSelect={(range) => {
                 setSpan({
                   roomId: range.roomId,
                   start: localTimeOnDay(
@@ -257,29 +287,40 @@ export function BookRoomView({
                     Math.round(range.endHour * 60),
                     timeZone,
                   ),
-                })
-              }
+                });
+                setPicks((n) => n + 1);
+              }}
               selection={selection}
               unavailableRoomIds={unavailableRooms}
             />
           ) : (
             <div
-              className="bg-surface text-muted rounded-[var(--radius-card)] p-10 text-center text-[14px]"
+              className="bg-surface text-muted rounded-[var(--radius-card)] p-6 text-center text-[14px] sm:p-10"
               style={{ boxShadow: "var(--ring)" }}
             >
               No rooms yet. An admin can add them from the Rooms tab.
             </div>
           )}
 
+          {/*
+           * Both halves are true wherever this is read, rather than one of them
+           * being swapped in on a coarse pointer: a tablet with a keyboard and a
+           * trackpad can do either, and someone on a phone is better served by a
+           * hint that names the mouse than by one that quietly withholds half
+           * the screen's behaviour.
+           */}
           <p className="text-faint mt-3 text-[12.5px]">
-            Drag down a room&apos;s column to sweep out a slot — the panel
-            follows along.
+            Tap a room&apos;s column to put a slot on it, then set the exact
+            times in the booking panel. With a mouse, drag down the column to
+            sweep the whole slot out in one go, and drag the block&apos;s edges
+            or middle to shift it.
           </p>
         </div>
       </div>
 
       {span && (
         <BookingDrawer
+          ref={panelRef}
           span={span}
           rooms={rooms}
           draft={draft}
@@ -307,7 +348,9 @@ export function BookRoomView({
 
       {flash && (
         <div
-          className="plr-toast fixed bottom-8 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2.5 rounded-xl px-4 py-3"
+          // Clear of the panel's action bar, which rides the bottom of the
+          // screen until the panel goes back to being a column of its own.
+          className="plr-toast fixed bottom-24 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2.5 rounded-xl px-4 py-3 lg:bottom-8"
           style={{
             background: "var(--surface)",
             boxShadow: "var(--ring), var(--shadow-float)",

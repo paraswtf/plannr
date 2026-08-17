@@ -48,7 +48,7 @@ export function SemestersPanel({ initial }: { initial: Semester[] }) {
         <button
           type="button"
           onClick={() => setOpening(true)}
-          className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+          className="inline-flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg px-3 py-1.5 text-[12.5px] font-semibold whitespace-nowrap text-white lg:min-h-0"
           style={{ background: "var(--grad-brand)" }}
         >
           Open a semester
@@ -86,7 +86,10 @@ export function SemestersPanel({ initial }: { initial: Semester[] }) {
                 {formatFullDate(semester.startDate, DEFAULT_TIMEZONE)} –{" "}
                 {formatFullDate(semester.endDate, DEFAULT_TIMEZONE)}
               </span>
-              <span className="text-faint ml-auto font-mono text-[11.5px]">
+              {/* On a phone the name, the dates and this tally each take a line
+                  of their own, and a lone right-aligned line reads as a stray;
+                  it is only flung to the far end once it shares one. */}
+              <span className="text-faint font-mono text-[11.5px] sm:ml-auto">
                 {semester._count.batches} intakes · {semester._count.courses}{" "}
                 courses · {semester._count.groups} groups
               </span>
@@ -148,7 +151,7 @@ function OpenSemester({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -164,7 +167,7 @@ function OpenSemester({
                 carryFrom: carry && carryFrom ? carryFrom.id : undefined,
               })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="inline-flex min-h-10 items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: valid && !create.isPending ? 1 : 0.5,
@@ -182,12 +185,17 @@ function OpenSemester({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Spring 2027"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* The month grid this pops open is 268px wide, which is more than half
+            a phone: side by side the two fields would each open a calendar that
+            hangs off the dialog. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Starts">
             <DatePicker
               value={startDate}
@@ -273,7 +281,7 @@ function EditSemester({
               type="button"
               disabled={remove.isPending}
               onClick={() => remove.mutate({ id: semester.id })}
-              className="mr-auto cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+              className="mr-auto inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
               style={{ color: "var(--red)", boxShadow: "var(--ring)" }}
             >
               {remove.isPending ? "Removing…" : "Remove"}
@@ -282,7 +290,7 @@ function EditSemester({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -298,7 +306,7 @@ function EditSemester({
                 endDate,
               })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="inline-flex min-h-10 items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: valid && !update.isPending ? 1 : 0.5,
@@ -315,12 +323,17 @@ function EditSemester({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* The month grid this pops open is 268px wide, which is more than half
+            a phone: side by side the two fields would each open a calendar that
+            hangs off the dialog. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Starts">
             <DatePicker
               value={startDate}

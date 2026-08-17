@@ -71,6 +71,38 @@ arithmetic in UTC, so `src/lib/recurrence.ts` feeds it "fake UTC" dates and
 converts back. Those fake dates must never escape that module — there is a test
 asserting exactly that.
 
+## Which day the schedule opens on
+
+`/schedule` is one day wide, and the day it starts on is **not** always today.
+Somebody opening their schedule is asking "where do I have to be next", and on a
+Friday evening the honest answer is Monday. So `timetable.mySchedule` called with
+no `date` picks the day itself and returns it as `from`:
+
+- A class **in progress** is the next class. Anchoring on the start instead of
+  the end would send somebody sitting in a Tuesday lecture to Wednesday.
+- A class that **ended less than 30 minutes ago** still counts. Attendance is
+  taken on the way out and the room for the next one is asked about in the
+  corridor, so the last sitting of the day holds the screen for half an hour
+  rather than skipping to tomorrow the moment the lecturer stops talking.
+- Otherwise it is the day of the **next class still to come**, however far off.
+- With nothing left on the timetable — or for somebody who neither attends nor
+  teaches — it is today.
+
+The grace is elapsed time, not calendar days: a class ending at 23:50 holds its
+own day until 00:20, which is the day the reader was actually in class.
+
+Two rules keep this from being a screen that moves under you. **An explicit
+`date` is never second-guessed** — every arrow, tab, date picker and the `Today`
+button pass one, so `Today` always lands on today. And the choice is made
+**once, on the server**, during the page render; the client sends a date from
+then on, so the day never jumps after the page has settled. When the opening day
+is not today the header says so ("Opened on the next class"), and that caption
+disappears as soon as the day is moved by hand.
+
+Covered by `describe("the day the schedule opens on")` in
+`src/server/api/routers/timetable.integration.test.ts`, which places its classes
+relative to the real clock rather than a fixed date.
+
 ## Commands
 
 | Command | What it does |

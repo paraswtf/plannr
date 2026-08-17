@@ -56,7 +56,7 @@ export function AttendanceOverview({
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
+      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
         {studies && teaches && (
           <div className="mb-5">
             <Segmented

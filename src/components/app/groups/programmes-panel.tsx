@@ -41,7 +41,7 @@ export function ProgrammesPanel({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{ background: "var(--grad-brand)" }}
           >
             + New programme
@@ -60,7 +60,7 @@ export function ProgrammesPanel({
           </p>
         </Card>
       ) : (
-        <div className="grid [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))] gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
           {rows.map((course) => (
             <Card key={course.id} pad={18} className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
@@ -77,7 +77,7 @@ export function ProgrammesPanel({
                     type="button"
                     aria-label={`Edit ${course.code}`}
                     onClick={() => setEditing(course.id)}
-                    className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg"
+                    className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
                     style={{ background: "rgba(68,88,121,0.07)" }}
                   >
                     <Icon
@@ -106,12 +106,12 @@ export function ProgrammesPanel({
       )}
 
       {(courses.data?.pageCount ?? 1) > 1 && (
-        <div className="mt-5 flex items-center justify-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             disabled={page === 1}
             onClick={() => setPage((n) => n - 1)}
-            className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+            className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)", opacity: page === 1 ? 0.4 : 1 }}
           >
             Previous
@@ -123,7 +123,7 @@ export function ProgrammesPanel({
             type="button"
             disabled={!courses.data?.hasMore}
             onClick={() => setPage((n) => n + 1)}
-            className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+            className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
             style={{
               boxShadow: "var(--ring)",
               opacity: courses.data?.hasMore ? 1 : 0.4,
@@ -207,7 +207,7 @@ function CourseDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -221,7 +221,7 @@ function CourseDialog({
               if (course) update.mutate({ id: course.id, ...input });
               else create.mutate(input);
             }}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !saving ? 1 : 0.5,
@@ -252,7 +252,9 @@ function CourseDialog({
             autoFocus={!course}
             onChange={(e) => setCode(e.target.value)}
             placeholder="e.g. BCA"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Field>
@@ -262,7 +264,7 @@ function CourseDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Bachelor of Computer Applications"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Field>
@@ -282,21 +284,21 @@ function CourseDialog({
                 their students and timetables with it.
               </span>
             ) : !confirmDelete ? (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-muted text-[12.5px]">
                   Nothing is filed under this course.
                 </span>
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636]"
+                  className="min-h-10 shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
                   style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
                 >
                   Delete
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-ink text-[12.5px]">
                   Delete {course.code}?
                 </span>
@@ -304,7 +306,7 @@ function CourseDialog({
                   <button
                     type="button"
                     onClick={() => setConfirmDelete(false)}
-                    className="text-muted cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                    className="text-muted min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                   >
                     Keep
                   </button>
@@ -312,7 +314,7 @@ function CourseDialog({
                     type="button"
                     disabled={remove.isPending}
                     onClick={() => remove.mutate({ id: course.id })}
-                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                     style={{ background: "var(--red)" }}
                   >
                     {remove.isPending ? "Deleting…" : "Delete"}

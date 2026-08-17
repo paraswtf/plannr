@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
 
 import { Icon, type IconName } from "~/components/ui/icon";
@@ -103,14 +103,24 @@ export function StructureFlowchart({
     <section aria-label="How the institution is arranged">
       {/* A node will not go narrower than its chip plus its label — about 150px
           — so six of them plus the arrows need a little over 1000px, which the
-          fixed 244px sidebar leaves nothing like until 2xl. Below that the chain
-          runs down the page and the arrows turn with it, rather than pushing the
-          whole document sideways. */}
-      <ol className="flex flex-col 2xl:flex-row 2xl:items-stretch">
+          fixed 244px sidebar leaves nothing like until 2xl. One line there, and
+          folded into three-a-line from md, where three nodes and two arrows want
+          about 500px of the 700 there is. Only on a phone does the chain run
+          straight down: six full-width nodes is a lot of scrolling for a diagram
+          whose whole point is a shape, but it is that or a document that scrolls
+          sideways. */}
+      <ol
+        className="flex flex-col md:grid md:items-stretch 2xl:flex 2xl:flex-row"
+        // Inert while this is a flex container, which is what it is on a phone
+        // and again at 2xl; only the grid in between reads it.
+        style={{
+          gridTemplateColumns: `repeat(${PER_ROW - 1}, minmax(0,1fr) auto) minmax(0,1fr)`,
+        }}
+      >
         {steps.map((step, i) => (
           <Fragment key={step.label}>
-            {i > 0 && <Arrow />}
-            <li className="min-w-0 2xl:flex-1">
+            {i > 0 && <Arrow {...arrowCell(i - 1)} />}
+            <li className="min-w-0 2xl:flex-1" style={nodeCell(i)}>
               <StepCard step={step} />
             </li>
           </Fragment>
@@ -133,8 +143,10 @@ export function StructureFlowchart({
 }
 
 /**
- * One node. The grid is what lets the same markup read two ways: stacked, the
- * number sits out to the right of the label; in a row it drops beneath it.
+ * One node. The grid is what lets the same markup read two ways: full width on
+ * a phone, the number sits out to the right of the label; in a column of a
+ * folded or single line — around 210px either way — it drops beneath it, which
+ * is the only way the label and the number both fit.
  */
 function StepCard({ step }: { step: Step }) {
   const pivot = step.pivot ?? false;
@@ -145,7 +157,7 @@ function StepCard({ step }: { step: Step }) {
   return (
     <Link
       href={step.href}
-      className={`plr-clip plr-hoverlift grid h-full grid-cols-[auto_1fr_auto] content-start items-center gap-x-2.5 gap-y-1.5 rounded-[var(--radius-card)] p-3.5 2xl:grid-cols-[auto_1fr] ${
+      className={`plr-clip plr-hoverlift grid h-full grid-cols-[auto_1fr_auto] content-start items-center gap-x-2.5 gap-y-1.5 rounded-[var(--radius-card)] p-3.5 md:grid-cols-[auto_1fr] ${
         pivot ? "text-white" : "bg-surface"
       }`}
       style={
@@ -181,7 +193,7 @@ function StepCard({ step }: { step: Step }) {
       </span>
 
       <span
-        className={`font-display justify-self-end leading-none font-bold tracking-[-0.02em] 2xl:col-span-2 2xl:justify-self-start ${
+        className={`font-display justify-self-end leading-none font-bold tracking-[-0.02em] md:col-span-2 md:justify-self-start ${
           numeric ? "text-[26px]" : "text-[17px]"
         } ${pivot ? "text-white" : "text-title"}`}
       >
@@ -189,7 +201,7 @@ function StepCard({ step }: { step: Step }) {
       </span>
 
       <span
-        className={`col-span-3 text-[11.5px] 2xl:col-span-2 ${
+        className={`col-span-3 text-[11.5px] md:col-span-2 ${
           pivot ? "text-white/70" : "text-faint"
         }`}
       >
@@ -198,7 +210,7 @@ function StepCard({ step }: { step: Step }) {
 
       {step.note && (
         <span
-          className={`col-span-3 font-mono text-[11px] 2xl:col-span-2 ${
+          className={`col-span-3 font-mono text-[11px] md:col-span-2 ${
             pivot ? "text-white/70" : "text-faint"
           }`}
         >
@@ -209,12 +221,78 @@ function StepCard({ step }: { step: Step }) {
   );
 }
 
+/**
+ * How many nodes go on a line once the chain is folded, and where each of the
+ * eleven items — six nodes and the five arrows between them — then sits.
+ *
+ * Node columns alternate with narrow arrow columns, and every other line runs
+ * backwards, so the chain folds like a snake. That is the whole reason for
+ * placing the items by hand rather than letting them flow: the step that ends
+ * one line is then directly above the step that starts the next, and the arrow
+ * joining them is a hop straight down instead of a jump back across the width
+ * of the diagram, which is the thing that stops a wrapped chain reading as one.
+ *
+ * Both helpers hand back a style rather than a class because `grid-row` and
+ * `grid-column` mean nothing to a flex container, which is what the list is on
+ * a phone and again at 2xl — so the same inline styles simply stop applying at
+ * both ends without a breakpoint being mentioned.
+ */
+const PER_ROW = 3;
+
+/** Which line the i-th step is on, and how far along it — right to left on the
+ * odd lines, which is what makes the fold a snake rather than a carriage return. */
+function place(i: number) {
+  const row = Math.floor(i / PER_ROW);
+  const along = i % PER_ROW;
+  return { row, col: row % 2 === 0 ? along : PER_ROW - 1 - along };
+}
+
+/** Node column n takes grid column 2n+1; line r takes grid row 2r+1. */
+function nodeCell(i: number): CSSProperties {
+  const { row, col } = place(i);
+  return { gridColumn: col * 2 + 1, gridRow: row * 2 + 1 };
+}
+
+/** The arrow leaving step i, and the way it has to point to reach step i+1. */
+function arrowCell(i: number): { style: CSSProperties; turn: Turn } {
+  const from = place(i);
+  const to = place(i + 1);
+
+  if (from.row === to.row) {
+    return {
+      // Between two node columns, so on the even column that divides them.
+      style: { gridColumn: from.col + to.col + 1, gridRow: from.row * 2 + 1 },
+      turn: from.row % 2 === 0 ? "right" : "left",
+    };
+  }
+  // The fold: both steps are in this column, and the arrow drops between them.
+  return {
+    style: { gridColumn: from.col * 2 + 1, gridRow: from.row * 2 + 2 },
+    turn: "down",
+  };
+}
+
+type Turn = "right" | "left" | "down";
+
+/**
+ * Stacked, every arrow points down the page; folded, it points the way its line
+ * runs and turns down at the fold; in one line at 2xl they all point right.
+ */
+const TURNS: Record<Turn, string> = {
+  right: "rotate-90 md:rotate-0",
+  left: "rotate-90 md:rotate-180 2xl:rotate-0",
+  down: "rotate-90 2xl:rotate-0",
+};
+
 /** Decoration: the order is already in the list, so this is hidden from readers. */
-function Arrow() {
+function Arrow({ style, turn }: { style: CSSProperties; turn: Turn }) {
   return (
     <li
       aria-hidden="true"
-      className="flex justify-center py-1.5 2xl:items-center 2xl:px-1.5 2xl:py-0"
+      // The padding is also the gutter: these cells are what holds the nodes
+      // apart in both directions once the chain is a grid.
+      className="flex justify-center py-1.5 md:items-center md:px-1.5 2xl:py-0"
+      style={style}
     >
       <svg
         width="20"
@@ -225,7 +303,7 @@ function Arrow() {
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="rotate-90 2xl:rotate-0"
+        className={TURNS[turn]}
       >
         <path d="M2.5 10h13" />
         <path d="M11 5.5 15.5 10 11 14.5" />

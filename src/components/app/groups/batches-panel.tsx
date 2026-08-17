@@ -45,7 +45,7 @@ export function BatchesPanel({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{ background: "var(--grad-brand)" }}
           >
             + New batch
@@ -83,7 +83,9 @@ export function BatchesPanel({
                     type="button"
                     aria-label={`Edit ${batch.name}`}
                     onClick={() => setEditing(batch.id)}
-                    className="ml-auto flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg"
+                    // A 28px chip is fine under a mouse and too small for a
+                    // thumb, so the chip itself grows where there is no mouse.
+                    className="ml-auto flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
                     style={{ background: "rgba(68,88,121,0.07)" }}
                   >
                     <Icon
@@ -103,16 +105,16 @@ export function BatchesPanel({
                       key={group.id}
                       type="button"
                       onClick={() => onOpenGroup(group.id)}
-                      className="plr-clip bg-surface flex cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left"
+                      className="plr-clip bg-surface flex min-h-10 max-w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left lg:min-h-0"
                       style={{ boxShadow: "var(--ring)" }}
                     >
                       <Badge tone={KIND_TONE[group.kind]}>
                         {KIND_LABEL[group.kind]}
                       </Badge>
-                      <span className="text-title text-[12.5px] font-semibold">
+                      <span className="text-title min-w-0 truncate text-[12.5px] font-semibold">
                         {group.label}
                       </span>
-                      <span className="text-faint font-mono text-[11.5px]">
+                      <span className="text-faint shrink-0 font-mono text-[11.5px]">
                         {group.studentCount}
                       </span>
                     </button>
@@ -180,7 +182,9 @@ function BatchDialog({
     pageSize: coursePageSize,
     includeIds: programmeId ? [programmeId] : undefined,
   });
-  const selectedProgramme = courses.data?.rows.find((c) => c.id === programmeId);
+  const selectedProgramme = courses.data?.rows.find(
+    (c) => c.id === programmeId,
+  );
 
   const done = async () => {
     await onSaved();
@@ -224,7 +228,7 @@ function BatchDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -243,7 +247,7 @@ function BatchDialog({
               if (batch) update.mutate({ id: batch.id, ...input });
               else create.mutate(input);
             }}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !saving ? 1 : 0.5,
@@ -293,7 +297,9 @@ function BatchDialog({
               value={startYear}
               inputMode="numeric"
               onChange={(e) => setStartYear(e.target.value)}
-              className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+              // 16px on a phone: below that, Safari zooms the page in as the
+              // field takes focus, which on a dialog leaves it half off screen.
+              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             />
           </Field>
@@ -302,7 +308,7 @@ function BatchDialog({
               value={endYear}
               inputMode="numeric"
               onChange={(e) => setEndYear(e.target.value)}
-              className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             />
           </Field>
@@ -313,14 +319,14 @@ function BatchDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. 23-27 BBA-IT"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
           {suggested && suggested !== name && (
             <button
               type="button"
               onClick={() => setName(suggested)}
-              className="text-slate self-start text-[12px] font-semibold"
+              className="text-slate inline-flex min-h-10 items-center self-start text-[12px] font-semibold lg:min-h-0"
             >
               Use “{suggested}”
             </button>
@@ -333,7 +339,7 @@ function BatchDialog({
             style={{ boxShadow: "inset 0 0 0 1px var(--hair)" }}
           >
             {!confirmDelete ? (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-muted text-[12.5px]">
                   Deleting the batch leaves its groups in place; they simply
                   stop belonging to an intake.
@@ -341,14 +347,14 @@ function BatchDialog({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636]"
+                  className="min-h-10 shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
                   style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
                 >
                   Delete
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-ink text-[12.5px]">
                   Delete {batch.name}?
                 </span>
@@ -356,7 +362,7 @@ function BatchDialog({
                   <button
                     type="button"
                     onClick={() => setConfirmDelete(false)}
-                    className="text-muted cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                    className="text-muted min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                   >
                     Keep
                   </button>
@@ -364,7 +370,7 @@ function BatchDialog({
                     type="button"
                     disabled={remove.isPending}
                     onClick={() => remove.mutate({ id: batch.id })}
-                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                     style={{ background: "var(--red)" }}
                   >
                     {remove.isPending ? "Deleting…" : "Delete"}

@@ -66,7 +66,7 @@ export function AddPersonDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -83,7 +83,7 @@ export function AddPersonDialog({
                 department: department.trim() || undefined,
               })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !create.isPending ? 1 : 0.5,
@@ -113,7 +113,9 @@ export function AddPersonDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Riya Kapoor"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Labelled>
@@ -123,7 +125,7 @@ export function AddPersonDialog({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="name@college.edu"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Labelled>
@@ -136,7 +138,7 @@ export function AddPersonDialog({
             value={prn}
             onChange={(e) => setPrn(e.target.value)}
             placeholder="11 digits"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </Labelled>
@@ -147,7 +149,7 @@ export function AddPersonDialog({
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
               placeholder="e.g. Computer Science"
-              className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             />
           </Labelled>

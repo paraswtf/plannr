@@ -91,7 +91,7 @@ export function PlanWorkspace({ planId }: { planId: string }) {
     return (
       <>
         <PageHeader title="Schedule builder" />
-        <div className="px-9 pt-2 pb-10">
+        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
           <Card>
             <p className="text-muted m-0 text-[14px]">Loading the plan…</p>
           </Card>
@@ -104,7 +104,7 @@ export function PlanWorkspace({ planId }: { planId: string }) {
     return (
       <>
         <PageHeader title="Schedule builder" />
-        <div className="px-9 pt-2 pb-10">
+        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
           <Card>
             <p className="text-title m-0 text-[14px] font-semibold">
               {plan.error?.data?.code === "NOT_FOUND"
@@ -140,10 +140,14 @@ export function PlanWorkspace({ planId }: { planId: string }) {
           data.timeZone,
         )}${data.repeatUntil ? ` until ${formatFullDate(data.repeatUntil, data.timeZone)}` : ""}`}
         actions={
+          // A plan can offer six actions at once, and on a phone that is more
+          // than one row of the header. Each label keeps its leading word and
+          // drops the qualifier below `sm`; the button's aria-label carries the
+          // whole phrase, so nothing is lost to anyone reading it aloud.
           <>
             <Link
               href="/planner"
-              className="text-muted rounded-[var(--radius-btn)] px-3 py-2 text-[13px] font-semibold"
+              className="text-muted flex min-h-10 items-center rounded-[var(--radius-btn)] px-3 text-[13px] font-semibold lg:min-h-0 lg:py-2"
               style={{ boxShadow: "var(--ring)" }}
             >
               All plans
@@ -156,16 +160,23 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                   onClick={() => setSettingsOpen(true)}
                   aria-label="Plan settings"
                   title="Plan settings"
-                  className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-[var(--radius-btn)]"
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[var(--radius-btn)] lg:h-[34px] lg:w-[34px]"
                   style={{ boxShadow: "var(--ring)" }}
                 >
                   <Icon name="settings" size={15} color="var(--muted)" />
                 </button>
                 <button
                   type="button"
-                  disabled={generate.isPending || data.requirements.length === 0}
+                  disabled={
+                    generate.isPending || data.requirements.length === 0
+                  }
                   onClick={() => generate.mutate({ id: data.id })}
-                  className="flex items-center gap-2 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+                  aria-label={
+                    data.sessions.length > 0
+                      ? "Regenerate timetable"
+                      : "Generate timetable"
+                  }
+                  className="flex min-h-10 items-center gap-2 rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
                   style={{
                     background: "var(--slate)",
                     opacity:
@@ -179,11 +190,16 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                   }}
                 >
                   <Icon name="sparkles" size={15} color="#fff" />
-                  {generate.isPending
-                    ? "Working…"
-                    : data.sessions.length > 0
-                      ? "Regenerate"
-                      : "Generate timetable"}
+                  {generate.isPending ? (
+                    "Working…"
+                  ) : data.sessions.length > 0 ? (
+                    "Regenerate"
+                  ) : (
+                    <span>
+                      Generate
+                      <span className="hidden sm:inline"> timetable</span>
+                    </span>
+                  )}
                 </button>
               </>
             )}
@@ -192,10 +208,12 @@ export function PlanWorkspace({ planId }: { planId: string }) {
               <button
                 type="button"
                 onClick={() => setSharing(true)}
-                className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+                aria-label="Share for approval"
+                className="flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
                 style={{ background: "var(--grad-brand)" }}
               >
-                Share for approval
+                Share
+                <span className="hidden sm:inline">&nbsp;for approval</span>
               </button>
             )}
 
@@ -203,7 +221,7 @@ export function PlanWorkspace({ planId }: { planId: string }) {
               <button
                 type="button"
                 onClick={() => withdraw.mutate({ id: data.id })}
-                className="text-muted cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold"
+                className="text-muted flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 Withdraw
@@ -215,10 +233,18 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                 type="button"
                 disabled={revise.isPending}
                 onClick={() => revise.mutate({ id: data.id })}
-                className="text-muted cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold"
+                aria-label="Revise as new draft"
+                className="text-muted flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
                 style={{ boxShadow: "var(--ring)" }}
               >
-                {revise.isPending ? "Copying…" : "Revise as new draft"}
+                {revise.isPending ? (
+                  "Copying…"
+                ) : (
+                  <span>
+                    Revise
+                    <span className="hidden sm:inline"> as new draft</span>
+                  </span>
+                )}
               </button>
             )}
 
@@ -226,22 +252,26 @@ export function PlanWorkspace({ planId }: { planId: string }) {
               <button
                 type="button"
                 onClick={() => setApplying(true)}
-                className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+                aria-label="Apply to timetable"
+                className="flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
                 style={{ background: "var(--grad-brand)" }}
               >
-                Apply to timetable
+                Apply
+                <span className="hidden sm:inline">&nbsp;to timetable</span>
               </button>
             )}
           </>
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
-        <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
           <Badge tone={PLAN_STATUS_TONE[data.status]} dot>
             {PLAN_STATUS_LABEL[data.status]}
           </Badge>
-          {data.version > 1 && <Badge tone="neutral">version {data.version}</Badge>}
+          {data.version > 1 && (
+            <Badge tone="neutral">version {data.version}</Badge>
+          )}
           {data.semester && <Badge tone="slate">{data.semester.name}</Badge>}
           <span className="text-faint font-mono text-[12px]">
             by {data.author.name}
@@ -256,9 +286,9 @@ export function PlanWorkspace({ planId }: { planId: string }) {
 
         {data.status === "CHANGES_REQUESTED" && (
           <Banner tone="red">
-            A reviewer asked for changes. This draft is locked — take a copy with{" "}
-            <b>Revise as new draft</b>, fix it there, and share it again for a
-            fresh round of approvals.
+            A reviewer asked for changes. This draft is locked — take a copy
+            with <b>Revise as new draft</b>, fix it there, and share it again
+            for a fresh round of approvals.
           </Banner>
         )}
         {data.status === "APPLIED" && (
@@ -286,7 +316,10 @@ export function PlanWorkspace({ planId }: { planId: string }) {
               },
               {
                 value: "timetable" as const,
-                label: unplaced > 0 ? `Timetable (${unplaced} unplaced)` : "Timetable",
+                label:
+                  unplaced > 0
+                    ? `Timetable (${unplaced} unplaced)`
+                    : "Timetable",
               },
               {
                 value: "review" as const,
@@ -337,8 +370,11 @@ export function PlanWorkspace({ planId }: { planId: string }) {
       )}
 
       {flash && (
+        // Pinned to both edges on a phone: these messages run to a couple of
+        // lines, and anchored to the right alone the box grew off the left of
+        // the screen instead of wrapping.
         <div
-          className="plr-toast fixed right-8 bottom-8 z-40 flex items-center gap-2.5 rounded-xl px-4 py-3"
+          className="plr-toast fixed right-4 bottom-4 left-4 z-40 flex items-start gap-2.5 rounded-xl px-4 py-3 sm:right-8 sm:bottom-8 sm:left-auto sm:items-center"
           style={{
             background: "var(--surface)",
             boxShadow: "var(--ring), var(--shadow-float)",
@@ -350,14 +386,14 @@ export function PlanWorkspace({ planId }: { planId: string }) {
             color={flash.bad ? "var(--red)" : "#4e7d3a"}
             stroke={2}
           />
-          <span className="text-title max-w-[360px] text-[13.5px] font-semibold">
+          <span className="text-title min-w-0 flex-1 text-[13.5px] font-semibold sm:max-w-[360px] sm:flex-none">
             {flash.text}
           </span>
           <button
             type="button"
             onClick={() => setFlash(null)}
             aria-label="Dismiss"
-            className="ml-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg"
+            className="-my-1 -mr-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:my-0 sm:mr-0 sm:ml-1.5 sm:h-6 sm:w-6"
           >
             <Icon name="x" size={13} color="var(--muted)" />
           </button>

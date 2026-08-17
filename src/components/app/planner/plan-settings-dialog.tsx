@@ -61,7 +61,8 @@ export function PlanSettingsDialog({
     label: i === 24 ? "midnight" : formatMinutesOfDay(i * 60),
   }));
 
-  const ready = name.trim().length > 0 && workingDays.length > 0 && dayEnd > dayStart;
+  const ready =
+    name.trim().length > 0 && workingDays.length > 0 && dayEnd > dayStart;
 
   return (
     <Dialog
@@ -75,7 +76,7 @@ export function PlanSettingsDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -100,7 +101,7 @@ export function PlanSettingsDialog({
                 respectLiveTimetable: respectLive,
               });
             }}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !update.isPending ? 1 : 0.5,
@@ -148,7 +149,9 @@ export function PlanSettingsDialog({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* Stacked below `sm` because the calendar popover is 268px wide: in
+            half a phone's dialog it would hang off the side of the screen. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Week it starts" hint="Snapped to the Monday.">
             <DatePicker
               value={weekStart}
@@ -182,14 +185,16 @@ export function PlanSettingsDialog({
                         : [...current, day].sort((a, b) => a - b),
                     )
                   }
-                  className="plr-clip flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="plr-clip flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold lg:min-h-0 lg:min-w-0 lg:py-1.5"
                   style={
                     on
                       ? { background: "var(--slate)", color: "#fff" }
                       : { boxShadow: "var(--ring)", color: "var(--muted)" }
                   }
                 >
-                  {on && <Icon name="check" size={11} color="#fff" stroke={3} />}
+                  {on && (
+                    <Icon name="check" size={11} color="#fff" stroke={3} />
+                  )}
                   {WEEKDAY_SHORT[day]}
                 </button>
               );
@@ -197,7 +202,9 @@ export function PlanSettingsDialog({
           </div>
         </Field>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* The two ends of the day stay on one line, since they are set against
+            each other; the slot length drops beneath them on a phone. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label="Day starts">
             <Select
               ariaLabel="Day start"
@@ -304,7 +311,9 @@ function Toggle({
         className="mt-0.5"
       />
       <span>
-        <span className="text-ink block text-[13px] font-semibold">{label}</span>
+        <span className="text-ink block text-[13px] font-semibold">
+          {label}
+        </span>
         <span className="text-faint block text-[11.5px]">{hint}</span>
       </span>
     </label>

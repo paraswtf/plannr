@@ -194,7 +194,7 @@ export function TimeField({
                 }
               }
             }}
-            className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[13px] font-bold outline-none"
+            className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-bold outline-none sm:text-[13px]"
           />
 
           <button
@@ -204,7 +204,7 @@ export function TimeField({
             aria-haspopup="listbox"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="flex h-6 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md"
+            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md lg:h-6 lg:w-5"
           >
             <Icon name="chevronDown" size={12} color="var(--muted)" />
           </button>
@@ -230,7 +230,9 @@ export function TimeField({
         {open && !disabled && (
           <div
             ref={listRef}
-            className="bg-surface absolute z-30 mt-1 flex w-full min-w-[186px] gap-1 rounded-[10px] p-1.5"
+            // Never wider than the narrowest field it hangs off — 180px in the
+            // docked booking panel — or the panel gains a sideways scrollbar.
+            className="bg-surface absolute z-30 mt-1 flex w-full min-w-[168px] gap-1 rounded-[10px] p-1.5"
             style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
             onClick={(e) => e.preventDefault()}
           >
@@ -303,7 +305,7 @@ function Column({
       <div
         role="listbox"
         aria-label={label}
-        className="plr-scroll flex max-h-[180px] flex-col gap-0.5 overflow-y-auto"
+        className="plr-scroll flex max-h-[240px] flex-col gap-0.5 overflow-y-auto lg:max-h-[180px]"
       >
         {children}
       </div>
@@ -332,7 +334,7 @@ function Cell({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onPick}
-      className="shrink-0 rounded-lg py-1 text-center font-mono text-[12.5px] font-semibold"
+      className="flex min-h-10 shrink-0 items-center justify-center rounded-lg font-mono text-[12.5px] font-semibold lg:min-h-0 lg:py-1"
       style={{
         background: current ? "var(--slate)" : "transparent",
         color: current ? "#fff" : "var(--app-title)",
@@ -360,7 +362,9 @@ function StepButton({
       onClick={onClick}
       disabled={!onClick}
       aria-label={label}
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+      // A 24px chip is fine under a mouse and hopeless under a thumb, so it
+      // only shrinks to that where a sidebar proves we are on a desktop.
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md lg:h-6 lg:w-6"
       style={{
         background: "rgba(68,88,121,0.07)",
         opacity: onClick ? 1 : 0.35,

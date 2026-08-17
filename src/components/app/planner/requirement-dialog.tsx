@@ -17,7 +17,11 @@ import {
 import { Icon } from "~/components/ui/icon";
 import { Select } from "~/components/ui/select";
 import { formatDuration } from "~/lib/dates";
-import { ROOM_TYPES, ROOM_TYPE_LABEL, type RoomTypeName } from "~/lib/schedule-plan";
+import {
+  ROOM_TYPES,
+  ROOM_TYPE_LABEL,
+  type RoomTypeName,
+} from "~/lib/schedule-plan";
 import { api, type RouterOutputs } from "~/trpc/react";
 
 type Requirement = RouterOutputs["plans"]["byId"]["requirements"][number];
@@ -91,7 +95,9 @@ export function RequirementDialog({
       ? room.code.toLowerCase().includes(roomQuery.toLowerCase())
       : true,
   );
-  const selectedRoom = workspace.data?.rooms.find((r) => r.id === preferredRoomId);
+  const selectedRoom = workspace.data?.rooms.find(
+    (r) => r.id === preferredRoomId,
+  );
 
   const save = api.plans.addRequirement.useMutation({
     onSuccess: async () => {
@@ -123,7 +129,10 @@ export function RequirementDialog({
     return { value, label: formatDuration(value) };
   }).filter((o) => o.value <= 8 * 60);
   if (!durationOptions.some((o) => o.value === duration)) {
-    durationOptions.unshift({ value: duration, label: formatDuration(duration) });
+    durationOptions.unshift({
+      value: duration,
+      label: formatDuration(duration),
+    });
   }
 
   const submit = () => {
@@ -159,7 +168,7 @@ export function RequirementDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -168,7 +177,7 @@ export function RequirementDialog({
             type="button"
             disabled={!ready || pending}
             onClick={submit}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !pending ? 1 : 0.5,
@@ -252,6 +261,8 @@ export function RequirementDialog({
           />
         </Field>
 
+        {/* Two short answers, kept side by side even on a phone — a count and a
+            length are read together. */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Lectures a week">
             <input
@@ -332,14 +343,16 @@ export function RequirementDialog({
                         : [...current, feature],
                     )
                   }
-                  className="plr-clip flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="plr-clip flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
                   style={
                     on
                       ? { background: "var(--slate)", color: "#fff" }
                       : { boxShadow: "var(--ring)", color: "var(--muted)" }
                   }
                 >
-                  {on && <Icon name="check" size={11} color="#fff" stroke={3} />}
+                  {on && (
+                    <Icon name="check" size={11} color="#fff" stroke={3} />
+                  )}
                   {FEATURE_LABELS[feature]}
                 </button>
               );
@@ -347,7 +360,9 @@ export function RequirementDialog({
           </div>
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* Unlike the pair above, "Lecture theatre" in half a phone's width is
+            an ellipsis, so this pair stacks. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Kind of room">
             <Select
               ariaLabel="Room type"

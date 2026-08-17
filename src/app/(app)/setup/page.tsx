@@ -36,7 +36,7 @@ export default async function SetupPage() {
         title="Setup"
         subtitle="How the institution is arranged, from the degree down to the lecture"
       />
-      <div className="flex flex-col gap-7 px-9 pt-2 pb-10">
+      <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
         {!structure || !semester ? (
           <>
             <Card>
@@ -59,8 +59,19 @@ export default async function SetupPage() {
             <Card
               title={semester.name}
               action={
-                <span className="text-faint font-mono text-[12px]">
-                  {termDates(semester.startDate, semester.endDate)}
+                // Two unbreakable halves rather than one string: beside the
+                // semester's name there is not 245px of card left on a phone,
+                // and a line that breaks between the range and the progress
+                // still reads, where one that breaks mid-date does not.
+                <span className="text-faint flex flex-wrap justify-end gap-x-1.5 font-mono text-[12px]">
+                  {termDates(semester.startDate, semester.endDate).map(
+                    (part, i) => (
+                      <span key={part} className="whitespace-nowrap">
+                        {i > 0 && "· "}
+                        {part}
+                      </span>
+                    ),
+                  )}
                 </span>
               }
             >
@@ -232,17 +243,21 @@ const YEAR = new Intl.DateTimeFormat("en-GB", {
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
-/** "1 Jul – 30 Nov 2026 · week 7 of 22" — how long the term is and how far in. */
-function termDates(start: Date, end: Date): string {
+/**
+ * "1 Jul – 30 Nov 2026" and "week 7 of 22" — how long the term is and how far
+ * in. Handed back in halves rather than as one line so the card can break
+ * between them when it is narrow, instead of in the middle of a date.
+ */
+function termDates(start: Date, end: Date): [range: string, progress: string] {
   const sameYear = YEAR.format(start) === YEAR.format(end);
   const range = `${sameYear ? DAY.format(start) : DAY_YEAR.format(start)} – ${DAY_YEAR.format(end)}`;
 
   const weeks = Math.max(1, Math.round((+end - +start) / WEEK));
   const now = Date.now();
-  if (now < +start || now > +end) return `${range} · ${weeks} weeks`;
+  if (now < +start || now > +end) return [range, `${weeks} weeks`];
 
   const week = Math.min(weeks, Math.floor((now - +start) / WEEK) + 1);
-  return `${range} · week ${week} of ${weeks}`;
+  return [range, `week ${week} of ${weeks}`];
 }
 
 function plural(n: number, noun: string): string {

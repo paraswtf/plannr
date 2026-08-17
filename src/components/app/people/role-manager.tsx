@@ -23,7 +23,7 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted max-w-2xl text-[13px]">
           Roles bundle permissions. The four built-in roles are locked so their
           meaning is the same everywhere; create a custom role for anything
@@ -33,7 +33,7 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="shrink-0 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 shrink-0 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{ background: "var(--grad-brand)" }}
           >
             + New role
@@ -41,7 +41,12 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
         )}
       </div>
 
-      <div className="grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4">
+      {/*
+       * auto-fill lays a 300px track even when the screen cannot hold one, so
+       * the single column is asked for explicitly below sm rather than left to
+       * the track sizing to work out.
+       */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
         {(roles.data ?? []).map((role) => {
           const bits = new PermissionBitField(BigInt(role.permissions));
           const held = PERMISSION_CATALOG.filter((p) =>
@@ -50,7 +55,10 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
           return (
             <Card key={role.id} pad={18} className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
-                <div>
+                {/* Role names are typed by whoever creates the role, so the
+                    column has to be allowed to give way rather than push the
+                    card wider than the screen. */}
+                <div className="min-w-0">
                   <div className="font-display text-title text-[16px] font-bold">
                     {role.name}
                   </div>
@@ -98,7 +106,7 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
                   <button
                     type="button"
                     onClick={() => setEditing(role.id)}
-                    className="text-slate cursor-pointer text-[12.5px] font-bold"
+                    className="text-slate inline-flex min-h-10 cursor-pointer items-center text-[12.5px] font-bold lg:min-h-0"
                   >
                     {role.isSystem ? "View →" : "Edit →"}
                   </button>
@@ -192,7 +200,7 @@ function RoleDialog({
                   : setConfirmDelete(true)
               }
               disabled={busy}
-              className="mr-auto inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#b02636]"
+              className="mr-auto inline-flex min-h-10 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
             >
               <Icon name="trash" size={13} color="var(--red)" />
               {confirmDelete ? "Confirm delete" : "Delete role"}
@@ -201,7 +209,7 @@ function RoleDialog({
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             {locked ? "Close" : "Cancel"}
@@ -220,7 +228,7 @@ function RoleDialog({
                     })
                   : create.mutate({ name, description, permissions })
               }
-              className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
               style={{
                 background: "var(--grad-brand)",
                 opacity: busy || !name.trim() ? 0.5 : 1,
@@ -266,7 +274,9 @@ function RoleDialog({
             onChange={(e) => setName(e.target.value)}
             disabled={locked}
             placeholder="e.g. Lab technician"
-            className="bg-surface rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            // 16px on a phone: below that, Safari zooms the page in as the
+            // field takes focus, which on a dialog leaves it half off screen.
+            className="bg-surface min-h-10 rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </label>
@@ -280,7 +290,7 @@ function RoleDialog({
             onChange={(e) => setDescription(e.target.value)}
             disabled={locked}
             placeholder="What is this role for?"
-            className="bg-surface rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface min-h-10 rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           />
         </label>

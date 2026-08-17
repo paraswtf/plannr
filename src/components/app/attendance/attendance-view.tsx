@@ -71,7 +71,7 @@ export function AttendanceView({
     return (
       <>
         <PageHeader title="Attendance" subtitle={sitting.title} />
-        <div className="px-9 pt-2 pb-10">
+        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
           <Card>
             <p className="text-muted m-0 text-[14px]">
               This lecture has no group attending it, so there is no register to
@@ -100,7 +100,7 @@ export function AttendanceView({
         actions={
           <Link
             href="/timetable"
-            className="text-muted inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             Back to timetable
@@ -108,8 +108,8 @@ export function AttendanceView({
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <Badge tone="slate">{sitting.room.code}</Badge>
           {sitting.facultyName && (
             <span className="text-muted text-[13px]">
@@ -117,17 +117,23 @@ export function AttendanceView({
             </span>
           )}
           {sitting.groups.length > 1 && (
-            <Segmented
-              items={sitting.groups.map((g) => ({
-                value: g.id,
-                label: g.name,
-              }))}
-              value={group.id}
-              onChange={setGroupId}
-              size="sm"
-            />
+            // A line of its own on a phone: three divisions' names beside the
+            // room and the teacher's name would leave the tabs a few pixels
+            // each. How the strip behaves when it is still too wide is the
+            // pill group's own business — it scrolls inside itself.
+            <div className="w-full min-w-0 sm:w-auto">
+              <Segmented
+                items={sitting.groups.map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                }))}
+                value={group.id}
+                onChange={setGroupId}
+                size="sm"
+              />
+            </div>
           )}
-          <span className="text-faint ml-auto font-mono text-[12px]">
+          <span className="text-faint font-mono text-[12px] sm:ml-auto">
             {group.markedAt
               ? `last taken by ${group.markedBy ?? "someone"}`
               : "not taken yet"}
@@ -146,11 +152,14 @@ export function AttendanceView({
               {present} of {group.students.length} present
             </span>
             {canMark && (
-              <span className="ml-auto flex items-center gap-2">
+              // Their own line on a phone, sharing it half and half: these are
+              // the two strokes that start a register, and reaching them should
+              // not mean aiming at a chip wedged beside the group's name.
+              <span className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setAll("PRESENT")}
-                  className="text-slate cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="text-slate min-h-10 flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold sm:flex-none lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 >
                   All present
@@ -158,7 +167,7 @@ export function AttendanceView({
                 <button
                   type="button"
                   onClick={() => setAll("ABSENT")}
-                  className="text-muted cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                  className="text-muted min-h-10 flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold sm:flex-none lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 >
                   All absent
@@ -175,7 +184,7 @@ export function AttendanceView({
             group.students.map((student, i) => (
               <div
                 key={student.id}
-                className="flex flex-wrap items-center gap-3 px-4 py-2.5"
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5"
                 style={
                   i > 0
                     ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
@@ -198,7 +207,15 @@ export function AttendanceView({
                 </span>
 
                 {canMark ? (
-                  <span className="flex items-center gap-1">
+                  /*
+                    A register is taken standing up, one thumb, sixty names. On
+                    a phone the four marks drop below the name and share the
+                    width evenly, which buys each of them a target a finger can
+                    actually hit; squeezed onto the name's line they came out
+                    around 24px tall and 40px wide. The row they sat in returns
+                    at `lg`, where there is a mouse and the width to spare.
+                  */
+                  <span className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-1">
                     {STATUSES.map((status) => {
                       const on = marks[student.id] === status.value;
                       return (
@@ -212,7 +229,7 @@ export function AttendanceView({
                               [student.id]: status.value,
                             }))
                           }
-                          className="plr-clip cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold"
+                          className="plr-clip min-h-10 flex-1 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold sm:flex-none lg:min-h-0"
                           style={
                             on
                               ? { background: status.tone, color: "#fff" }
@@ -277,7 +294,7 @@ export function AttendanceView({
                   })),
                 })
               }
-              className="ml-auto rounded-[var(--radius-btn)] px-5 py-2.5 text-[14px] font-semibold text-white"
+              className="min-h-10 w-full rounded-[var(--radius-btn)] px-5 py-2.5 text-[14px] font-semibold text-white sm:ml-auto sm:w-auto lg:min-h-0"
               style={{
                 background: "var(--grad-brand)",
                 opacity: mark.isPending ? 0.5 : 1,

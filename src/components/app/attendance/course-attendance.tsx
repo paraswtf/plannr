@@ -46,7 +46,7 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
   return (
     <>
       {ordered.length > 1 && (
-        <div className="mb-5 grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4">
+        <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(232px,1fr))]">
           {ordered.map((report) => {
             const selected = report.course.id === open.course.id;
             return (
@@ -86,7 +86,9 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
       )}
 
       <Card pad={0}>
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 p-5">
+        {/* Stacked on a phone for the same reason the student's card is: a
+            course title squeezed beside the count reads as a column of words. */}
+        <div className="flex flex-col gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-2 sm:p-5">
           <div className="min-w-0">
             <h3 className="font-display text-title m-0 text-[17px] font-bold">
               {open.course.title}
@@ -98,7 +100,7 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
               · {open.scheduled} scheduled this semester
             </p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <div
               className="font-display text-[30px] leading-none font-bold tracking-[-0.02em]"
               style={{
@@ -115,7 +117,7 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
 
         {open.students.length === 0 ? (
           <p
-            className="text-muted m-0 px-5 py-6 text-[14px]"
+            className="text-muted m-0 px-4 py-6 text-[14px] sm:px-5"
             style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
           >
             No group taking this course has anybody in it yet.
@@ -127,14 +129,20 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
             return (
               <div
                 key={student.studentId}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5"
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 sm:px-5"
                 style={{
                   boxShadow: short
                     ? "inset 0 1px 0 var(--hair-soft), inset 3px 0 0 var(--red)"
                     : "inset 0 1px 0 var(--hair-soft)",
                 }}
               >
-                <span className="min-w-0 flex-1">
+                {/*
+                  Sixty of these are read one under the other looking for the
+                  short ones, so on a phone the name takes its own line and the
+                  two figures share the one below — the percentage still last
+                  and still hard right, which is the column the eye runs down.
+                */}
+                <span className="w-full min-w-0 sm:w-auto sm:flex-1">
                   <span className="text-title block truncate text-[13.5px] font-semibold">
                     {student.name}
                   </span>
@@ -144,7 +152,7 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
                       : student.prn}
                   </span>
                 </span>
-                <span className="text-muted w-[130px] shrink-0 text-[12.5px]">
+                <span className="text-muted flex-1 text-[12.5px] sm:w-[130px] sm:flex-none">
                   {student.attended} of {student.conducted} attended
                 </span>
                 <span
@@ -166,7 +174,7 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
         )}
 
         <p
-          className="text-faint m-0 px-5 py-3 text-[12px]"
+          className="text-faint m-0 px-4 py-3 text-[12px] sm:px-5"
           style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
         >
           Percentages are over the registers taken, not over the{" "}

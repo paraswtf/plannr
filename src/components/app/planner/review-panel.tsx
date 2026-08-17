@@ -116,7 +116,7 @@ export function ReviewPanel({
                     note: note.trim() || undefined,
                   })
                 }
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+                className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
                 style={{ background: "#4e7d3a" }}
               >
                 <Icon name="check" size={14} color="#fff" stroke={3} />
@@ -132,7 +132,7 @@ export function ReviewPanel({
                     note: note.trim() || undefined,
                   })
                 }
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+                className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
                 style={{ boxShadow: "var(--ring)", color: "var(--red)" }}
               >
                 <Icon name="alert" size={14} color="var(--red)" />
@@ -142,10 +142,8 @@ export function ReviewPanel({
             {plan.myDecision && plan.myDecision !== "PENDING" && (
               <p className="text-faint mt-2.5 mb-0 text-[12px]">
                 You already answered{" "}
-                <b>
-                  {PLAN_DECISION_LABEL[plan.myDecision]}
-                </b>
-                . Answering again replaces it.
+                <b>{PLAN_DECISION_LABEL[plan.myDecision]}</b>. Answering again
+                replaces it.
               </p>
             )}
           </Card>
@@ -175,7 +173,7 @@ export function ReviewPanel({
               onClick={() =>
                 comment.mutate({ planId: plan.id, body: body.trim() })
               }
-              className="self-start rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="flex min-h-10 items-center self-start rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
               style={{
                 background: "var(--slate)",
                 opacity: body.trim() && !comment.isPending ? 1 : 0.5,
@@ -202,7 +200,10 @@ export function ReviewPanel({
                     opacity: c.resolvedAt ? 0.6 : 1,
                   }}
                 >
-                  <div className="mb-1 flex items-center gap-2">
+                  {/* Wraps: a long name, the timestamp and the resolved badge
+                      are three unbreakable things on one line, and a phone
+                      does not always have room for all three. */}
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
                     <span
                       className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
                       style={{ background: "var(--slate)" }}
@@ -224,8 +225,16 @@ export function ReviewPanel({
                   </div>
 
                   {sessionTitle(c.sessionId) && (
-                    <div className="mb-1.5">
-                      <Badge tone="slate">{sessionTitle(c.sessionId)}</Badge>
+                    // A badge never wraps and a subject may run to 160
+                    // characters, so left alone this one line would drag the
+                    // whole page sideways on a phone. It shrinks to the width
+                    // of the comment and trails off instead.
+                    <div className="mb-1.5 flex [&>span]:min-w-0">
+                      <Badge tone="slate">
+                        <span className="truncate">
+                          {sessionTitle(c.sessionId)}
+                        </span>
+                      </Badge>
                     </div>
                   )}
 
@@ -233,13 +242,15 @@ export function ReviewPanel({
                     {c.body}
                   </p>
 
-                  <div className="mt-2 flex items-center gap-3">
+                  {/* The negative margin gives these text buttons a finger-sized
+                      hit area without opening a gap under every comment. */}
+                  <div className="-mb-2 flex items-center gap-4 lg:mt-2 lg:mb-0 lg:gap-3">
                     <button
                       type="button"
                       onClick={() =>
                         resolve.mutate({ id: c.id, resolved: !c.resolvedAt })
                       }
-                      className="text-slate cursor-pointer text-[12px] font-semibold"
+                      className="text-slate flex min-h-10 cursor-pointer items-center text-[12px] font-semibold lg:min-h-0"
                     >
                       {c.resolvedAt ? "Reopen" : "Mark resolved"}
                     </button>
@@ -247,7 +258,7 @@ export function ReviewPanel({
                       <button
                         type="button"
                         onClick={() => removeComment.mutate({ id: c.id })}
-                        className="cursor-pointer text-[12px] font-semibold"
+                        className="flex min-h-10 cursor-pointer items-center text-[12px] font-semibold lg:min-h-0"
                         style={{ color: "var(--red)" }}
                       >
                         Delete
@@ -265,8 +276,8 @@ export function ReviewPanel({
         <Card title="Sign-off" pad={18}>
           {plan.reviewers.length === 0 ? (
             <p className="text-muted m-0 text-[13px]">
-              Not shared with anyone yet. Until it is, this draft is visible only
-              to you.
+              Not shared with anyone yet. Until it is, this draft is visible
+              only to you.
             </p>
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -296,12 +307,7 @@ export function ReviewPanel({
                       </span>
                     )}
                   </span>
-                  <Badge
-                    tone={
-                      PLAN_DECISION_TONE[reviewer.decision]
-                    }
-                    dot
-                  >
+                  <Badge tone={PLAN_DECISION_TONE[reviewer.decision]} dot>
                     {PLAN_DECISION_LABEL[reviewer.decision]}
                   </Badge>
                 </div>
@@ -320,7 +326,7 @@ export function ReviewPanel({
               <Link
                 key={version.id}
                 href={`/planner/${version.id}`}
-                className="flex items-center gap-2 rounded-[10px] px-2.5 py-2"
+                className="flex min-h-10 items-center gap-2 rounded-[10px] px-2.5 lg:min-h-0 lg:py-2"
                 style={
                   version.isCurrent
                     ? { background: "rgba(68,88,121,0.08)" }

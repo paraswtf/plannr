@@ -121,8 +121,14 @@ function CourseCard({
 
   return (
     <Card pad={0}>
-      <div className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+      <div className="p-4 sm:p-5">
+        {/*
+          Side by side, a course title on a phone gets about 150px and breaks
+          over four lines to keep the number company. Stacking gives the title
+          the width it needs and costs the number nothing — it is still the
+          first thing under the name, still the largest thing in the card.
+        */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-2">
           <div className="min-w-0">
             <h3 className="font-display text-title m-0 text-[17px] font-bold">
               {course.title}
@@ -131,7 +137,7 @@ function CourseCard({
               {course.code ?? "no paper code"}
             </p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <div
               className="font-display text-[30px] leading-none font-bold tracking-[-0.02em]"
               style={{
@@ -185,7 +191,7 @@ function CourseCard({
           page that has not hydrated yet.
         */}
           <summary
-            className="flex cursor-pointer list-none items-center gap-2 px-5 py-2.5 [&::-webkit-details-marker]:hidden"
+            className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-4 py-2.5 [&::-webkit-details-marker]:hidden sm:px-5 lg:min-h-0"
             style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
           >
             <Icon
@@ -217,32 +223,50 @@ function CourseCard({
           {course.register.map((sitting) => {
             const meta = markMeta(sitting.status);
             return (
+              /*
+                Four columns of a table on a wide screen; a record on a phone.
+                The 242px of fixed date and time columns left about 60px for
+                the room, so below `sm` they pair up on one line with the room
+                and teacher beneath, and the mark stays out at the right where
+                the eye is already going.
+
+                The wrappers that do the stacking dissolve at `sm` —
+                `display: contents` — so the wide layout is the original four
+                children of the original row, not a second copy of it kept in
+                step by hand.
+              */
               <div
                 key={sitting.occurrenceId}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5"
+                className="flex items-center gap-x-4 gap-y-1 px-4 py-2.5 sm:flex-wrap sm:px-5"
                 style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
               >
-                <span className="text-title w-[130px] shrink-0 text-[13px] font-semibold">
-                  {formatFullDate(sitting.start, DEFAULT_TIMEZONE)}
-                </span>
-                <span className="text-muted w-[112px] shrink-0 font-mono text-[12px]">
-                  {formatHourLabel(sitting.start, DEFAULT_TIMEZONE)}–
-                  {formatHourLabel(sitting.end, DEFAULT_TIMEZONE)}
-                </span>
-                <span className="text-muted min-w-0 flex-1 truncate text-[12.5px]">
-                  {[sitting.room, sitting.faculty]
-                    .filter(Boolean)
-                    .join(" · ") || "room and teacher not recorded"}
-                </span>
-                {meta ? (
-                  <Badge tone={meta.badge}>{meta.label}</Badge>
-                ) : (
-                  <span className="text-faint text-[12px] font-semibold">
-                    {sitting.start > now
-                      ? "Yet to happen"
-                      : "No register taken"}
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:contents">
+                  <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 sm:contents">
+                    <span className="text-title text-[13px] font-semibold sm:w-[130px] sm:shrink-0">
+                      {formatFullDate(sitting.start, DEFAULT_TIMEZONE)}
+                    </span>
+                    <span className="text-muted font-mono text-[12px] sm:w-[112px] sm:shrink-0">
+                      {formatHourLabel(sitting.start, DEFAULT_TIMEZONE)}–
+                      {formatHourLabel(sitting.end, DEFAULT_TIMEZONE)}
+                    </span>
+                  </div>
+                  <span className="text-muted truncate text-[12.5px] sm:min-w-0 sm:flex-1">
+                    {[sitting.room, sitting.faculty]
+                      .filter(Boolean)
+                      .join(" · ") || "room and teacher not recorded"}
                   </span>
-                )}
+                </div>
+                <div className="shrink-0 sm:contents">
+                  {meta ? (
+                    <Badge tone={meta.badge}>{meta.label}</Badge>
+                  ) : (
+                    <span className="text-faint text-[12px] font-semibold">
+                      {sitting.start > now
+                        ? "Yet to happen"
+                        : "No register taken"}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

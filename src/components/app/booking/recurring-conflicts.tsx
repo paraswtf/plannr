@@ -86,21 +86,21 @@ export function RecurringConflicts({
               <button
                 type="button"
                 onClick={() => draft.unskipDate(at)}
-                className="text-slate cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold"
+                className="text-slate inline-flex min-h-10 cursor-pointer items-center rounded-lg px-2.5 text-[12px] font-semibold lg:min-h-0 lg:py-1"
               >
                 Undo
               </button>
             ) : isGone ? (
               <Icon name="checkCircle" size={15} color="#4e7d3a" stroke={2} />
             ) : confirming === key ? (
-              <span className="flex items-center gap-2">
+              <span className="flex flex-wrap items-center gap-2">
                 <span className="text-ink text-[12px]">
                   Cancel {other.title} on this date?
                 </span>
                 <button
                   type="button"
                   onClick={() => setConfirming(null)}
-                  className="text-muted cursor-pointer rounded-lg px-2 py-1 text-[12px] font-semibold"
+                  className="text-muted inline-flex min-h-10 cursor-pointer items-center rounded-lg px-2.5 text-[12px] font-semibold lg:min-h-0 lg:px-2 lg:py-1"
                 >
                   No
                 </button>
@@ -124,18 +124,18 @@ export function RecurringConflicts({
                       setConfirming(null);
                     }
                   }}
-                  className="cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold text-white"
+                  className="inline-flex min-h-10 cursor-pointer items-center rounded-lg px-2.5 text-[12px] font-semibold text-white lg:min-h-0 lg:py-1"
                   style={{ background: "var(--red)" }}
                 >
                   {cancel.isPending ? "Cancelling…" : "Yes, cancel it"}
                 </button>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5">
+              <span className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => draft.skipDate(at)}
-                  className="text-slate cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold"
+                  className="text-slate inline-flex min-h-10 cursor-pointer items-center rounded-lg px-2.5 text-[12px] font-semibold lg:min-h-0 lg:py-1"
                   style={{ boxShadow: "var(--ring)" }}
                 >
                   Skip this date
@@ -144,7 +144,7 @@ export function RecurringConflicts({
                   <button
                     type="button"
                     onClick={() => setConfirming(key)}
-                    className="cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold text-[#b02636]"
+                    className="inline-flex min-h-10 cursor-pointer items-center rounded-lg px-2.5 text-[12px] font-semibold text-[#b02636] lg:min-h-0 lg:py-1"
                     style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
                   >
                     Cancel theirs

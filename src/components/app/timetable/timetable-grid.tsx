@@ -83,8 +83,14 @@ interface TimetableGridProps {
   snapMinutes?: number;
 }
 
-const GUTTER = 62;
-const MIN_COLUMN = 118;
+/**
+ * Column geometry, as CSS variables rather than numbers, because a phone cannot
+ * spare 62px for the hour gutter and three separate things — the grid template,
+ * the scrolling width and the now-line — have to agree on whatever it is. All
+ * the drag arithmetic measures the columns it finds, so none of it cares.
+ */
+const GEOMETRY =
+  "[--tt-gutter:46px] [--tt-column:104px] sm:[--tt-gutter:62px] sm:[--tt-column:118px]";
 /** Pointer travel before a press on a block counts as a move rather than a click. */
 const MOVE_THRESHOLD = 4;
 
@@ -319,7 +325,7 @@ export function TimetableGrid({
   const nowHour = decimalHour(now, timeZone);
   const nowVisible = showNowLine && nowHour >= startHour && nowHour <= endHour;
 
-  const gridTemplate = `${GUTTER}px repeat(${rooms.length}, minmax(${MIN_COLUMN}px, 1fr))`;
+  const gridTemplate = `var(--tt-gutter) repeat(${rooms.length}, minmax(var(--tt-column), 1fr))`;
   const dragHandlers = {
     onPointerMove: onDragMove,
     onPointerUp: onDragEnd,
@@ -329,13 +335,56 @@ export function TimetableGrid({
   return (
     <div
       ref={rootRef}
-      className="plr-scroll bg-surface overflow-x-auto rounded-[var(--radius-card)]"
+      // Containing the overscroll keeps a swipe that runs off the end of the
+      // rooms from being read as the browser's back gesture. Only sideways:
+      // once the day is taller than the box, a swipe that runs off the bottom
+      // of it has to carry on down the page, which is what chaining does.
+      className={`plr-scroll bg-surface overflow-auto overscroll-x-contain rounded-[var(--radius-card)] ${GEOMETRY}`}
       style={{
         boxShadow: "var(--ring), var(--shadow-card)",
         userSelect: drag ? "none" : undefined,
+        /*
+         * A ceiling on the height, so that the room codes can stay put.
+         *
+         * The header row is sticky, but sticky is measured against the nearest
+         * scrolling ancestor, and that is this element: it scrolls sideways,
+         * which makes it the scroller in both axes. Unbounded it has nothing to
+         * scroll vertically, so the headings never move within it and the page
+         * carries them off — scroll a tall grid on a phone and every column is
+         * unlabelled. A ceiling gives the day somewhere to scroll and the
+         * headings something to stick inside, and it costs neither the sideways
+         * scroll nor the stuck hour gutter, since both belong to this same box.
+         *
+         * Sticking the headings to the viewport instead cannot be done from in
+         * here: they would have to clear the page's own sticky header, whose
+         * height is not something this component is told.
+         *
+         * The ceiling is one screen, less the phone's top bar and roughly the
+         * page header beneath it. A default day — 08:00 to 18:00, 645px with
+         * the headings — is well under that on a laptop, so a desktop grid is
+         * the height it always was and never grows a second scrollbar. `svh`
+         * rather than `dvh` because dvh would resize the box mid-scroll as a
+         * phone's URL bar collapses, dragging the rows under the reader's
+         * finger.
+         *
+         * The floor is what stops the ceiling from becoming the problem. A
+         * phone held sideways is still a small screen — the top bar is charged
+         * for, and the screen itself is only 340-odd points tall — so one
+         * screen less both of those leaves under 200px, which is three hours of
+         * a ten-hour day: not a calendar. A laptop window dragged to half
+         * height lands in the same place. Under the floor the box goes back to
+         * standing taller than the space and letting the page scroll, which is
+         * what it did before there was any ceiling, so nothing is lost there
+         * that was not already lost.
+         */
+        maxHeight: "max(420px, calc(100svh - var(--topbar-h) - 96px))",
       }}
     >
-      <div style={{ minWidth: GUTTER + rooms.length * MIN_COLUMN }}>
+      <div
+        style={{
+          minWidth: `calc(var(--tt-gutter) + ${rooms.length} * var(--tt-column))`,
+        }}
+      >
         {/* Room headers */}
         <div
           className="bg-surface sticky top-0 z-10 grid"
@@ -344,14 +393,15 @@ export function TimetableGrid({
             boxShadow: "0 1px 0 var(--hair)",
           }}
         >
-          <div />
+          {/* Holds the corner over the sticky gutter as the rooms slide past. */}
+          <div className="bg-surface sticky left-0 z-1" />
           {rooms.map((room) => {
             const unavailable = unavailableRoomIds?.has(room.id);
             return (
               <div
                 key={room.id}
                 title={unavailable ? "Does not fit this booking" : undefined}
-                className="font-display px-2 py-3 text-center text-[13px] font-bold"
+                className="font-display truncate px-2 py-3 text-center text-[13px] font-bold"
                 style={{
                   color: unavailable ? "var(--faint)" : "var(--app-title)",
                   textDecoration: unavailable ? "line-through" : undefined,
@@ -368,8 +418,16 @@ export function TimetableGrid({
           className="relative grid"
           style={{ gridTemplateColumns: gridTemplate, height: bodyHeight }}
         >
-          {/* Hour gutter */}
-          <div className="relative">
+          {/*
+           * Hour gutter. It is stuck to the left edge of the scroller: on a
+           * narrow screen only two or three rooms are on show at once, and a
+           * block whose hour has scrolled out of sight tells you nothing. The
+           * background is what the room columns pass behind.
+           */}
+          <div
+            className="bg-surface sticky left-0 z-8"
+            style={{ boxShadow: "inset -1px 0 0 var(--hair-soft)" }}
+          >
             {hours.map((hour) => (
               <div
                 key={hour}
@@ -384,7 +442,7 @@ export function TimetableGrid({
             ))}
           </div>
 
-          {rooms.map((room) => {
+          {rooms.map((room, index) => {
             const unavailable = unavailableRoomIds?.has(room.id) ?? false;
             const creating =
               drag?.kind === "range" && drag.roomId === room.id ? drag : null;
@@ -409,7 +467,15 @@ export function TimetableGrid({
                 data-room-id={room.id}
                 className="relative"
                 style={{
-                  boxShadow: "inset 1px 0 0 var(--hair-soft)",
+                  // Every column draws the divider on its own left edge — bar
+                  // the first, whose left edge is the gutter's right edge, and
+                  // the gutter already draws that one. It has to: it is stuck
+                  // to the left of the scroller and the columns slide behind
+                  // it, so a divider belonging to the first column would slide
+                  // away with it and leave the gutter's edge bare. Drawing both
+                  // is what made this the one divider in the grid at 2px.
+                  boxShadow:
+                    index === 0 ? undefined : "inset 1px 0 0 var(--hair-soft)",
                   // Hatched rather than merely pale: a room that cannot take
                   // this booking should not read as one that is simply free.
                   backgroundImage: unavailable
@@ -447,13 +513,13 @@ export function TimetableGrid({
                  * pressing one of those picks the block up instead, but pointer
                  * capture means a sweep that starts on empty space may run
                  * straight over them. Touch is left alone: taking the gesture
-                 * would cost the page its vertical scroll, so a tap picks a
-                 * single step instead.
+                 * would cost the page its vertical scroll and the grid its
+                 * sideways one, so a tap picks a single step instead.
                  */}
                 {onRangeSelect && !unavailable && (
                   <div
-                    className="absolute inset-0"
-                    style={{ cursor: "cell", touchAction: "pan-y" }}
+                    className="absolute inset-0 touch-auto"
+                    style={{ cursor: "cell" }}
                     onPointerDown={(e) => {
                       if (e.pointerType === "touch" || e.button !== 0) return;
                       measureColumns();
@@ -551,7 +617,10 @@ export function TimetableGrid({
                         );
                       }}
                       {...(onEventMove ? dragHandlers : {})}
-                      className="plr-clip absolute inset-x-1 overflow-hidden rounded-lg px-2 py-1.5 text-left"
+                      // Blocks cover most of a column, so pinning touch to one
+                      // axis here would leave a phone unable to scroll the grid
+                      // sideways at all. A touch never starts a drag anyway.
+                      className="plr-clip absolute inset-x-1 touch-auto overflow-hidden rounded-lg px-2 py-1.5 text-left"
                       style={{
                         top: (from - startHour) * rowHeight + 2,
                         height: Math.max(22, (to - from) * rowHeight - 4),
@@ -562,7 +631,6 @@ export function TimetableGrid({
                           ? "inset 0 0 0 1px var(--red)"
                           : "inset 0 0 0 1px var(--card-ring)",
                         opacity: beingMoved ? 0.35 : 1,
-                        touchAction: "pan-y",
                         cursor: onEventMove
                           ? drag?.kind === "move"
                             ? "grabbing"
@@ -672,7 +740,7 @@ export function TimetableGrid({
             <div
               className="pointer-events-none absolute right-0 z-[5] flex items-center"
               style={{
-                left: GUTTER,
+                left: "var(--tt-gutter)",
                 top: (nowHour - startHour) * rowHeight,
               }}
             >
@@ -745,11 +813,8 @@ function RangeBlock({
     >
       {onBodyDown && (
         <div
-          className="pointer-events-auto absolute inset-0"
-          style={{
-            cursor: grabbing ? "grabbing" : "grab",
-            touchAction: "none",
-          }}
+          className="pointer-events-auto absolute inset-0 touch-auto"
+          style={{ cursor: grabbing ? "grabbing" : "grab" }}
           onPointerDown={onBodyDown}
           {...dragHandlers}
         />
@@ -792,7 +857,11 @@ function RangeBlock({
   );
 }
 
-/** The grab bar on one edge of a chosen span. */
+/**
+ * The grab bar on one edge of a chosen span. It answers to a mouse only, so it
+ * claims no touch gesture: swallowing them would leave a thumb unable to scroll
+ * the page or the grid wherever a chosen span happens to lie.
+ */
 function ResizeHandle({
   edge,
   height,
@@ -806,12 +875,11 @@ function ResizeHandle({
 }) {
   return (
     <div
-      className="pointer-events-auto absolute inset-x-0 flex items-center justify-center"
+      className="pointer-events-auto absolute inset-x-0 flex touch-auto items-center justify-center"
       style={{
         [edge === "start" ? "top" : "bottom"]: 0,
         height,
         cursor: "ns-resize",
-        touchAction: "none",
       }}
       onPointerDown={(e) => onDown(edge, e)}
       {...dragHandlers}

@@ -52,7 +52,7 @@ export function ApplyDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{ background: "var(--slate)" }}
           >
             Done
@@ -62,7 +62,7 @@ export function ApplyDialog({
             <button
               type="button"
               onClick={onClose}
-              className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+              className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
               style={{ boxShadow: "var(--ring)" }}
             >
               Cancel
@@ -74,12 +74,14 @@ export function ApplyDialog({
                 setError(null);
                 apply.mutate({ id: planId });
               }}
-              className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
               style={{
                 background: "var(--grad-brand)",
                 opacity: !data || blocked || apply.isPending ? 0.5 : 1,
                 cursor:
-                  !data || blocked || apply.isPending ? "not-allowed" : "pointer",
+                  !data || blocked || apply.isPending
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
               {apply.isPending
@@ -130,15 +132,15 @@ export function ApplyDialog({
             <>
               <p className="text-ink m-0 text-[13.5px]">
                 This will create <b>{data.willCreate}</b> weekly recurring{" "}
-                {data.willCreate === 1 ? "class" : "classes"}, each repeating for{" "}
-                <b>{data.weeks}</b> {data.weeks === 1 ? "week" : "weeks"}. They
-                appear on the timetable immediately.
+                {data.willCreate === 1 ? "class" : "classes"}, each repeating
+                for <b>{data.weeks}</b> {data.weeks === 1 ? "week" : "weeks"}.
+                They appear on the timetable immediately.
               </p>
 
               {data.skipped > 0 && (
                 <Notice tone="orange">
-                  {data.skipped} session{data.skipped === 1 ? "" : "s"} could not
-                  be placed and will be left out. Fix or remove them if they
+                  {data.skipped} session{data.skipped === 1 ? "" : "s"} could
+                  not be placed and will be left out. Fix or remove them if they
                   matter.
                 </Notice>
               )}
@@ -148,7 +150,8 @@ export function ApplyDialog({
                   {data.coTaught.length} session
                   {data.coTaught.length === 1 ? "" : "s"} name more than one
                   teacher. A class carries one, so the first named is recorded
-                  and the rest are noted on it: {data.coTaught.slice(0, 3).join(", ")}
+                  and the rest are noted on it:{" "}
+                  {data.coTaught.slice(0, 3).join(", ")}
                   {data.coTaught.length > 3 && "…"}
                 </Notice>
               )}

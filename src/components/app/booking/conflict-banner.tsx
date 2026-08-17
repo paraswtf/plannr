@@ -57,7 +57,7 @@ export function ConflictBanner({
               <button
                 type="button"
                 onClick={onUseNextFree}
-                className="mt-3 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                className="mt-3 min-h-10 cursor-pointer rounded-[8px] px-3.5 text-[12.5px] font-semibold text-white lg:min-h-0 lg:px-3 lg:py-1.5"
                 style={{ background: "var(--slate)" }}
               >
                 Use next free slot

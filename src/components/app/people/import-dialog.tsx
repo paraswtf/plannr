@@ -95,7 +95,7 @@ export function ImportDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
             style={{ background: "var(--slate)" }}
           >
             Done
@@ -105,7 +105,7 @@ export function ImportDialog({
             <button
               type="button"
               onClick={onClose}
-              className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+              className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             >
               Cancel
@@ -120,7 +120,7 @@ export function ImportDialog({
                   createMissingGroups: createGroups,
                 })
               }
-              className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
               style={{
                 background: "var(--grad-brand)",
                 opacity: !plan || blocked || commit.isPending ? 0.5 : 1,
@@ -158,7 +158,7 @@ export function ImportDialog({
           <>
             <div className="flex flex-wrap items-center gap-3">
               <label
-                className="flex cursor-pointer items-center gap-2 rounded-[10px] px-3.5 py-2 text-[13px] font-semibold"
+                className="flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 <Icon name="upload" size={15} color="var(--slate)" />
@@ -184,7 +184,7 @@ export function ImportDialog({
                   setCsv(TEMPLATE);
                   setFileName("example.csv");
                 }}
-                className="text-slate ml-auto cursor-pointer text-[12.5px] font-semibold"
+                className="text-slate ml-auto inline-flex min-h-10 cursor-pointer items-center text-[12.5px] font-semibold lg:min-h-0"
               >
                 Use an example
               </button>
@@ -202,7 +202,10 @@ export function ImportDialog({
                 }}
                 rows={5}
                 placeholder="name,email,prn,roles,groups"
-                className="bg-surface plr-scroll w-full resize-y rounded-[10px] px-3 py-2 font-mono text-[12px] outline-none"
+                // 16px on a phone: below that, Safari zooms the page in as the
+                // field takes focus, which on a dialog leaves it half off
+                // screen.
+                className="bg-surface plr-scroll w-full resize-y rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[12px]"
                 style={{ boxShadow: "var(--ring)" }}
               />
               <span className="text-faint text-[11.5px]">
@@ -236,7 +239,7 @@ export function ImportDialog({
                     <button
                       type="button"
                       onClick={() => setShowErrorsOnly((v) => !v)}
-                      className="text-slate ml-auto cursor-pointer text-[12.5px] font-semibold"
+                      className="text-slate ml-auto inline-flex min-h-10 cursor-pointer items-center text-[12.5px] font-semibold lg:min-h-0"
                     >
                       {showErrorsOnly ? "Show all rows" : "Show errors only"}
                     </button>
@@ -255,7 +258,7 @@ export function ImportDialog({
                       type="checkbox"
                       checked={createGroups}
                       onChange={(e) => setCreateGroups(e.target.checked)}
-                      className="mt-0.5"
+                      className="mt-0.5 h-4.5 w-4.5 shrink-0"
                     />
                     <span className="text-ink text-[12.5px]">
                       Create {plan.newGroups.length} group(s) named in the file
@@ -264,11 +267,17 @@ export function ImportDialog({
                   </label>
                 )}
 
+                {/*
+                 * Six columns of import diff genuinely need the width — a line
+                 * number matched to the error on it is the whole point — so the
+                 * preview scrolls in both directions inside its own box rather
+                 * than being folded up or dragging the dialog sideways.
+                 */}
                 <div
-                  className="plr-scroll max-h-[320px] overflow-y-auto rounded-[10px]"
+                  className="plr-scroll max-h-[320px] overflow-auto rounded-[10px]"
                   style={{ boxShadow: "var(--ring)" }}
                 >
-                  <table className="w-full border-collapse">
+                  <table className="w-full min-w-155 border-collapse">
                     <thead className="bg-surface sticky top-0">
                       <tr>
                         <Th>Line</Th>

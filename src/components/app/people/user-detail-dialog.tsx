@@ -158,18 +158,26 @@ export function UserDetailDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={!canManage}
-                className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                // 16px on a phone: below that, Safari zooms the page in as the
+                // field takes focus, which on a dialog leaves it half off
+                // screen.
+                className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                 style={{ boxShadow: "var(--ring)" }}
               />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            {/*
+             * An address and a PRN side by side leave about 130px each on a
+             * phone, which truncates the very thing being checked; they stack
+             * until there is room to read both.
+             */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Email">
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={!canManage}
                   placeholder={NO_ADDRESS}
-                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 />
                 {!data.email && (
@@ -188,19 +196,19 @@ export function UserDetailDialog({
                   onChange={(e) => setPrn(e.target.value)}
                   disabled={!canManage}
                   placeholder="11 digits"
-                  className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
+                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Department">
                 <input
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   disabled={!canManage}
                   placeholder="Faculty only"
-                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 />
               </Field>
@@ -210,12 +218,12 @@ export function UserDetailDialog({
                   onChange={(e) => setShortName(e.target.value)}
                   disabled={!canManage}
                   placeholder="Shown on timetable cards"
-                  className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 />
               </Field>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {data.hasSignedIn ? (
                 <Badge tone="green" dot>
                   has signed in
@@ -238,7 +246,7 @@ export function UserDetailDialog({
                   onClick={() =>
                     update.mutate({ id: userId, isActive: !data.isActive })
                   }
-                  className="text-muted ml-auto cursor-pointer text-[12px] font-semibold"
+                  className="text-muted ml-auto inline-flex min-h-10 cursor-pointer items-center text-[12px] font-semibold lg:min-h-0"
                 >
                   {data.isActive ? "Disable account" : "Re-enable account"}
                 </button>
@@ -262,7 +270,7 @@ export function UserDetailDialog({
                     shortName: shortName.trim() || null,
                   })
                 }
-                className="cursor-pointer self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                className="min-h-10 cursor-pointer self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                 style={{ background: "var(--slate)" }}
               >
                 Save details
@@ -310,7 +318,7 @@ export function UserDetailDialog({
                     type="button"
                     disabled={busy}
                     onClick={() => setGroups.mutate({ id: userId, groupIds })}
-                    className="mt-3 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="mt-3 min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                     style={{ background: "var(--slate)" }}
                   >
                     Save groups
@@ -349,7 +357,7 @@ export function UserDetailDialog({
                 type="button"
                 disabled={busy}
                 onClick={() => setRoles.mutate({ id: userId, roleIds })}
-                className="mt-3 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                className="mt-3 min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                 style={{ background: "var(--slate)" }}
               >
                 Save roles
@@ -359,7 +367,7 @@ export function UserDetailDialog({
 
           {canManageRoles && (
             <details>
-              <summary className="text-title cursor-pointer text-[13.5px] font-semibold">
+              <summary className="text-title cursor-pointer py-2.5 text-[13.5px] font-semibold lg:py-0">
                 Extra permissions for this person
               </summary>
               <p className="text-muted mt-1.5 mb-3 text-[12.5px]">
@@ -374,7 +382,7 @@ export function UserDetailDialog({
                   onClick={() =>
                     setPerms.mutate({ id: userId, permissions: extra })
                   }
-                  className="mt-3 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                  className="mt-3 min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                   style={{ background: "var(--slate)" }}
                 >
                   Save permissions
@@ -384,12 +392,12 @@ export function UserDetailDialog({
           )}
 
           <div
-            className="flex items-center justify-between gap-3 pt-4"
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-4"
             style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
           >
             {canManage ? (
               confirmDelete ? (
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-2">
                   <span className="text-[12.5px] font-semibold text-[#b02636]">
                     Remove {personName(data, data.prn ?? "this person")}?
                   </span>
@@ -397,7 +405,7 @@ export function UserDetailDialog({
                     type="button"
                     disabled={busy}
                     onClick={() => remove.mutate({ id: userId })}
-                    className="cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white"
+                    className="min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
                     style={{ background: "var(--red)" }}
                   >
                     Yes, remove
@@ -405,7 +413,7 @@ export function UserDetailDialog({
                   <button
                     type="button"
                     onClick={() => setConfirmDelete(false)}
-                    className="text-muted cursor-pointer text-[12.5px]"
+                    className="text-muted inline-flex min-h-10 cursor-pointer items-center text-[12.5px] lg:min-h-0"
                   >
                     Cancel
                   </button>
@@ -414,7 +422,7 @@ export function UserDetailDialog({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#b02636]"
+                  className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
                 >
                   <Icon name="trash" size={13} color="var(--red)" />
                   Remove person
@@ -428,7 +436,7 @@ export function UserDetailDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-muted cursor-pointer rounded-[8px] px-3.5 py-2 text-[13px] font-semibold"
+                className="text-muted min-h-10 cursor-pointer rounded-[8px] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 Close

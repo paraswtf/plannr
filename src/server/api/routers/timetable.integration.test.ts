@@ -316,9 +316,10 @@ describe("the people who can be looked at", () => {
  * Which day the screen opens on.
  *
  * Asked for no date, the server answers with the day the next class falls on.
- * The rule is measured from the *end* of a sitting rather than its start, so
- * these tests are mostly about the boundaries: a lecture in progress, a day
- * whose lectures are over, and a term with nothing left in it at all.
+ * The rule is measured from the *end* of a sitting rather than its start, plus
+ * half an hour of grace, so these tests are mostly about the boundaries: a
+ * lecture in progress, one that has only just finished, one finished long
+ * enough ago to let go of, and a term with nothing left in it at all.
  *
  * Everything here is placed relative to the real clock, because that is what
  * the router compares against — a fixture pinned to a date would pass in
@@ -391,6 +392,30 @@ describe("the day the schedule opens on", () => {
     const day = await callerFor(learner).timetable.mySchedule({});
     expect(day.from).toEqual(startOfLocalDay(started, TZ));
     expect(day.occurrences.map((o) => o.title)).toContain("The Next One");
+  });
+
+  it("holds the day for half an hour after a class has ended", async () => {
+    // Finished ten minutes ago, with nothing else for three days. Attendance
+    // is still being taken in the corridor; moving the screen off this day now
+    // would take it away mid-sentence.
+    const ended = new Date(Date.now() - 10 * 60_000 - HOUR);
+    await classAt(ended, HOUR);
+    await classAt(new Date(Date.now() + 3 * 24 * HOUR));
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(ended, TZ));
+    expect(day.occurrences.map((o) => o.title)).toEqual(["The Next One"]);
+  });
+
+  it("moves on to the next class once the half hour is up", async () => {
+    // A minute past the grace, which is the whole difference between this test
+    // and the one above it.
+    await classAt(new Date(Date.now() - 31 * 60_000 - HOUR), HOUR);
+    const later = new Date(Date.now() + 3 * 24 * HOUR);
+    await classAt(later);
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(later, TZ));
   });
 
   it("falls back to today when nothing is left on the timetable", async () => {

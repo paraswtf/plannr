@@ -132,7 +132,7 @@ export function RoomsView({
             <button
               type="button"
               onClick={() => setEditing({})}
-              className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="inline-flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
               style={{ background: "var(--grad-brand)" }}
             >
               + Add room
@@ -140,7 +140,7 @@ export function RoomsView({
           )
         }
       />
-      <div className="px-9 pt-2 pb-10">
+      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
         <div className="mb-5 flex flex-wrap items-center gap-3">
           {canManage && (
             <Segmented
@@ -153,7 +153,7 @@ export function RoomsView({
               size="sm"
             />
           )}
-          <div className="relative w-60">
+          <div className="relative w-full sm:w-60">
             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
               <Icon name="search" size={15} color="var(--faint)" />
             </span>
@@ -161,13 +161,14 @@ export function RoomsView({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search rooms…"
-              className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13.5px] outline-none"
+              className="bg-surface w-full rounded-[10px] py-2.5 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:py-2"
               style={{ boxShadow: "var(--ring)" }}
             />
           </div>
           {tab === "active" && (
             <Select
               ariaLabel="Building"
+              className="w-full sm:w-auto"
               value={buildingId ?? ""}
               options={[
                 { value: "", label: "All buildings" },
@@ -194,7 +195,9 @@ export function RoomsView({
             onRestore={(id) => restore.mutate({ id })}
           />
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(268px,1fr))] gap-4">
+          // The `min()` is what keeps a 268px card from outgrowing a 358px
+          // phone: below that width the track collapses to the column itself.
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(268px,100%),1fr))] gap-4">
             {rooms.map((room) => {
               const status = roomStatus(
                 byRoom.get(room.id) ?? [],
@@ -205,7 +208,7 @@ export function RoomsView({
               return (
                 <Card key={room.id} pad={18} className="flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="min-w-0">
                       <div className="font-display text-title text-[19px] font-bold">
                         {room.code}
                       </div>
@@ -236,7 +239,7 @@ export function RoomsView({
                               },
                             })
                           }
-                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg"
+                          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
                           style={{ background: "rgba(68,88,121,0.07)" }}
                         >
                           <Icon
@@ -292,7 +295,7 @@ export function RoomsView({
 
                   <Link
                     href={`/book?room=${room.id}`}
-                    className="text-slate inline-flex items-center gap-1.5 text-[13px] font-bold"
+                    className="text-slate inline-flex min-h-10 items-center gap-1.5 self-start text-[13px] font-bold lg:min-h-0"
                   >
                     Book this room
                     <Icon name="arrowRight" size={15} color="var(--slate)" />
@@ -372,12 +375,17 @@ function ArchivedRooms({
       {rooms.map((room, i) => (
         <div
           key={room.id}
-          className="flex flex-wrap items-center gap-3 px-4 py-3"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3"
           style={
             i > 0 ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" } : undefined
           }
         >
-          <span className="font-display text-title min-w-[90px] text-[15px] font-bold">
+          {/*
+           * The code keeps its own column where the row reads as a table, but
+           * on a phone the row is three stacked lines and a fixed 90px in front
+           * of the first one only wastes the width.
+           */}
+          <span className="font-display text-title text-[15px] font-bold sm:min-w-[90px]">
             {room.code}
           </span>
           <span className="text-muted text-[12.5px]">
@@ -393,7 +401,7 @@ function ArchivedRooms({
             type="button"
             disabled={restoring === room.id}
             onClick={() => onRestore(room.id)}
-            className="text-slate ml-auto cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+            className="text-slate ml-auto inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
             style={{ boxShadow: "var(--ring)" }}
           >
             {restoring === room.id ? "Restoring…" : "Put back in service"}

@@ -107,7 +107,7 @@ export function CourseCatalogue({
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
+      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
         {!catalogue.semester ? (
           <Card>
             <p className="text-muted m-0 text-[14px]">
@@ -118,7 +118,10 @@ export function CourseCatalogue({
         ) : (
           <>
             <div className="mb-5 flex flex-wrap items-center gap-3">
-              <div className="relative w-72">
+              {/* The search takes the whole width on a phone and the filters
+                  share the line under it: a 288px box beside a 224px one needs
+                  more room than the screen has. */}
+              <div className="relative w-full sm:w-72">
                 <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
                   <Icon name="search" size={15} color="var(--faint)" />
                 </span>
@@ -126,12 +129,18 @@ export function CourseCatalogue({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by title, code or programme…"
-                  className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13.5px] outline-none"
+                  // 16px on a phone: below that, Safari zooms the page in as
+                  // the field takes focus, and a zoomed page is one that
+                  // scrolls sideways.
+                  className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
                   style={{ boxShadow: "var(--ring)" }}
                 />
               </div>
 
-              <div className="w-56">
+              {/* The floor is what "All programmes" needs before its own
+                  truncation starts eating it, so sharing the line with the
+                  staffing filter narrows the control without blanking it. */}
+              <div className="min-w-[136px] flex-1 sm:w-56 sm:flex-none">
                 <Select
                   ariaLabel="Programme"
                   value={programmeId}
@@ -177,7 +186,10 @@ export function CourseCatalogue({
                 />
               )}
 
-              <span className="text-faint ml-auto font-mono text-[12px]">
+              {/* The tally would otherwise squeeze onto the filters' line and
+                  crush both of them, so on a phone it takes a line of its own
+                  and keeps the right edge it has beside them. */}
+              <span className="text-faint w-full text-right font-mono text-[12px] sm:ml-auto sm:w-auto">
                 {shown === catalogue.courses.length
                   ? countLabel(shown, "course")
                   : `${shown} of ${catalogue.courses.length}`}
@@ -213,44 +225,65 @@ export function CourseCatalogue({
                       <Link
                         key={course.id}
                         href={`/courses/${course.id}`}
-                        // The counts wrap under the title once the row runs out
-                        // of width, rather than pushing the page sideways: the
-                        // title is the only column that can shrink, and it hits
-                        // zero long before the fixed ones give way.
-                        className="plr-clip plr-slotcol flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5"
+                        // Five columns need about 420px of fixed width before
+                        // the title gets any, so on a phone the row becomes two
+                        // lines — what the course is, then what it adds up to —
+                        // rather than pushing the page sideways. From sm the
+                        // two groups flatten back into the one row of columns,
+                        // their inner gap matching the outer one so the
+                        // grouping is invisible.
+                        className="plr-clip plr-slotcol flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5"
                         style={
                           i > 0
                             ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
                             : undefined
                         }
                       >
-                        <span className="text-faint w-[72px] shrink-0 truncate font-mono text-[12px]">
-                          {course.code ?? "—"}
+                        <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                          <span className="text-faint w-[72px] shrink-0 truncate font-mono text-[12px]">
+                            {course.code ?? "—"}
+                          </span>
+                          <span className="text-title min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+                            {course.title}
+                          </span>
+                          {/* The affordance belongs at the end of the line the
+                              title is on, which is a different line in each
+                              layout — and the arrow is decoration the screen
+                              reader is already told to skip, so drawing it
+                              twice is cheaper than moving it. */}
+                          <Icon
+                            name="chevronRight"
+                            size={14}
+                            color="var(--faint)"
+                            className="sm:hidden"
+                          />
                         </span>
-                        <span className="text-title min-w-0 flex-1 truncate text-[13.5px] font-semibold">
-                          {course.title}
+
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:shrink-0 sm:flex-nowrap">
+                          <span className="text-muted shrink-0 font-mono text-[12px] sm:w-[76px] sm:text-right">
+                            {countLabel(course._count.groups, "group")}
+                          </span>
+                          <span className="shrink-0 sm:w-[104px] sm:text-right">
+                            {course._count.faculty === 0 ? (
+                              <Badge tone="red" dot>
+                                No teacher
+                              </Badge>
+                            ) : (
+                              <span className="text-muted font-mono text-[12px]">
+                                {countLabel(course._count.faculty, "teacher")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-muted shrink-0 font-mono text-[12px] sm:w-[88px] sm:text-right">
+                            {countLabel(course._count.events, "lecture")}
+                          </span>
                         </span>
-                        <span className="text-muted w-[76px] shrink-0 text-right font-mono text-[12px]">
-                          {countLabel(course._count.groups, "group")}
-                        </span>
-                        <span className="w-[104px] shrink-0 text-right">
-                          {course._count.faculty === 0 ? (
-                            <Badge tone="red" dot>
-                              No teacher
-                            </Badge>
-                          ) : (
-                            <span className="text-muted font-mono text-[12px]">
-                              {countLabel(course._count.faculty, "teacher")}
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-muted w-[88px] shrink-0 text-right font-mono text-[12px]">
-                          {countLabel(course._count.events, "lecture")}
-                        </span>
+
                         <Icon
                           name="chevronRight"
                           size={14}
                           color="var(--faint)"
+                          className="hidden sm:block"
                         />
                       </Link>
                     ))}

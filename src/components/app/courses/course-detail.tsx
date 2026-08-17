@@ -60,7 +60,7 @@ export function CourseDetail({
         actions={
           <Link
             href="/courses"
-            className="text-muted inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
             style={{ boxShadow: "var(--ring)" }}
           >
             All courses
@@ -68,8 +68,11 @@ export function CourseDetail({
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
-        <div className="mb-5 grid [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))] gap-4">
+      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
+        {/* auto-fit alone is not safe here: its minmax floor is a hard minimum,
+            so a track wider than a phone would push the document sideways. The
+            single column below sm is what stops that. */}
+        <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(210px,1fr))]">
           <Stat
             label="Students"
             value={course.headcount}
@@ -96,7 +99,7 @@ export function CourseDetail({
           />
         </div>
 
-        <div className="mb-4 grid [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))] gap-4">
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(340px,1fr))]">
           <Card title="Who may teach it">
             {canManage ? (
               <FacultyEditor course={course} />
@@ -112,7 +115,11 @@ export function CourseDetail({
                     className="text-muted inline-flex items-center gap-2 text-[13px]"
                   >
                     <span
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                      // Held to its size the way the picker's avatars are:
+                      // without it a long name squeezes the circle into an
+                      // oval on a phone, since the initials inside are half
+                      // the width the ring is drawn at.
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
                       style={{ background: "var(--slate)" }}
                     >
                       {initialsOf(teacher.name)}
@@ -143,15 +150,18 @@ export function CourseDetail({
                 {course.groups.map((group) => (
                   <div
                     key={group.id}
-                    className="flex items-center gap-2.5 py-1.5"
+                    // A group's name is the whole point of the row, and beside
+                    // a badge and a headcount there are only ~140px left for it
+                    // on a phone, so it takes the line to itself there.
+                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 py-2 sm:flex-nowrap sm:py-1.5"
                   >
-                    <span className="text-title min-w-0 flex-1 truncate text-[13px] font-semibold">
+                    <span className="text-title w-full min-w-0 truncate text-[13px] font-semibold sm:w-auto sm:flex-1">
                       {group.name}
                     </span>
                     <Badge tone={KIND_TONE[group.kind]}>
                       {KIND_LABEL[group.kind]}
                     </Badge>
-                    <span className="text-faint w-[80px] shrink-0 text-right font-mono text-[12px]">
+                    <span className="text-faint shrink-0 font-mono text-[12px] sm:w-[80px] sm:text-right">
                       {countLabel(group.students, "student")}
                     </span>
                   </div>
@@ -341,41 +351,53 @@ function Lectures({ events }: { events: Course["events"] }) {
       {events.map((event, i) => (
         <div
           key={event.id}
-          className="flex flex-wrap items-center gap-3 px-4 py-2.5"
+          // Six columns come to nearly 600px of fixed width, so on a phone the
+          // row becomes three lines — when it meets, who it is for, and who and
+          // where — and only flattens into columns once there is room. Grouping
+          // the columns in pairs of spans is what lets the same markup do both;
+          // the inner gap matches the outer one, so at sm the grouping cannot
+          // be seen.
+          className="flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5"
           style={
             i > 0 ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" } : undefined
           }
         >
-          <span className="text-title w-[104px] shrink-0 font-mono text-[12px] font-bold">
-            {whenLabel(event)}
+          <span className="flex shrink-0 items-center gap-3">
+            <span className="text-title font-mono text-[12px] font-bold sm:w-[104px]">
+              {whenLabel(event)}
+            </span>
+            <span className="text-muted font-mono text-[12px] sm:w-[116px]">
+              {formatHourLabel(event.startTime, DEFAULT_TIMEZONE)}–
+              {formatHourLabel(event.endTime, DEFAULT_TIMEZONE)}
+            </span>
           </span>
-          <span className="text-muted w-[116px] shrink-0 font-mono text-[12px]">
-            {formatHourLabel(event.startTime, DEFAULT_TIMEZONE)}–
-            {formatHourLabel(event.endTime, DEFAULT_TIMEZONE)}
-          </span>
-          <span className="text-title min-w-0 flex-1 truncate text-[13px] font-semibold">
+
+          <span className="text-title min-w-0 truncate text-[13px] font-semibold sm:flex-1">
             {event.group?.label ?? event.group?.name ?? event.title}
           </span>
-          {/* Nobody on the lecture means a register nobody can take, since only
-              the teacher it is timetabled to may mark it — the same failure the
-              catalogue flags on an unstaffed course, so it is flagged as
-              loudly. */}
-          <span className="flex w-[168px] shrink-0 items-center">
-            {event.faculty ? (
-              <span className="text-muted truncate text-[12.5px]">
-                {event.faculty.user.name ?? "Unnamed"}
-              </span>
-            ) : (
-              <Badge tone="red" dot>
-                No teacher
-              </Badge>
-            )}
-          </span>
-          <Badge tone="slate">{event.room.code}</Badge>
-          <span className="text-faint w-[86px] shrink-0 text-right font-mono text-[11.5px]">
-            {event.rrule
-              ? countLabel(event._count.occurrences, "sitting")
-              : "one-off"}
+
+          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:shrink-0 sm:flex-nowrap">
+            {/* Nobody on the lecture means a register nobody can take, since
+                only the teacher it is timetabled to may mark it — the same
+                failure the catalogue flags on an unstaffed course, so it is
+                flagged as loudly. */}
+            <span className="flex min-w-0 items-center sm:w-[168px]">
+              {event.faculty ? (
+                <span className="text-muted truncate text-[12.5px]">
+                  {event.faculty.user.name ?? "Unnamed"}
+                </span>
+              ) : (
+                <Badge tone="red" dot>
+                  No teacher
+                </Badge>
+              )}
+            </span>
+            <Badge tone="slate">{event.room.code}</Badge>
+            <span className="text-faint shrink-0 font-mono text-[11.5px] sm:w-[86px] sm:text-right">
+              {event.rrule
+                ? countLabel(event._count.occurrences, "sitting")
+                : "one-off"}
+            </span>
           </span>
         </div>
       ))}

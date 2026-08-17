@@ -60,11 +60,11 @@ export function DemandPanel({
           {Math.round(totalHours * 10) / 10} contact hours
         </span>
         {plan.can.edit && (
-          <span className="ml-auto flex items-center gap-2.5">
+          <span className="flex w-full items-center gap-2.5 sm:ml-auto sm:w-auto">
             <button
               type="button"
               onClick={() => setImporting(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
+              className="flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] px-3 text-[13px] font-semibold sm:flex-none lg:min-h-0 lg:py-2"
               style={{ boxShadow: "var(--ring)" }}
             >
               <Icon name="upload" size={15} color="var(--slate)" />
@@ -73,7 +73,7 @@ export function DemandPanel({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white sm:flex-none lg:min-h-0 lg:py-2"
               style={{ background: "var(--slate)" }}
             >
               + Add a subject
@@ -103,94 +103,171 @@ export function DemandPanel({
           </p>
         </Card>
       ) : (
-        <div
-          className="bg-surface plr-scroll overflow-x-auto rounded-[var(--radius-card)]"
-          style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
-        >
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <Th>Group</Th>
-                <Th>Subject</Th>
-                <Th align="right">Per week</Th>
-                <Th>Length</Th>
-                <Th>Taught by</Th>
-                <Th>Room needs</Th>
-                {plan.can.edit && <Th align="right">{""}</Th>}
-              </tr>
-            </thead>
-            <tbody>
-              {plan.requirements.map((requirement) => (
-                <tr key={requirement.id}>
-                  <Td>
-                    <span className="text-title font-semibold">
-                      {requirement.groupLabel}
-                    </span>
-                    {requirement.groupSize > 0 && (
-                      <span className="text-faint mt-0.5 block font-mono text-[11px]">
-                        {requirement.groupSize} students
-                      </span>
-                    )}
-                  </Td>
-                  <Td>
-                    <span className="text-title font-medium">
+        <>
+          {/* Seven columns of demand is a matrix on a desk and unreadable on a
+              phone, and each row here is really one record rather than a cell
+              in a grid — so below `md` a requirement is stacked as its own
+              card, and the table proper starts where it has room to be a
+              table. */}
+          <div className="flex flex-col gap-2.5 md:hidden">
+            {plan.requirements.map((requirement) => (
+              <div
+                key={requirement.id}
+                className="bg-surface rounded-[var(--radius-card)] p-3.5"
+                style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="text-title block text-[13.5px] font-semibold">
                       {requirement.subject}
                     </span>
-                    {requirement.notes && (
-                      <span className="text-faint mt-0.5 block text-[11.5px]">
-                        {requirement.notes}
-                      </span>
-                    )}
-                  </Td>
-                  <Td align="right" mono>
-                    {requirement.sessionsPerWeek}
-                  </Td>
-                  <Td mono>{formatDuration(requirement.durationMinutes)}</Td>
-                  <Td>
-                    {requirement.facultyNames.length > 0 ? (
-                      <span className="flex flex-wrap gap-1">
-                        {requirement.facultyNames.map((name, i) => (
-                          <span
-                            key={`${requirement.id}-${i}`}
-                            className="text-muted text-[12px]"
-                          >
-                            {name}
-                            {i < requirement.facultyNames.length - 1 ? "," : ""}
-                          </span>
-                        ))}
-                      </span>
-                    ) : (
-                      <span className="text-faint text-[12px]">Anyone</span>
-                    )}
-                  </Td>
-                  <Td>
-                    <RoomNeeds requirement={requirement} />
-                  </Td>
+                    <span className="text-muted block text-[12px]">
+                      {requirement.groupLabel}
+                      {requirement.groupSize > 0 &&
+                        ` · ${requirement.groupSize} students`}
+                    </span>
+                  </span>
                   {plan.can.edit && (
-                    <Td align="right">
-                      <span className="flex items-center justify-end gap-1">
-                        <IconButton
-                          label="Edit"
-                          icon="swap"
-                          onClick={() => setEditing(requirement)}
-                        />
-                        <IconButton
-                          label="Remove"
-                          icon="trash"
-                          tone="var(--red)"
-                          onClick={() => {
-                            setError(null);
-                            remove.mutate({ id: requirement.id });
-                          }}
-                        />
-                      </span>
-                    </Td>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <IconButton
+                        label="Edit"
+                        icon="swap"
+                        onClick={() => setEditing(requirement)}
+                      />
+                      <IconButton
+                        label="Remove"
+                        icon="trash"
+                        tone="var(--red)"
+                        onClick={() => {
+                          setError(null);
+                          remove.mutate({ id: requirement.id });
+                        }}
+                      />
+                    </span>
                   )}
+                </div>
+
+                <p className="text-muted mt-2 mb-0 text-[12px]">
+                  <span className="font-mono">
+                    {requirement.sessionsPerWeek}
+                  </span>{" "}
+                  a week ·{" "}
+                  <span className="font-mono">
+                    {formatDuration(requirement.durationMinutes)}
+                  </span>{" "}
+                  ·{" "}
+                  {requirement.facultyNames.length > 0
+                    ? requirement.facultyNames.join(", ")
+                    : "Anyone"}
+                </p>
+
+                <div className="mt-2">
+                  <RoomNeeds requirement={requirement} />
+                </div>
+
+                {requirement.notes && (
+                  <p className="text-faint mt-2 mb-0 text-[11.5px]">
+                    {requirement.notes}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="bg-surface plr-scroll hidden overflow-x-auto rounded-[var(--radius-card)] md:block"
+            style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
+          >
+            {/* Below this the columns squeeze rather than scroll, and a room
+                requirement wrapped over four lines is worse than a sideways
+                nudge. */}
+            <table className="w-full min-w-[840px] border-collapse">
+              <thead>
+                <tr>
+                  <Th>Group</Th>
+                  <Th>Subject</Th>
+                  <Th align="right">Per week</Th>
+                  <Th>Length</Th>
+                  <Th>Taught by</Th>
+                  <Th>Room needs</Th>
+                  {plan.can.edit && <Th align="right">{""}</Th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {plan.requirements.map((requirement) => (
+                  <tr key={requirement.id}>
+                    <Td>
+                      <span className="text-title font-semibold">
+                        {requirement.groupLabel}
+                      </span>
+                      {requirement.groupSize > 0 && (
+                        <span className="text-faint mt-0.5 block font-mono text-[11px]">
+                          {requirement.groupSize} students
+                        </span>
+                      )}
+                    </Td>
+                    <Td>
+                      <span className="text-title font-medium">
+                        {requirement.subject}
+                      </span>
+                      {requirement.notes && (
+                        <span className="text-faint mt-0.5 block text-[11.5px]">
+                          {requirement.notes}
+                        </span>
+                      )}
+                    </Td>
+                    <Td align="right" mono>
+                      {requirement.sessionsPerWeek}
+                    </Td>
+                    <Td mono>{formatDuration(requirement.durationMinutes)}</Td>
+                    <Td>
+                      {requirement.facultyNames.length > 0 ? (
+                        <span className="flex flex-wrap gap-1">
+                          {requirement.facultyNames.map((name, i) => (
+                            <span
+                              key={`${requirement.id}-${i}`}
+                              className="text-muted text-[12px]"
+                            >
+                              {name}
+                              {i < requirement.facultyNames.length - 1
+                                ? ","
+                                : ""}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-faint text-[12px]">Anyone</span>
+                      )}
+                    </Td>
+                    <Td>
+                      <RoomNeeds requirement={requirement} />
+                    </Td>
+                    {plan.can.edit && (
+                      <Td align="right">
+                        <span className="flex items-center justify-end gap-1">
+                          <IconButton
+                            label="Edit"
+                            icon="swap"
+                            onClick={() => setEditing(requirement)}
+                          />
+                          <IconButton
+                            label="Remove"
+                            icon="trash"
+                            tone="var(--red)"
+                            onClick={() => {
+                              setError(null);
+                              remove.mutate({ id: requirement.id });
+                            }}
+                          />
+                        </span>
+                      </Td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {(adding || editing) && (
@@ -272,7 +349,7 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg"
+      className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
       style={{ boxShadow: "var(--ring)" }}
     >
       <Icon name={icon} size={13} color={tone} />

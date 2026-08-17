@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import { DatePicker } from "~/components/ui/date-picker";
-import { Drawer } from "~/components/ui/drawer";
-import { Icon } from "~/components/ui/icon";
+import { Icon, type IconName } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import {
   formatDayLabel,
@@ -26,7 +27,7 @@ import { TimeField } from "./time-field";
 import type { BookingDraft } from "./use-booking-draft";
 
 /**
- * The booking form: permanently docked on the Book screen, opened by a drag on
+ * The booking form: permanently docked on the Book screen, opened by a pick on
  * the Timetable.
  *
  * Neither the span nor the draft belongs to it — both are held by the screen, so
@@ -67,6 +68,7 @@ export function BookingDrawer({
   onChange,
   onClose,
   onOtherCancelled,
+  ref,
 }: {
   span: BookingSpan;
   rooms: FittableRoom[];
@@ -82,6 +84,12 @@ export function BookingDrawer({
   onClose?: () => void;
   /** Refetch after a clashing booking has been cancelled. */
   onOtherCancelled: () => void | Promise<unknown>;
+  /**
+   * The panel element. Handed out so a screen can scroll to it — where the
+   * panel is under the calendar rather than beside it, retiming it from the
+   * calendar happens off screen unless someone takes the reader there.
+   */
+  ref?: React.Ref<HTMLElement>;
 }) {
   const { roomId, start, end } = span;
   const room = rooms.find((r) => r.id === roomId);
@@ -132,8 +140,8 @@ export function BookingDrawer({
   };
 
   return (
-    <Drawer
-      open
+    <BookingPanel
+      ref={ref}
       icon="calendar"
       title={isSelfServe ? "Book a slot" : "New session"}
       subtitle={`${formatDayLabel(start, timeZone)} · ${formatDuration(durationMinutes)}`}
@@ -200,7 +208,11 @@ export function BookingDrawer({
           <DatePicker value={start} timeZone={timeZone} onChange={setDay} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/*
+         * Side by side the two times are 170px each on a phone, which is not
+         * enough for a field carrying two nudges, a chevron and a clock time.
+         */}
+        <div className="grid gap-3 sm:grid-cols-2">
           <TimeField
             label="Starts"
             value={start}
@@ -301,8 +313,15 @@ export function BookingDrawer({
           </div>
         )}
 
+        {/*
+         * Two to a line only while the panel is the width of the page; back in
+         * its dock there is no room for a second column.
+         */}
         {!isSelfServe && (
-          <AttendeeFields draft={draft} className="grid gap-3" />
+          <AttendeeFields
+            draft={draft}
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
+          />
         )}
 
         <div>
@@ -339,7 +358,7 @@ export function BookingDrawer({
           <input
             value={draft.title}
             onChange={(e) => draft.setTitle(e.target.value)}
-            className="bg-surface rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
+            className="bg-surface rounded-[10px] px-3 py-2.5 text-[16px] outline-none sm:text-[13.5px] lg:py-2"
             style={{ boxShadow: "var(--ring)" }}
           />
         </label>
@@ -378,7 +397,141 @@ export function BookingDrawer({
           </div>
         )}
       </div>
-    </Drawer>
+    </BookingPanel>
+  );
+}
+
+/**
+ * The panel the form sits in.
+ *
+ * Docking a 420px column beside the calendar is a desktop idea: on a phone it
+ * would leave the grid a sliver, and a form squeezed next to a grid helps
+ * nobody. So the dock only exists from `lg` — the width at which the sidebar
+ * comes back and there is room to spare. Below that the panel is simply the
+ * next thing down the page: full width, in the flow, scrolling with it, with
+ * the action bar riding the bottom of the screen so the Book button is never a
+ * scroll away.
+ *
+ * The shared Drawer stacks the same way, and from `lg` the two are the same
+ * panel down to the pixel. What is not shared is that action bar: Drawer leaves
+ * its footer at the end of the form, and on a phone this particular form runs
+ * several screens long, so Book would be a scroll away rather than under the
+ * thumb. That is the whole of the difference, and the day Drawer can pin its
+ * own footer the two should become one again.
+ */
+function BookingPanel({
+  title,
+  subtitle,
+  icon,
+  onClose,
+  footer,
+  children,
+  ref,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: IconName;
+  /** Omit to make the panel permanent, as the Book screen does. */
+  onClose?: () => void;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+  ref?: React.Ref<HTMLElement>;
+}) {
+  // The screens above write `onClose` as an inline arrow, so a new function
+  // arrives on every render of the page around this — and the page re-renders
+  // on every keystroke in the form. Keyed on the callback's identity, the
+  // effect below would tear its listener down and put it back between
+  // characters; read through a ref it can key on whether the panel is
+  // dismissible at all, which changes never.
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  const dismissible = Boolean(onClose);
+
+  useEffect(() => {
+    if (!dismissible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Escape belongs to whatever is laid over the page, and this panel never
+      // is — docked it is a column beside the calendar, stacked it is a block
+      // under it, and either way the page around it is still live. Without
+      // this, one press aimed at the shell's nav overlay or at a dialog opened
+      // from the grid behind takes the half-written booking down with it: both
+      // listen on the document, and neither can see the other. `aria-modal` is
+      // the mark of the layer that is actually on top. The Drawer this panel
+      // was forked from carries the same guard, and for the same reason.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      close.current?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dismissible]);
+
+  return (
+    <aside
+      ref={ref}
+      role="dialog"
+      aria-label={title}
+      // `lg:w-105` is the spacing scale's spelling of the Drawer's 420px dock.
+      // The slide-in belongs to that docked panel only: on a full-width one it
+      // would be 26px of the page hanging off the right edge mid-animation.
+      // `scroll-mt` keeps the panel's own heading clear of the topbar when a
+      // screen scrolls to it; above lg the offset is zero, as is the need.
+      className="bg-surface flex w-full scroll-mt-(--topbar-h) flex-col shadow-[inset_0_1px_0_var(--hair)] lg:sticky lg:h-screen lg:w-105 lg:max-w-[92vw] lg:shrink-0 lg:animate-[plrSlideIn_0.24s_cubic-bezier(0.4,0,0.2,1)] lg:shadow-[inset_1px_0_0_var(--hair),-12px_0_34px_rgba(13,17,23,0.07)]"
+      style={{ top: "var(--topbar-h)" }}
+    >
+      <div
+        className="flex items-start gap-3 px-4 pt-5 pb-4 sm:px-6 lg:pt-6"
+        style={{ boxShadow: "0 1px 0 var(--hair-soft)" }}
+      >
+        {icon && (
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{
+              background: "color-mix(in srgb, var(--slate) 14%, #fff)",
+            }}
+          >
+            <Icon name={icon} size={19} color="var(--slate)" stroke={1.9} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-muted mt-0.5 text-[12.5px]">{subtitle}</p>
+          )}
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-8 lg:w-8"
+          >
+            <Icon name="x" size={16} color="var(--muted)" />
+          </button>
+        )}
+      </div>
+
+      {/*
+       * Only the docked panel scrolls on its own; in the flow the page is the
+       * scroller, which also lets the pickers inside hang past its edges.
+       */}
+      <div className="plr-scroll flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto">
+        {children}
+      </div>
+
+      {footer && (
+        <div
+          className="bg-surface sticky bottom-0 flex items-center justify-end gap-2.5 px-4 pt-4 pb-5 sm:px-6 lg:static lg:pb-6"
+          style={{ boxShadow: "0 -1px 0 var(--hair-soft)" }}
+        >
+          {footer}
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -410,7 +563,7 @@ function CountField({
           const next = Number(e.target.value.replace(/\D/g, ""));
           if (Number.isFinite(next) && next > 0) onChange(next);
         }}
-        className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[13px] font-bold outline-none"
+        className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-bold outline-none sm:text-[13px]"
       />
       <span className="text-faint shrink-0 pr-0.5 text-[11.5px]">
         {value === 1 ? "date" : "dates"}
@@ -439,7 +592,9 @@ function Nudge({
       onClick={onClick}
       disabled={!onClick}
       aria-label={label}
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+      // Wide enough for a thumb until there is a sidebar to prove there is a
+      // mouse, the same trade the calendar's day stepper makes.
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md lg:h-6 lg:w-6"
       style={{
         background: "rgba(68,88,121,0.07)",
         opacity: onClick ? 1 : 0.35,
@@ -466,7 +621,7 @@ function FeatureChip({
       type="button"
       aria-pressed={on}
       onClick={onToggle}
-      className="plr-clip cursor-pointer rounded-full px-2.5 py-1 text-[12px] font-semibold"
+      className="plr-clip inline-flex min-h-10 cursor-pointer items-center rounded-full px-3 text-[12px] font-semibold lg:min-h-0 lg:px-2.5 lg:py-1"
       style={
         on
           ? {

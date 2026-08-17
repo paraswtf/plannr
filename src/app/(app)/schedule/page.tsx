@@ -19,7 +19,10 @@ export default async function SchedulePage() {
 
   // No date: the screen opens on the day of the next class rather than on
   // today, so an evening or a weekend shows the day being asked about instead
-  // of an empty one. The server sends back which day it chose as `from`.
+  // of an empty one. A class in progress — or one that ended in the last half
+  // hour — counts as that next class, which is what keeps the day still while
+  // somebody is in it or has just left it. The server sends back which day it
+  // chose as `from`; `Today` in the day navigator always goes back to today.
   const initial = await api.timetable.mySchedule({});
 
   return (

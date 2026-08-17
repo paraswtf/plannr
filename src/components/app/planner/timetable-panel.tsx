@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
@@ -89,26 +89,37 @@ export function TimetablePanel({
 
   const selected = plan.sessions.find((s) => s.id === selectedId) ?? null;
 
+  // Wide enough and the detail panel sits beside the grid, so picking a session
+  // shows it straight away. Stacked, it is off the bottom of the screen and the
+  // tap looks like it did nothing — `nearest` scrolls only when that is true.
+  const detailRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!selectedId) return;
+    detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedId]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Select
-          ariaLabel="View by"
-          size="sm"
-          value={lens}
-          options={[
-            { value: "all", label: "Everything" },
-            { value: "group", label: "One group" },
-            { value: "room", label: "One room" },
-            { value: "faculty", label: "One teacher" },
-          ]}
-          onChange={(next) => {
-            setLens(next);
-            setLensValue("");
-          }}
-        />
+        <div className="w-full sm:w-auto">
+          <Select
+            ariaLabel="View by"
+            size="sm"
+            value={lens}
+            options={[
+              { value: "all", label: "Everything" },
+              { value: "group", label: "One group" },
+              { value: "room", label: "One room" },
+              { value: "faculty", label: "One teacher" },
+            ]}
+            onChange={(next) => {
+              setLens(next);
+              setLensValue("");
+            }}
+          />
+        </div>
         {lens !== "all" && (
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Select
               ariaLabel="Filter"
               size="sm"
@@ -119,7 +130,7 @@ export function TimetablePanel({
             />
           </div>
         )}
-        <span className="text-faint ml-auto font-mono text-[12px]">
+        <span className="text-faint font-mono text-[12px] sm:ml-auto">
           {placed.length} placed
           {unplaced.length > 0 && ` · ${unplaced.length} unplaced`}
         </span>
@@ -146,19 +157,27 @@ export function TimetablePanel({
         </Card>
       ) : (
         <div className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
-          <PlanWeekGrid
-            sessions={gridSessions}
-            workingDays={plan.settings.workingDays}
-            dayStartMinutes={plan.settings.dayStartMinutes}
-            dayEndMinutes={plan.settings.dayEndMinutes}
-            selectedId={selectedId}
-            onSelect={(s) => {
-              setError(null);
-              setSelectedId(s.id === selectedId ? null : s.id);
-            }}
-          />
+          <div className="flex flex-col gap-2">
+            <PlanWeekGrid
+              sessions={gridSessions}
+              workingDays={plan.settings.workingDays}
+              dayStartMinutes={plan.settings.dayStartMinutes}
+              dayEndMinutes={plan.settings.dayEndMinutes}
+              selectedId={selectedId}
+              onSelect={(s) => {
+                setError(null);
+                setSelectedId(s.id === selectedId ? null : s.id);
+              }}
+            />
+            {/* A week cannot be made to fit a phone, so it is said out loud
+                rather than left as a scrollbar nobody notices. */}
+            <p className="text-faint m-0 text-[11.5px] sm:hidden">
+              Swipe the week sideways to reach the other days. Tapping a class
+              opens it underneath.
+            </p>
+          </div>
 
-          <div className="flex flex-col gap-4">
+          <div ref={detailRef} className="flex flex-col gap-4">
             {selected ? (
               <SessionPanel
                 plan={plan}
@@ -184,10 +203,7 @@ export function TimetablePanel({
             )}
 
             {unplaced.length > 0 && (
-              <Card
-                title={`Could not be placed (${unplaced.length})`}
-                pad={18}
-              >
+              <Card title={`Could not be placed (${unplaced.length})`} pad={18}>
                 <div className="flex flex-col gap-2.5">
                   {unplaced.map((session) => (
                     <button
@@ -236,7 +252,9 @@ function Legend({
   return (
     <span className="text-muted flex items-center gap-2 text-[12px]">
       <span
-        className={dot ? "h-[8px] w-[8px] rounded-full" : "h-[14px] w-[22px] rounded"}
+        className={
+          dot ? "h-[8px] w-[8px] rounded-full" : "h-[14px] w-[22px] rounded"
+        }
         style={{
           background: swatch,
           boxShadow: dot ? undefined : "inset 0 0 0 1px rgba(68,88,121,0.22)",
@@ -261,7 +279,9 @@ function SessionPanel({
   onChanged: () => void | Promise<unknown>;
   onError: (message: string | null) => void;
 }) {
-  const [day, setDay] = useState(session.dayOfWeek ?? plan.settings.workingDays[0] ?? 1);
+  const [day, setDay] = useState(
+    session.dayOfWeek ?? plan.settings.workingDays[0] ?? 1,
+  );
   const [start, setStart] = useState(
     session.startMinutes ?? plan.settings.dayStartMinutes,
   );
@@ -326,7 +346,7 @@ function SessionPanel({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg"
+          className="-mt-1.5 -mr-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:mt-0 lg:mr-0 lg:h-7 lg:w-7"
         >
           <Icon name="x" size={13} color="var(--muted)" />
         </button>
@@ -360,6 +380,8 @@ function SessionPanel({
 
       {plan.can.edit && (
         <>
+          {/* Day and time stay paired even on a phone: both are short, and
+              they are chosen as one answer to "when". */}
           <div className="mb-2.5 grid grid-cols-2 gap-2">
             <Select
               ariaLabel="Day"
@@ -408,7 +430,7 @@ function SessionPanel({
                   roomId,
                 })
               }
-              className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+              className="flex min-h-10 items-center rounded-lg px-3 text-[12.5px] font-semibold text-white lg:min-h-0 lg:py-1.5"
               style={{
                 background: "var(--slate)",
                 opacity: move.isPending || !roomId ? 0.5 : 1,
@@ -422,7 +444,7 @@ function SessionPanel({
               onClick={() =>
                 pin.mutate({ id: session.id, pinned: !session.pinned })
               }
-              className="text-muted cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+              className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
               style={{ boxShadow: "var(--ring)" }}
             >
               {session.pinned ? "Unpin" : "Pin here"}
@@ -431,7 +453,7 @@ function SessionPanel({
               <button
                 type="button"
                 onClick={() => clear.mutate({ id: session.id })}
-                className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636]"
+                className="flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0 lg:py-1.5"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 Take off the grid
@@ -441,7 +463,10 @@ function SessionPanel({
         </>
       )}
 
-      <div style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }} className="pt-3">
+      <div
+        style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
+        className="pt-3"
+      >
         <span className="text-ink mb-1.5 block text-[12.5px] font-semibold">
           Comment on this session
         </span>
@@ -463,12 +488,16 @@ function SessionPanel({
               body: comment.trim(),
             })
           }
-          className="mt-2 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white"
+          // Inline, not block: this button has no flex row to sit in, and a
+          // plain `flex` would stretch it across the whole panel.
+          className="mt-2 inline-flex min-h-10 items-center rounded-lg px-3 text-[12.5px] font-semibold text-white lg:min-h-0 lg:py-1.5"
           style={{
             background: "var(--slate)",
             opacity: comment.trim() && !addComment.isPending ? 1 : 0.5,
             cursor:
-              comment.trim() && !addComment.isPending ? "pointer" : "not-allowed",
+              comment.trim() && !addComment.isPending
+                ? "pointer"
+                : "not-allowed",
           }}
         >
           Add comment

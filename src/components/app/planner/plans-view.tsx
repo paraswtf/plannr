@@ -32,7 +32,9 @@ export function PlansView({ permissions }: { permissions: string }) {
   const bits = new PermissionBitField(BigInt(permissions));
   const canBuild = bits.has(PermissionFlags.ManageSchedulePlans);
 
-  const [scope, setScope] = useState<"all" | "mine" | "shared" | "review">("all");
+  const [scope, setScope] = useState<"all" | "mine" | "shared" | "review">(
+    "all",
+  );
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
@@ -58,7 +60,7 @@ export function PlansView({ permissions }: { permissions: string }) {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white"
+              className="flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
               style={{ background: "var(--grad-brand)" }}
             >
               + New plan
@@ -67,7 +69,7 @@ export function PlansView({ permissions }: { permissions: string }) {
         }
       />
 
-      <div className="px-9 pt-2 pb-10">
+      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
           <Stat
             label="Plans"
@@ -98,7 +100,7 @@ export function PlansView({ permissions }: { permissions: string }) {
           />
         </div>
 
-        <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <Segmented
             items={[
               { value: "all" as const, label: "All" },
@@ -110,7 +112,7 @@ export function PlansView({ permissions }: { permissions: string }) {
             onChange={setScope}
             size="sm"
           />
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
               <Icon name="search" size={15} color="var(--faint)" />
             </span>
@@ -118,17 +120,17 @@ export function PlansView({ permissions }: { permissions: string }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search plans…"
-              className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13.5px] outline-none"
+              className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[13.5px] outline-none lg:min-h-0"
               style={{ boxShadow: "var(--ring)" }}
             />
           </div>
-          <span className="text-faint ml-auto font-mono text-[12px]">
+          <span className="text-faint font-mono text-[12px] sm:ml-auto">
             {plans.data?.total ?? 0} plans
           </span>
         </div>
 
         {rows.length > 0 ? (
-          <div className="grid [grid-template-columns:repeat(auto-fill,minmax(340px,1fr))] gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(340px,1fr))]">
             {rows.map((plan) => (
               <PlanCard key={plan.id} plan={plan} />
             ))}
@@ -153,8 +155,11 @@ export function PlansView({ permissions }: { permissions: string }) {
               type="button"
               disabled={page === 1}
               onClick={() => setPage((n) => n - 1)}
-              className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
-              style={{ boxShadow: "var(--ring)", opacity: page === 1 ? 0.4 : 1 }}
+              className="flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
+              style={{
+                boxShadow: "var(--ring)",
+                opacity: page === 1 ? 0.4 : 1,
+              }}
             >
               Previous
             </button>
@@ -165,7 +170,7 @@ export function PlansView({ permissions }: { permissions: string }) {
               type="button"
               disabled={!plans.data?.hasMore}
               onClick={() => setPage((n) => n + 1)}
-              className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+              className="flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
               style={{
                 boxShadow: "var(--ring)",
                 opacity: plans.data?.hasMore ? 1 : 0.4,
@@ -296,7 +301,7 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
-            className="text-muted cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold"
+            className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
             style={{ boxShadow: "var(--ring)" }}
           >
             Cancel
@@ -305,9 +310,12 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
             type="button"
             disabled={!ready || create.isPending}
             onClick={() =>
-              create.mutate({ name: name.trim(), semesterId: semesterId || undefined })
+              create.mutate({
+                name: name.trim(),
+                semesterId: semesterId || undefined,
+              })
             }
-            className="rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white"
+            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
             style={{
               background: "var(--grad-brand)",
               opacity: ready && !create.isPending ? 1 : 0.5,
@@ -361,16 +369,22 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
                   label: t.name,
                   card: {
                     label: t.name,
-                    avatar: { kind: "icon" as const, name: "calendar" as const },
+                    avatar: {
+                      kind: "icon" as const,
+                      name: "calendar" as const,
+                    },
                     title: t.name,
                     subtitle: `${new Intl.DateTimeFormat("en-GB", {
                       day: "numeric",
                       month: "short",
-                    }).format(t.startDate)} – ${new Intl.DateTimeFormat("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    }).format(t.endDate)}`,
+                    }).format(t.startDate)} – ${new Intl.DateTimeFormat(
+                      "en-GB",
+                      {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      },
+                    ).format(t.endDate)}`,
                   },
                 })),
               }

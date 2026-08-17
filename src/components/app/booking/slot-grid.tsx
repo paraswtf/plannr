@@ -61,7 +61,8 @@ export function SlotGrid({
 
   return (
     <div>
-      <div className="grid grid-cols-5 gap-1.5">
+      {/* Five clock times to a line need more width than a phone has. */}
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
         {slots.map(({ start, kind, clash }) => {
           const selected = value?.getTime() === start.getTime();
           const background = selected
@@ -85,7 +86,7 @@ export function SlotGrid({
               type="button"
               onClick={() => onChange(start)}
               title={clash ? `${clash.title}` : "available"}
-              className="relative cursor-pointer rounded-[9px] px-1 py-2 font-mono text-[12.5px] font-bold transition-colors"
+              className="relative min-h-10 cursor-pointer rounded-[9px] px-1 py-2 font-mono text-[12.5px] font-bold transition-colors lg:min-h-0"
               style={{
                 background,
                 color,

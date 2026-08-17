@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -127,6 +127,40 @@ export function TimetableView({
     return () => clearTimeout(id);
   }, [flash]);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Counts picks taken from the grid, so that a second one moves the page as
+  // readily as the first. Watching the panel open instead would fire once and
+  // then never again, leaving every later tap silent — which is the same fault
+  // one tap further on.
+  const [picks, setPicks] = useState(0);
+  // Whether the pick being counted is the one that opened the panel. Read in
+  // the effect below, so it is written before the state that runs it.
+  const opening = useRef(false);
+
+  /**
+   * Where the panel sits under the calendar rather than beside it, a pick on the
+   * grid would otherwise appear to do nothing — the form it filled in is a
+   * screen further down. Only when it is genuinely in the flow: a panel drawn
+   * over the page has no height of its own and is on screen already.
+   *
+   * With a mouse, only the pick that opened the panel moves the page. A mouse
+   * reports the range live all the way through a resize or a move drag, and
+   * scrolling on each of those reports would pull the grid out from under the
+   * cursor; the opening pick is the one that cannot be mid-drag, since there was
+   * no chosen block to take hold of yet. Touch cannot drag this grid at all, so
+   * every pick it makes is one settled tap and every one of them can be shown.
+   */
+  useEffect(() => {
+    if (picks === 0) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    if (!opening.current && !window.matchMedia("(pointer: coarse)").matches) {
+      return;
+    }
+    const panel = panelRef.current;
+    if (!panel || panel.offsetHeight === 0) return;
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [picks]);
+
   const events: GridEvent[] = (data?.occurrences ?? []).map((o) => ({
     occurrenceId: o.occurrenceId,
     eventId: o.eventId,
@@ -201,12 +235,15 @@ export function TimetableView({
       (span.end.getTime() - span.start.getTime()) / 3_600_000,
   };
 
-  const takeRange = (range: GridRange) =>
+  const takeRange = (range: GridRange) => {
+    opening.current = !span;
     setSpan({
       roomId: range.roomId,
       start: localTimeOnDay(date, Math.round(range.startHour * 60), timeZone),
       end: localTimeOnDay(date, Math.round(range.endHour * 60), timeZone),
     });
+    setPicks((n) => n + 1);
+  };
 
   const move = api.events.update.useMutation({
     onSuccess: async () => {
@@ -251,17 +288,27 @@ export function TimetableView({
   return (
     // The booking panel is a column beside the page, not a sheet over it: the
     // grid narrows to make room and stays draggable while a booking is drafted.
-    <div className="flex min-h-screen items-start">
+    // There is no room for that beside a phone — narrowing the grid to a couple
+    // of centimetres would defeat the point — so below lg it falls in under the
+    // calendar instead, and the screen takes you to it. The full-screen floor
+    // is what gives the docked panel something to stick against, so it comes in
+    // with the docking: below lg it would only add the topbar's height to the
+    // page and leave a phone scrolling past the end of the day.
+    <div className="flex flex-col lg:min-h-screen lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Timetable"
           subtitle={`${formatFullDate(date, timeZone)} · ${data?.rooms.length ?? 0} rooms · ${events.length} scheduled`}
         />
-        <div className="px-9 pt-2 pb-10">
+        <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <DayNavigator date={date} timeZone={timeZone} onChange={goToDay} />
             <Select
               ariaLabel="Building"
+              // On its own line under the day controls it may as well be the
+              // width of that line; a 120px stub floating at the left reads as
+              // something that came loose.
+              className="w-full sm:w-auto"
               value={buildingId ?? ""}
               options={[
                 { value: "", label: "All buildings" },
@@ -292,39 +339,67 @@ export function TimetableView({
             />
           ) : (
             <div
-              className="bg-surface text-muted rounded-[var(--radius-card)] p-10 text-center text-[14px]"
+              className="bg-surface text-muted rounded-[var(--radius-card)] p-6 text-center text-[14px] sm:p-10"
               style={{ boxShadow: "var(--ring)" }}
             >
               No rooms yet. An admin can add them from the Rooms tab.
             </div>
           )}
 
+          {/*
+           * Every clause is true wherever this is read, rather than one set of
+           * words being swapped in on a coarse pointer: a tablet with a trackpad
+           * can do both, and someone on a phone is better served by a hint that
+           * names the mouse than by one that quietly withholds half the screen's
+           * behaviour. What it may not do is describe a drag as the only way in,
+           * which is what it did while touch could only tap.
+           */}
           <p className="text-faint mt-3 text-[12.5px]">
-            {canBook
-              ? "Drag down a room's column to book it, in 15-minute steps. Either edge of the block moves it, and the middle drags the whole thing."
-              : "Each block is a scheduled class or booking."}
-            {canMoveEvents &&
-              " Booked blocks can be dragged to another time or room."}
+            {canBook ? (
+              <>
+                Tap a room&apos;s column to start a 15-minute slot, then set the
+                exact times in the panel. With a mouse, drag down a column to
+                sweep a longer slot out in one go, and drag the chosen
+                block&apos;s edges or middle to adjust it
+                {canMoveEvents &&
+                  ", or drag a booked block to another time or room"}
+                .
+              </>
+            ) : (
+              <>
+                Each block is a scheduled class or booking.
+                {canMoveEvents &&
+                  " With a mouse, one can be dragged to another time or room."}
+              </>
+            )}
           </p>
         </div>
       </div>
 
       {span && data && (
-        <BookingDrawer
-          span={span}
-          rooms={data.rooms}
-          draft={draft}
-          timeZone={timeZone}
-          dayStartMinutes={dayStartMinutes}
-          dayEndMinutes={dayEndMinutes}
-          canCancelOthers={canMoveEvents}
-          onChange={changeSpan}
-          onClose={() => setSpan(null)}
-          onOtherCancelled={async () => {
-            await utils.timetable.invalidate();
-            router.refresh();
-          }}
-        />
+        // Stretching the wrapper on a desktop keeps the panel's own stickiness
+        // alive: caged in a box its exact height, it would have nowhere to
+        // travel and would scroll away with the page.
+        <div
+          ref={panelRef}
+          className="shrink-0 scroll-mt-(--topbar-h) lg:self-stretch"
+        >
+          <BookingDrawer
+            span={span}
+            rooms={data.rooms}
+            draft={draft}
+            timeZone={timeZone}
+            dayStartMinutes={dayStartMinutes}
+            dayEndMinutes={dayEndMinutes}
+            canCancelOthers={canMoveEvents}
+            onChange={changeSpan}
+            onClose={() => setSpan(null)}
+            onOtherCancelled={async () => {
+              await utils.timetable.invalidate();
+              router.refresh();
+            }}
+          />
+        </div>
       )}
 
       {opened && (
@@ -367,7 +442,7 @@ export function TimetableView({
                   applyMove(pendingMove.event, pendingMove.target, scope);
                   setPendingMove(null);
                 }}
-                className="bg-surface text-title cursor-pointer rounded-[10px] px-3.5 py-2.5 text-left text-[13.5px] font-semibold"
+                className="bg-surface text-title cursor-pointer rounded-[10px] px-3.5 py-3.5 text-left text-[13.5px] font-semibold lg:py-2.5"
                 style={{ boxShadow: "var(--ring)" }}
               >
                 {label}
@@ -379,7 +454,7 @@ export function TimetableView({
 
       {flash && (
         <div
-          className="plr-toast fixed right-8 bottom-8 z-40 flex items-center gap-2.5 rounded-xl px-4 py-3"
+          className="plr-toast fixed inset-x-4 bottom-4 z-40 flex items-center gap-2.5 rounded-xl px-4 py-3 sm:inset-x-auto sm:right-8 sm:bottom-8"
           style={{
             background: "var(--surface)",
             boxShadow: "var(--ring), var(--shadow-float)",
@@ -391,14 +466,14 @@ export function TimetableView({
             color={flash.bad ? "var(--red)" : "#4e7d3a"}
             stroke={2}
           />
-          <span className="text-title max-w-[320px] text-[13.5px] font-semibold">
+          <span className="text-title min-w-0 flex-1 text-[13.5px] font-semibold sm:max-w-[320px] sm:flex-none">
             {flash.text}
           </span>
           <button
             type="button"
             onClick={() => setFlash(null)}
             aria-label="Dismiss"
-            className="ml-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg"
+            className="-mr-1.5 ml-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:mr-0 sm:h-6 sm:w-6"
           >
             <Icon name="x" size={13} color="var(--muted)" />
           </button>
