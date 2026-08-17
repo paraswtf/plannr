@@ -25,7 +25,10 @@ export interface DayCalendarEvent {
   lines?: string[];
 }
 
-const GUTTER = 58;
+/** Width of the hour column down the left. Shared with the loading state. */
+export const GUTTER = 58;
+/** Pixels per hour. Shared, so a skeleton cannot be a different day's height. */
+export const ROW_HEIGHT = 84;
 /** Enough for a title even on a fifteen-minute sitting. */
 const MIN_BLOCK = 26;
 const PADDING = 16;
@@ -38,7 +41,7 @@ export function DayCalendar({
   now,
   /** Whether the day on screen is the one the clock is in. */
   isToday = true,
-  rowHeight = 84,
+  rowHeight = ROW_HEIGHT,
   onEventClick,
 }: {
   events: DayCalendarEvent[];
@@ -51,7 +54,6 @@ export function DayCalendar({
   const nowRef = useRef<HTMLDivElement>(null);
 
   const { startHour, endHour } = dayWindow(events, isToday ? now : null, timeZone);
-  const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
   const height = (endHour - startHour) * rowHeight;
 
   const nowHour = decimalHour(now, timeZone);
@@ -71,39 +73,7 @@ export function DayCalendar({
 
   return (
     <div className="relative" style={{ height }}>
-      {/* Hour labels and the lines they name */}
-      {hours.map((hour) => (
-        <div key={hour}>
-          <div
-            className="text-faint absolute -translate-y-1/2 font-mono text-[11px]"
-            style={{ top: (hour - startHour) * rowHeight, left: 0, width: GUTTER - 12 }}
-          >
-            <span className="block text-right">
-              {formatHourLabel(new Date(Date.UTC(2000, 0, 1, hour, 0)), "UTC")}
-            </span>
-          </div>
-          <div
-            className="absolute right-0"
-            style={{
-              top: (hour - startHour) * rowHeight,
-              left: GUTTER,
-              boxShadow: "inset 0 1px 0 var(--hair-soft)",
-              height: 1,
-            }}
-          />
-          {hour < endHour && (
-            <div
-              className="absolute right-0"
-              style={{
-                top: (hour - startHour + 0.5) * rowHeight,
-                left: GUTTER,
-                boxShadow: "inset 0 1px 0 rgba(68,88,121,0.05)",
-                height: 1,
-              }}
-            />
-          )}
-        </div>
-      ))}
+      <HourGrid startHour={startHour} endHour={endHour} rowHeight={rowHeight} />
 
       {packOverlaps(events).map(({ event, column, columns }) => {
         const from = decimalHour(event.start, timeZone);
@@ -184,5 +154,68 @@ export function DayCalendar({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The hours down the side and the lines they name.
+ *
+ * Its own component so the loading state can draw the identical frame: the
+ * point of a skeleton is that nothing moves when the real thing replaces it,
+ * and two copies of this arithmetic would drift the first time one changed.
+ */
+export function HourGrid({
+  startHour,
+  endHour,
+  rowHeight = ROW_HEIGHT,
+}: {
+  startHour: number;
+  endHour: number;
+  rowHeight?: number;
+}) {
+  const hours = Array.from(
+    { length: endHour - startHour + 1 },
+    (_, i) => startHour + i,
+  );
+
+  return (
+    <>
+      {hours.map((hour) => (
+        <div key={hour}>
+          <div
+            className="text-faint absolute -translate-y-1/2 font-mono text-[11px]"
+            style={{
+              top: (hour - startHour) * rowHeight,
+              left: 0,
+              width: GUTTER - 12,
+            }}
+          >
+            <span className="block text-right">
+              {formatHourLabel(new Date(Date.UTC(2000, 0, 1, hour, 0)), "UTC")}
+            </span>
+          </div>
+          <div
+            className="absolute right-0"
+            style={{
+              top: (hour - startHour) * rowHeight,
+              left: GUTTER,
+              boxShadow: "inset 0 1px 0 var(--hair-soft)",
+              height: 1,
+            }}
+          />
+          {hour < endHour && (
+            <div
+              className="absolute right-0"
+              style={{
+                top: (hour - startHour + 0.5) * rowHeight,
+                left: GUTTER,
+                boxShadow: "inset 0 1px 0 rgba(68,88,121,0.05)",
+                height: 1,
+              }}
+            />
+          )}
+        </div>
+      ))}
+    </>
   );
 }

@@ -416,7 +416,17 @@ export const timetableRouter = createTRPCRouter({
   mySchedule: protectedProcedure
     .input(
       z.object({
-        date: z.date(),
+        /**
+         * The day to show. Left out, the server answers with the day the next
+         * class falls on, which is what the screen opens on — the question
+         * somebody arriving at their schedule is actually asking is "where do I
+         * have to be next", and on a Friday evening the answer is not Friday.
+         *
+         * Deciding it here rather than in the browser is what keeps it to one
+         * round trip: the page is rendered on the server, and a client that had
+         * to ask for the day first would render today, then jump.
+         */
+        date: z.date().optional(),
         viewAs: z.enum(PERSPECTIVES).optional(),
         /** Somebody else's day, for whoever is entitled to look at it. */
         asUserId: z.string().cuid().optional(),
@@ -424,8 +434,6 @@ export const timetableRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const timeZone = await orgTimezone(ctx.db, ctx.orgId);
-      const from = startOfLocalDay(input.date, timeZone);
-      const to = endOfLocalDay(input.date, timeZone);
 
       // Looking at somebody else is a permission rather than a perspective, and
       // a stricter one than seeing the timetable: it needs the right to know
@@ -492,18 +500,31 @@ export const timetableRouter = createTRPCRouter({
           }
         : null;
 
-      const base = { timeZone, from, to, views, viewAs, viewingAs, detail };
-      if (!detail) return { ...base, occurrences: [] as ScheduleDto[] };
-
-      const groupIds = profiles.student?.memberships.map((m) => m.groupId) ?? [];
+      // Which occurrences count as this person's, whichever day is shown. Built
+      // before the day is settled, because with no date asked for the day is
+      // worked out *from* these — there is no "my next class" without knowing
+      // first which classes are mine.
       const belongs: object[] = [];
-      if (detail.scope !== "teaching" && groupIds.length > 0) {
-        belongs.push({ groupId: { in: groupIds } });
+      if (detail) {
+        const groupIds =
+          profiles.student?.memberships.map((m) => m.groupId) ?? [];
+        if (detail.scope !== "teaching" && groupIds.length > 0) {
+          belongs.push({ groupId: { in: groupIds } });
+        }
+        if (detail.scope !== "attending" && profiles.faculty) {
+          belongs.push({ facultyId: profiles.faculty.id });
+        }
       }
-      if (detail.scope !== "attending" && profiles.faculty) {
-        belongs.push({ facultyId: profiles.faculty.id });
-      }
-      if (belongs.length === 0) return { ...base, occurrences: [] as ScheduleDto[] };
+
+      const anchor =
+        input.date ?? (await nextClassMoment(ctx.db, ctx.orgId, belongs));
+      const from = startOfLocalDay(anchor, timeZone);
+      const to = endOfLocalDay(anchor, timeZone);
+
+      const base = { timeZone, from, to, views, viewAs, viewingAs, detail };
+      // No detail means no perspective, which means nothing is theirs to see.
+      if (belongs.length === 0)
+        return { ...base, occurrences: [] as ScheduleDto[] };
 
       const occurrences = await ctx.db.eventOccurrence.findMany({
         where: {
@@ -546,6 +567,41 @@ export const timetableRouter = createTRPCRouter({
       return (occurrences as OccurrenceRow[]).map(toDto);
     }),
 });
+
+/**
+ * When the next class this person is involved in happens, or now if there is none.
+ *
+ * "Next" is measured by the end rather than the start, so a lecture already
+ * running still counts as the one you are going to. Anchoring on the start
+ * would send somebody sitting in a Tuesday afternoon lecture to Wednesday.
+ *
+ * Ordered by start, though: among everything not yet finished, the next one is
+ * the one that begins soonest, which is not the same as the one that ends
+ * soonest once a long sitting overlaps a short one.
+ *
+ * Returns a moment rather than a day because the caller knows the timezone the
+ * day should be cut on, and doing that arithmetic twice is how the two disagree.
+ */
+async function nextClassMoment(
+  db: Db,
+  orgId: string,
+  belongs: object[],
+): Promise<Date> {
+  const now = new Date();
+  if (belongs.length === 0) return now;
+
+  const next = await db.eventOccurrence.findFirst({
+    where: {
+      orgId,
+      status: { in: [...OCCUPYING_STATUSES] },
+      end: { gt: now },
+      OR: belongs,
+    },
+    select: { start: true },
+    orderBy: { start: "asc" },
+  });
+  return next?.start ?? now;
+}
 
 type Scope =
   | { kind: "student"; groupIds: string[] }

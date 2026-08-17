@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { startOfLocalDay } from "~/lib/dates";
 import { PermissionBitField, SYSTEM_ROLES } from "~/lib/permissions";
 import { appRouter } from "~/server/api/root";
 import { createCallerFactory } from "~/server/api/trpc";
@@ -308,5 +309,126 @@ describe("the people who can be looked at", () => {
   it("is closed to a lecturer and to a student", async () => {
     await expect(callerFor(lecturer).timetable.peopleWithSchedules({})).rejects.toThrow(/permission/i);
     await expect(callerFor(learner).timetable.peopleWithSchedules({})).rejects.toThrow(/permission/i);
+  });
+});
+
+/**
+ * Which day the screen opens on.
+ *
+ * Asked for no date, the server answers with the day the next class falls on.
+ * The rule is measured from the *end* of a sitting rather than its start, so
+ * these tests are mostly about the boundaries: a lecture in progress, a day
+ * whose lectures are over, and a term with nothing left in it at all.
+ *
+ * Everything here is placed relative to the real clock, because that is what
+ * the router compares against — a fixture pinned to a date would pass in
+ * August and fail in September.
+ */
+describe("the day the schedule opens on", () => {
+  const HOUR = 3_600_000;
+
+  /** Puts one class on the timetable for the lecturer and the learner. */
+  async function classAt(start: Date, lengthMs = HOUR) {
+    const end = new Date(start.getTime() + lengthMs);
+    const faculty = await db.facultyProfile.findUniqueOrThrow({
+      where: { userId: lecturer.id },
+      select: { id: true },
+    });
+    const event = await db.event.create({
+      data: {
+        orgId,
+        roomId,
+        groupId,
+        facultyId: faculty.id,
+        title: "The Next One",
+        kind: "CLASS",
+        status: "CONFIRMED",
+        startTime: start,
+        endTime: end,
+        timezone: TZ,
+      },
+    });
+    await db.eventOccurrence.create({
+      data: {
+        orgId,
+        eventId: event.id,
+        start,
+        end,
+        roomId,
+        groupId,
+        facultyId: faculty.id,
+        kind: "CLASS",
+        status: "CONFIRMED",
+      },
+    });
+    return { start, end };
+  }
+
+  it("opens on the day of the next class rather than on today", async () => {
+    const later = new Date(Date.now() + 3 * 24 * HOUR);
+    await classAt(later);
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(later, TZ));
+    expect(day.occurrences.map((o) => o.title)).toEqual(["The Next One"]);
+  });
+
+  it("stays on today while a class is still to come", async () => {
+    // Two hours out, and far enough from midnight that "today" is unambiguous.
+    const soon = new Date(Date.now() + 2 * HOUR);
+    await classAt(soon);
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(soon, TZ));
+  });
+
+  it("counts a class already running as the one you are going to", async () => {
+    // Started ten minutes ago. Anchoring on the start instead of the end would
+    // send somebody sitting in this lecture to tomorrow.
+    const started = new Date(Date.now() - 10 * 60_000);
+    await classAt(started, HOUR);
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(started, TZ));
+    expect(day.occurrences.map((o) => o.title)).toContain("The Next One");
+  });
+
+  it("falls back to today when nothing is left on the timetable", async () => {
+    // The only class in the fixture is in the past.
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(new Date(), TZ));
+    expect(day.occurrences).toEqual([]);
+  });
+
+  it("gives today to somebody with no classes of their own", async () => {
+    await classAt(new Date(Date.now() + 3 * 24 * HOUR));
+
+    // The coordinator attends nothing and teaches nothing, so there is no next
+    // class to find and no reason to move them off today.
+    const day = await callerFor(coordinator).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(new Date(), TZ));
+  });
+
+  it("ignores a cancelled class when working out the next one", async () => {
+    const soon = new Date(Date.now() + 2 * HOUR);
+    const { start, end } = await classAt(soon);
+    await db.eventOccurrence.updateMany({
+      where: { orgId, start, end },
+      data: { status: "CANCELLED" },
+    });
+    const later = new Date(Date.now() + 4 * 24 * HOUR);
+    await classAt(later);
+
+    const day = await callerFor(learner).timetable.mySchedule({});
+    expect(day.from).toEqual(startOfLocalDay(later, TZ));
+  });
+
+  it("still shows exactly the day it is given", async () => {
+    await classAt(new Date(Date.now() + 3 * 24 * HOUR));
+
+    // An explicit date is the day-stepper, and it must never be second-guessed.
+    const day = await callerFor(learner).timetable.mySchedule({ date: DAY });
+    expect(day.from).toEqual(startOfLocalDay(DAY, TZ));
+    expect(day.occurrences.map((o) => o.title)).toEqual(["Scheduling, Applied"]);
   });
 });

@@ -20,6 +20,8 @@ import {
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { DayCalendar } from "./day-calendar";
+import { dayWindow } from "./day-layout";
+import { DaySkeleton } from "./day-skeleton";
 
 type Schedule = RouterOutputs["timetable"]["mySchedule"];
 
@@ -47,6 +49,19 @@ export function ScheduleView({
   const utils = api.useUtils();
 
   const [date, setDate] = useState(() => new Date(initial.from));
+  /**
+   * Whether the day on screen was chosen by the person reading it.
+   *
+   * The screen opens on the day of the next class, which on a Friday evening is
+   * Monday — a jump nobody asked for and, unexplained, one that reads as the
+   * app having lost today. Saying so is only honest until they move the day
+   * themselves, after which it is their choice and needs no caption.
+   */
+  const [moved, setMoved] = useState(false);
+  const goTo = (day: Date) => {
+    setMoved(true);
+    setDate(day);
+  };
   /** Whose day is on screen, when it is not your own. */
   const [asUserId, setAsUserId] = useState<string | null>(null);
   const [pickingPerson, setPickingPerson] = useState(false);
@@ -65,21 +80,46 @@ export function ScheduleView({
     asUserId === null &&
     date.getTime() === new Date(initial.from).getTime();
 
-  const { data } = api.timetable.mySchedule.useQuery(
-    { date, viewAs: viewAs ?? undefined, asUserId: asUserId ?? undefined },
-    {
-      initialData: isRendered ? initial : undefined,
-      // Keep the day on screen while the next one loads, rather than blinking.
-      placeholderData: (previous) => previous,
-      refetchInterval: 60_000,
-      refetchOnWindowFocus: true,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isError, refetch } =
+    api.timetable.mySchedule.useQuery(
+      { date, viewAs: viewAs ?? undefined, asUserId: asUserId ?? undefined },
+      {
+        initialData: isRendered ? initial : undefined,
+        // The previous day's response is held on to, but only for the frame it
+        // came in: the timezone, the perspectives on offer, whose day this is.
+        // None of those change from one day to the next, so keeping them stops
+        // the toolbar collapsing and rebuilding on every step.
+        //
+        // The classes are a different matter and are hidden until they are this
+        // day's — see `stale` below.
+        placeholderData: (previous) => previous,
+        refetchInterval: 60_000,
+        refetchOnWindowFocus: true,
+      },
+    );
+
+  /**
+   * Whether what is in `data` belongs to the day (or person) now being asked
+   * about. Placeholder data is the previous key's answer, and a previous day's
+   * lectures drawn under today's date cannot be told apart from real ones — so
+   * while this is true the calendar gives way to a skeleton rather than lying
+   * quietly.
+   */
+  const stale = isPending || isPlaceholderData;
 
   const timeZone = data?.timeZone ?? "Asia/Kolkata";
   const views = data?.views ?? [];
   const detail = data?.detail ?? null;
   const classes = data?.occurrences ?? [];
+
+  // The hours the day spans. Taken from whatever is in hand — the previous day
+  // while the next loads — because the skeleton and the calendar have to agree
+  // on the page's height or the switch shows up as a jump.
+  const frame = dayWindow(
+    classes,
+    isSameLocalDay(date, now, timeZone) ? now : null,
+    timeZone,
+  );
 
   const bits = new PermissionBitField(BigInt(permissions));
   const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
@@ -109,16 +149,25 @@ export function ScheduleView({
           title="Schedule"
           subtitle={[
             viewingAs ? `${viewingAs.name}'s day` : null,
-            classes.length > 0
-              ? `${classes.length} class${classes.length === 1 ? "" : "es"}`
-              : "Nothing scheduled",
+            // Why the screen is not on today. Drops away the moment the day is
+            // stepped by hand, because from then on it is not a surprise.
+            !moved && !isSameLocalDay(date, now, timeZone)
+              ? "Opened on the next class"
+              : null,
+            // The count is the previous day's until the new one lands, and
+            // "4 classes" above an empty calendar is the same lie in words.
+            stale
+              ? "Loading…"
+              : classes.length > 0
+                ? `${classes.length} class${classes.length === 1 ? "" : "es"}`
+                : "Nothing scheduled",
           ]
             .filter(Boolean)
             .join(" · ")}
         />
         <div className="px-9 pt-3 pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <DayNavigator date={date} timeZone={timeZone} onChange={setDate} />
+            <DayNavigator date={date} timeZone={timeZone} onChange={goTo} />
 
             {(views.length > 1 || canViewOthers) && (
               <div className="flex flex-wrap items-center gap-2">
@@ -191,7 +240,39 @@ export function ScheduleView({
             )}
           </div>
 
-          {classes.length > 0 && detail ? (
+          {stale ? (
+            // Sized from the window the last day left behind, so the page does
+            // not change height underneath whoever is reading it.
+            <DaySkeleton startHour={frame.startHour} endHour={frame.endHour} />
+          ) : isError && !data ? (
+            /*
+              A failed request is not an empty day. Without this branch the
+              screen falls through to the card below and says "You have no
+              classes of your own", which is the same untruth the skeleton was
+              added to stop — stated with more confidence, because it reads as
+              an answer rather than a wait.
+
+              Not folded into `stale`: a skeleton that spins for ever is worse
+              than either. An error has to say it is an error.
+            */
+            <Card>
+              <p className="text-title m-0 text-[14px] font-semibold">
+                This day could not be loaded.
+              </p>
+              <p className="text-muted mt-1 mb-3 text-[13px]">
+                Nothing is wrong with your timetable — the request did not get
+                through. It will try again on its own in a minute.
+              </p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
+                style={{ background: "rgba(68,88,121,0.07)", color: "var(--slate)" }}
+              >
+                Try again now
+              </button>
+            </Card>
+          ) : classes.length > 0 && detail ? (
             <DayCalendar
               events={classes.map((o) => ({
                 id: o.occurrenceId,

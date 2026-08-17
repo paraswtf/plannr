@@ -17,7 +17,10 @@ export default async function SchedulePage() {
   if (!session?.user) redirect("/login");
   if (!canOpen(BigInt(session.user.permissions), "/schedule")) redirect("/");
 
-  const initial = await api.timetable.mySchedule({ date: new Date() });
+  // No date: the screen opens on the day of the next class rather than on
+  // today, so an evening or a weekend shows the day being asked about instead
+  // of an empty one. The server sends back which day it chose as `from`.
+  const initial = await api.timetable.mySchedule({});
 
   return (
     <ScheduleView initial={initial} permissions={session.user.permissions} />
