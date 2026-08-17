@@ -51,3 +51,6 @@ yarn-error.log*
 
 # idea files
 .idea
+
+# personal scratch notes, not the project's issue tracker
+todo.md
