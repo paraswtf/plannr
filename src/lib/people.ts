@@ -18,10 +18,10 @@
  * Matched in full rather than by its `.invalid` TLD, even though RFC 2606 makes
  * the whole TLD unresolvable. The demo seed and the integration fixtures sit at
  * `plannr-demo.invalid` on purpose — reserved so a demo row can never be
- * claimed by whoever really owns that address — and those 27 people, the admin
- * and every seeded lecturer among them, do have addresses: it is what sign-in
- * links their account by. Reading the TLD alone told all of them the college
- * owed them an address.
+ * claimed by whoever really owns that address — and those people, the seeded
+ * admin and every seeded lecturer among them, do have addresses: it is what
+ * sign-in links their account by. Reading the TLD alone told all of them the
+ * college owed them an address, and hid them from the people search.
  *
  * Kept in step with NO_ADDRESS_DOMAIN in prisma/import-students.ts, which is
  * deliberately not imported: prisma/ holds scripts run by hand against a
@@ -37,7 +37,8 @@ export function contactAddress(
   email: string | null | undefined,
 ): string | null {
   const address = email?.trim() ?? "";
-  if (!address || address.toLowerCase().endsWith(NO_ADDRESS_DOMAIN)) return null;
+  if (!address || address.toLowerCase().endsWith(NO_ADDRESS_DOMAIN))
+    return null;
   return address;
 }
 
