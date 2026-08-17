@@ -29,17 +29,23 @@ export function Badge({
   dot?: boolean;
 }) {
   return (
+    // `whitespace-nowrap` keeps a badge on one line, but on its own it also lets
+    // one long enough to beat its container push the page sideways — role names
+    // are typed by an administrator and run to 60 characters, and on a 390px
+    // phone a single one of those is wider than the card holding it. The cap and
+    // the truncation bound it to whatever room it is given; the dot is held at
+    // its size so the label is what gives way.
     <span
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold whitespace-nowrap"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold whitespace-nowrap"
       style={TONES[tone]}
     >
       {dot && (
         <span
-          className="h-[6px] w-[6px] rounded-full"
+          className="h-[6px] w-[6px] shrink-0 rounded-full"
           style={{ background: DOT_COLOR[tone] ?? "currentColor" }}
         />
       )}
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   );
 }

@@ -66,7 +66,13 @@ export function EntityCardBody({ card }: { card: EntityCard }) {
     <>
       {card.avatar && <EntityCardAvatar avatar={card.avatar} />}
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
+        {/*
+         * Badges never shrink, so on a narrow result the title would otherwise
+         * truncate away to nothing to make room for them. Letting the row wrap
+         * drops them onto a second line instead, and costs nothing where there
+         * is space for one.
+         */}
+        <span className="flex flex-wrap items-center gap-1.5">
           <span className="text-title min-w-0 flex-1 truncate text-[13px] font-semibold">
             {card.title}
           </span>

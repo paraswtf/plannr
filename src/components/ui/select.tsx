@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Icon } from "./icon";
+import { Popover } from "./popover";
 
 /**
  * A short list of choices, drawn the way the rest of the app is drawn.
@@ -106,36 +107,11 @@ export function Select<T extends string | number>({
     }
   };
 
-  // Clicking away closes the popover; without this it survives until the next
-  // toggle, which reads as the control being stuck open.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
-  // Escape closes the list and goes no further. Taken during the capture phase
-  // because a dialog wrapping this control listens for escape on the document,
-  // and dismissing a dropdown must not dismiss the form behind it.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      setOpen(false);
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [open]);
-
   const pad =
     size === "sm" ? "px-2.5 py-1 text-[12px]" : "px-3 py-2 text-[13px]";
 
   return (
-    <div className={`relative ${className ?? ""}`} ref={boxRef}>
+    <div className={className} ref={boxRef}>
       <button
         type="button"
         aria-label={ariaLabel}
@@ -143,10 +119,12 @@ export function Select<T extends string | number>({
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKeyDown}
-        className={`bg-surface text-ink flex w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] text-left font-medium ${pad}`}
+        className={`bg-surface text-ink flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] text-left font-medium lg:min-h-0 ${pad}`}
         style={{ boxShadow: "var(--ring)" }}
       >
-        <span className={selected ? "text-title truncate" : "text-faint"}>
+        <span
+          className={`min-w-0 truncate ${selected ? "text-title" : "text-faint"}`}
+        >
           {selected?.label ?? placeholder}
         </span>
         <Icon
@@ -156,64 +134,63 @@ export function Select<T extends string | number>({
         />
       </button>
 
-      {open && (
-        <div
-          role="listbox"
-          aria-label={ariaLabel}
-          className="bg-surface plr-scroll absolute z-30 mt-1 max-h-[280px] w-full min-w-max overflow-y-auto rounded-[10px] p-1.5"
-          style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
-          // Callers put this inside a <label>, and a <button> is labelable:
-          // without this, picking a row would also forward a click to the
-          // trigger and pop the list straight back open.
-          onClick={(e) => e.preventDefault()}
-        >
-          {options.map((option, i) => {
-            const isSelected = option.value === value;
-            return (
-              <div
-                key={String(option.value)}
-                role="option"
-                aria-selected={isSelected}
-                aria-disabled={option.disabled}
-                onMouseEnter={() => setActive(i)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(i)}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
-                style={{
-                  background: option.disabled
-                    ? "transparent"
-                    : isSelected
-                      ? "rgba(68,88,121,0.08)"
-                      : i === active
-                        ? "rgba(68,88,121,0.06)"
-                        : "transparent",
-                  cursor: option.disabled ? "not-allowed" : "pointer",
-                  opacity: option.disabled ? 0.45 : 1,
-                }}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="text-title block truncate text-[12.5px] font-medium">
-                    {option.label}
-                  </span>
-                  {option.hint && (
-                    <span className="text-faint block truncate text-[11px]">
-                      {option.hint}
-                    </span>
-                  )}
+      <Popover
+        open={open}
+        anchorRef={boxRef}
+        onClose={() => setOpen(false)}
+        role="listbox"
+        ariaLabel={ariaLabel}
+        // Wide enough for the longest label and never narrower than the
+        // control; 280px is as tall as it goes before it scrolls. Both used to
+        // be classes, and both have to be numbers now: the panel is placed in
+        // the window rather than in the control, so the placement is what
+        // shrinks them when the window has less room than they asked for.
+        match="min-width"
+        maxHeight={280}
+        className="bg-surface plr-scroll w-max overflow-y-auto rounded-[10px] p-1.5"
+        style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+      >
+        {options.map((option, i) => {
+          const isSelected = option.value === value;
+          return (
+            <div
+              key={String(option.value)}
+              role="option"
+              aria-selected={isSelected}
+              aria-disabled={option.disabled}
+              onMouseEnter={() => setActive(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(i)}
+              className="flex min-h-10 items-center gap-2 rounded-lg px-2.5 py-1.5 lg:min-h-0"
+              style={{
+                background: option.disabled
+                  ? "transparent"
+                  : isSelected
+                    ? "rgba(68,88,121,0.08)"
+                    : i === active
+                      ? "rgba(68,88,121,0.06)"
+                      : "transparent",
+                cursor: option.disabled ? "not-allowed" : "pointer",
+                opacity: option.disabled ? 0.45 : 1,
+              }}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="text-title block truncate text-[12.5px] font-medium">
+                  {option.label}
                 </span>
-                {isSelected && (
-                  <Icon
-                    name="check"
-                    size={12}
-                    color="var(--slate)"
-                    stroke={3}
-                  />
+                {option.hint && (
+                  <span className="text-faint block truncate text-[11px]">
+                    {option.hint}
+                  </span>
                 )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+              </span>
+              {isSelected && (
+                <Icon name="check" size={12} color="var(--slate)" stroke={3} />
+              )}
+            </div>
+          );
+        })}
+      </Popover>
     </div>
   );
 }

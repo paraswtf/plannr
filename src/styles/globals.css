@@ -102,6 +102,42 @@ html {
   background: var(--paper);
 }
 
+/*
+ * Text fields are 16px on a touch screen, whatever the component asked for.
+ *
+ * Not a taste decision. iOS Safari zooms the viewport in when a field smaller
+ * than 16px takes focus, and does not zoom back out — so one tap on a search
+ * box leaves the page genuinely wider than the screen until the reader pinches
+ * it back, which is the exact fault the responsive pass exists to remove. The
+ * app's fields are 12–13.5px throughout, so every one of them does it.
+ *
+ * Keyed on `pointer: coarse` rather than a width, because it is the input
+ * device that decides whether this happens, not how wide the window is: a
+ * narrow desktop window has no such behaviour and keeps the smaller type.
+ */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/*
+ * Height of the bar that carries the hamburger on small screens. Anything
+ * sticking to the top of a page — the page headers, the calendar's day rows —
+ * offsets by this instead of hardcoding it, so the two cannot disagree. Above
+ * the sidebar's breakpoint the bar is gone and the offset collapses to nothing.
+ */
+:root {
+  --topbar-h: 52px;
+}
+@media (min-width: 1024px) {
+  :root {
+    --topbar-h: 0px;
+  }
+}
+
 body {
   font-family: var(--font-body);
   color: var(--app-ink);

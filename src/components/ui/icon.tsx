@@ -85,6 +85,21 @@ const PATHS = {
       <path d="M18 6 6 18" />
     </>
   ),
+  menu: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </>
+  ),
+  /** Points at the edge the sidebar folds towards; flipped when it is folded. */
+  panelFold: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M10 4v16" />
+      <path d="M6.6 10.2 5 12l1.6 1.8" />
+    </>
+  ),
   alert: (
     <>
       <path d="M12 3.5 22 20H2z" />

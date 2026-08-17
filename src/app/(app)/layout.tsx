@@ -1,6 +1,7 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { AppShell } from "~/components/app/shell/app-shell";
+import { AppShell, NAV_COOKIE } from "~/components/app/shell/app-shell";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 import { HydrateClient } from "~/trpc/server";
@@ -23,9 +24,15 @@ export default async function AppLayout({
     select: { name: true },
   });
 
+  // Read here rather than in the browser so the sidebar is rendered the width
+  // it is about to be; discovered after paint, every page would start wide and
+  // visibly snap shut.
+  const folded = (await cookies()).get(NAV_COOKIE)?.value === "folded";
+
   return (
     <HydrateClient>
       <AppShell
+        defaultFolded={folded}
         permissions={session.user.permissions}
         roleNames={session.user.roles.map((r) => r.name)}
         orgName={org?.name ?? "Plannr"}

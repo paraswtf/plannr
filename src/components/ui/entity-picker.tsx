@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { EntityCardBody, type EntityCard } from "./entity-card";
 import { Icon } from "./icon";
+import { Popover } from "./popover";
 
 export type { EntityCard } from "./entity-card";
 export { initialsOf } from "./entity-card";
@@ -127,16 +128,25 @@ export function EntityPicker({
           selected.map((s) => (
             <span
               key={s.id}
-              className="inline-flex items-center gap-1.5 rounded-full py-1.5 pr-2 pl-3 text-[12.5px] font-semibold text-white"
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full py-1.5 pr-2 pl-3 text-[12.5px] font-semibold text-white"
               style={{ background: "var(--slate)" }}
             >
-              {s.label}
+              {/*
+               * A chip is one line, and a room or group with a long name is
+               * not: left to itself the label would push the chip wider than
+               * the screen. It gives way instead, and the remove button's
+               * accessible name still carries it in full.
+               */}
+              <span className="min-w-0 truncate">{s.label}</span>
               {!disabled && (
                 <button
                   type="button"
                   onClick={() => toggle(s.id)}
                   aria-label={`Remove ${s.label}`}
-                  className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full"
+                  // The cross stays the size the chip was drawn at; what grows
+                  // for a finger is an invisible pad around it, since a 40px
+                  // button would be taller than the chip holding it.
+                  className="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full before:absolute before:-inset-2.5 before:content-['']"
                   style={{ background: "rgba(255,255,255,0.25)" }}
                 >
                   <Icon name="x" size={10} color="#fff" stroke={3} />
@@ -162,7 +172,17 @@ export function EntityPicker({
                 setOpen(true);
               }}
               onFocus={() => setOpen(true)}
-              onKeyDown={onKeyDown}
+              onKeyDown={(e) => {
+                // Escape dismisses the suggestions and stops there. This is the
+                // one list in the file that stays in the page rather than going
+                // through `Popover`, so nothing upstream takes the key for it:
+                // left alone it reaches the dialog listening on the document
+                // and closes the whole form, losing a half-filled booking to a
+                // keypress meant for a dropdown. With the list already down it
+                // is not this control's key to take.
+                if (e.key === "Escape" && open) e.stopPropagation();
+                onKeyDown(e);
+              }}
               placeholder={placeholder}
               role="combobox"
               aria-expanded={open}
@@ -173,7 +193,10 @@ export function EntityPicker({
                   ? `${base}-opt-${rows[active].id}`
                   : undefined
               }
-              className="bg-surface w-full rounded-[10px] py-2 pr-3 pl-9 text-[13px] outline-none"
+              // Text below 16px makes mobile Safari zoom the page in the moment
+              // the field takes focus, and a zoomed page is one that scrolls
+              // sideways; the pointer size comes back at the first breakpoint.
+              className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:min-h-0 sm:text-[13px]"
               style={{ boxShadow: "var(--ring)" }}
             />
           </div>
@@ -232,7 +255,7 @@ export function EntityPicker({
                     <button
                       type="button"
                       onClick={onLoadMore}
-                      className="text-slate w-full cursor-pointer px-3 py-2 text-[12.5px] font-semibold"
+                      className="text-slate min-h-10 w-full cursor-pointer px-3 py-2 text-[12.5px] font-semibold lg:min-h-0"
                     >
                       Load more ({page.total - rows.length} more)
                     </button>
@@ -294,6 +317,7 @@ export function SearchSelect({
 }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const rows = page?.rows ?? [];
 
   const pick = (id: string | null) => {
@@ -310,125 +334,142 @@ export function SearchSelect({
     () => setOpen(false),
   );
 
-  // Clicking away closes the popover; without this it survives until the next
-  // toggle, which reads as the control being stuck open.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
   const base = listId ?? "search-select";
 
   return (
-    <div className="relative" ref={boxRef}>
+    <div ref={boxRef}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="bg-surface flex w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px]"
+        className="bg-surface flex min-h-10 w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0"
         style={{
           boxShadow: "var(--ring)",
           cursor: disabled ? "default" : "pointer",
         }}
       >
-        <span className={value ? "text-title font-medium" : "text-faint"}>
+        <span
+          className={`min-w-0 truncate ${value ? "text-title font-medium" : "text-faint"}`}
+        >
           {value?.label ?? emptyOption ?? placeholder}
         </span>
         <Icon name="chevronDown" size={14} color="var(--muted)" />
       </button>
 
-      {open && !disabled && (
-        <div
-          className="bg-surface absolute z-30 mt-1 w-full rounded-[10px] p-1.5"
-          style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
-          // Callers wrap this control in a <label>, and a <button> is
-          // labelable: without this, picking a row would also forward a click
-          // to the toggle and pop the list straight back open.
-          onClick={(e) => e.preventDefault()}
-        >
-          <div className="relative mb-1.5">
-            <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
-              <Icon name="search" size={13} color="var(--faint)" />
-            </span>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              role="combobox"
-              aria-expanded={open}
-              aria-controls={`${base}-list`}
-              aria-autocomplete="list"
-              aria-activedescendant={
-                rows[active] ? `${base}-opt-${rows[active].id}` : undefined
+      <Popover
+        open={open && !disabled}
+        anchorRef={boxRef}
+        onClose={() => setOpen(false)}
+        // As wide as the control, as it has always been — `w-full` no longer
+        // says that once the panel hangs off <body>. A column so that the
+        // search box stays put and only the results give ground when the
+        // placement has less height to offer than the list would like.
+        match="width"
+        className="bg-surface flex flex-col rounded-[10px] p-1.5"
+        style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+      >
+        <div className="relative mb-1.5 shrink-0">
+          <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
+            <Icon name="search" size={13} color="var(--faint)" />
+          </span>
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Tab leaves the picker rather than walking its rows. The panel
+              // hangs off <body>, so the stop after this box is whatever ends
+              // the document — the browser's own chrome, not the next field in
+              // the form. Handing the caret back to the control before the key
+              // does its work puts Tab back where the reader expects it.
+              if (e.key === "Tab") {
+                triggerRef.current?.focus();
+                setOpen(false);
+                return;
               }
-              className="bg-paper w-full rounded-lg py-1.5 pr-2 pl-8 text-[12.5px] outline-none"
-            />
-          </div>
-
-          <div
-            id={`${base}-list`}
-            role="listbox"
-            className="plr-scroll max-h-[260px] overflow-y-auto"
-          >
-            {emptyOption && (
-              <button
-                type="button"
-                onClick={() => pick(null)}
-                className="text-muted w-full cursor-pointer rounded-lg px-2.5 py-1.5 text-left text-[12.5px]"
-              >
-                {emptyOption}
-              </button>
-            )}
-            {loading && !page ? (
-              <p className="text-muted p-2 text-[12.5px]">Searching…</p>
-            ) : rows.length > 0 ? (
-              <>
-                {rows.map((o, i) => (
-                  <div
-                    key={o.id}
-                    id={`${base}-opt-${o.id}`}
-                    role="option"
-                    aria-selected={o.id === value?.id}
-                    aria-disabled={o.disabled}
-                    onMouseEnter={() => setActive(i)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => !o.disabled && pick(o.id)}
-                    className="flex items-start gap-2.5 rounded-lg px-2.5 py-2"
-                    style={{
-                      background: o.disabled
-                        ? "transparent"
-                        : rowBackground(o.id === value?.id, i === active),
-                      cursor: o.disabled ? "not-allowed" : "pointer",
-                      opacity: o.disabled ? 0.45 : 1,
-                    }}
-                  >
-                    <EntityCardBody card={toCard(o)} />
-                  </div>
-                ))}
-                {page?.hasMore && (
-                  <button
-                    type="button"
-                    onClick={onLoadMore}
-                    className="text-slate w-full cursor-pointer px-2.5 py-1.5 text-[12px] font-semibold"
-                  >
-                    Load more ({page.total - rows.length} more)
-                  </button>
-                )}
-              </>
-            ) : (
-              <p className="text-muted p-2 text-[12.5px]">No matches.</p>
-            )}
-          </div>
+              onKeyDown(e);
+            }}
+            placeholder={placeholder}
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={`${base}-list`}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              rows[active] ? `${base}-opt-${rows[active].id}` : undefined
+            }
+            // 16px on a phone for the same reason as the multi-select's
+            // field: anything smaller and Safari zooms the page on focus.
+            className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
+          />
         </div>
-      )}
+
+        <div
+          id={`${base}-list`}
+          role="listbox"
+          // 260px of results by choice, and less than that when the placement
+          // had less height to give: a flex child refuses to shrink below its
+          // content unless `min-h-0` says it may, and the one that has to give
+          // way is this one — the search box above it keeps its size.
+          className="plr-scroll max-h-[260px] min-h-0 overflow-y-auto"
+        >
+          {emptyOption && (
+            <button
+              type="button"
+              onClick={() => pick(null)}
+              className="text-muted min-h-10 w-full cursor-pointer rounded-lg px-2.5 py-1.5 text-left text-[12.5px] lg:min-h-0"
+            >
+              {emptyOption}
+            </button>
+          )}
+          {loading && !page ? (
+            <p className="text-muted p-2 text-[12.5px]">Searching…</p>
+          ) : rows.length > 0 ? (
+            <>
+              {rows.map((o, i) => (
+                <div
+                  key={o.id}
+                  id={`${base}-opt-${o.id}`}
+                  role="option"
+                  aria-selected={o.id === value?.id}
+                  aria-disabled={o.disabled}
+                  onMouseEnter={() => setActive(i)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => !o.disabled && pick(o.id)}
+                  className="flex min-h-10 items-start gap-2.5 rounded-lg px-2.5 py-2 lg:min-h-0"
+                  style={{
+                    background: o.disabled
+                      ? "transparent"
+                      : rowBackground(o.id === value?.id, i === active),
+                    cursor: o.disabled ? "not-allowed" : "pointer",
+                    opacity: o.disabled ? 0.45 : 1,
+                  }}
+                >
+                  <EntityCardBody card={toCard(o)} />
+                </div>
+              ))}
+              {page?.hasMore && (
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  // The only control in the panel that leaves it open, and the
+                  // panel hangs off <body>: taking the caret would stop typing
+                  // from reaching the search box above it, and Tab from here
+                  // walks out of the dialog rather than around it.
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="text-slate min-h-10 w-full cursor-pointer px-2.5 py-1.5 text-[12px] font-semibold lg:min-h-0"
+                >
+                  Load more ({page.total - rows.length} more)
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="text-muted p-2 text-[12.5px]">No matches.</p>
+          )}
+        </div>
+      </Popover>
     </div>
   );
 }
