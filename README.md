@@ -79,12 +79,82 @@ asserting exactly that.
 | `npm test` | Unit tests (no database needed) |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
+| `npm run test:integration` | Router tests against the local container only |
 | `npm run db:start` / `db:stop` | Local Postgres container |
+| `npm run db:migrate` | Apply migrations to whatever `DIRECT_URL` points at |
 | `npm run db:seed` | Reset demo data |
 | `npm run db:studio` | Browse the database |
 
 ## Deployment
 
-Vercel plus a Neon Postgres works well. Point `DATABASE_URL` at the pooled
-connection string and `DIRECT_URL` at the direct one, and set the build command
-to `prisma generate && prisma migrate deploy && next build`.
+Vercel for the app, Supabase (`ap-south-1`) for the database.
+
+### The two connection strings
+
+Supabase offers three ways in and the app needs two of them, because a
+serverless runtime and a migration want opposite things from a connection.
+
+| Variable | Port | Why that one |
+| --- | --- | --- |
+| `DATABASE_URL` | `6543` | Transaction pooler. A query borrows a connection and returns it at once, which is how a few hundred lambdas share the ~60 connections Postgres will hand out. It cannot hold a session, so the URL carries `?pgbouncer=true&connection_limit=1` and Prisma stops naming prepared statements it would never see again. |
+| `DIRECT_URL` | `5432` | Session pooler. One connection held for a whole run — what DDL and Prisma's migration advisory lock need. Only `prisma migrate` uses it. |
+
+Both go through `aws-0-ap-south-1.pooler.supabase.com`, not the direct
+`db.<ref>.supabase.co` host: that one resolves to IPv6 only, and Vercel's
+functions cannot dial it without the IPv4 add-on.
+
+`vercel.json` pins functions to `bom1` for the same reason the region is worth
+naming — the database is in Mumbai, sessions are stored in it, and every page
+load costs several round trips. Left on the default US region each of those
+crosses the planet.
+
+### Migrations
+
+The build runs `prisma generate && next build` and deliberately stops there.
+`generate` is not optional: the client is generated to `generated/`, which is
+gitignored, and Vercel's build cache can skip `postinstall` on a redeploy —
+`generate` in the build command is what makes that failure impossible.
+
+`prisma migrate deploy` is left out on purpose. Preview deployments build too,
+and with one Supabase project behind every environment, a migration on a branch
+would land on production the moment somebody opened a pull request. Run it
+yourself when the schema changes:
+
+```bash
+npm run db:migrate
+```
+
+### Environment variables
+
+Set these in Vercel → Settings → Environment Variables. `next.config.js` imports
+`src/env.js`, so the build fails with a named error rather than a broken deploy
+if one is missing.
+
+| Variable | Notes |
+| --- | --- |
+| `DATABASE_URL` | Pooler, port 6543, with `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | Pooler, port 5432 |
+| `AUTH_SECRET` | `npx auth secret`; must be ≥32 chars in production |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From the Google Cloud console |
+| `GOOGLE_WORKSPACE_DOMAIN` | `sicsr.ac.in` — nobody outside it can sign in |
+| `SEED_ADMIN_EMAILS` | Optional; the admin already exists in the database |
+| `NEXT_PUBLIC_APP_URL` | The deployed origin. Defaults to `localhost:3000`, which would put localhost links in outgoing email |
+| `EMAIL_PROVIDER` / `EMAIL_ENABLED` / `EMAIL_FROM` | `console` and `false` are safe defaults |
+
+`AUTH_URL` is not needed: NextAuth trusts the host automatically when `VERCEL`
+is set. On any other host, set `AUTH_TRUST_HOST=true`.
+
+### Google sign-in
+
+Add the deployed callback to the OAuth client's authorised redirect URIs, or
+sign-in fails with `redirect_uri_mismatch`:
+
+```
+https://<your-domain>/api/auth/callback/google
+```
+
+### What is not in the deploy
+
+`data/` — the college's spreadsheets and PDFs, ~122 MB of real student records —
+is gitignored, and nothing under `src/` reads from disk at runtime. The import
+scripts in `prisma/` are run by hand from a laptop, never by the app.

@@ -1,0 +1,19 @@
+# Deploying from Git never sends these, but `vercel` from a laptop uploads the
+# working directory, and this folder is the college's real student records —
+# names, PRNs, phone numbers, ~122 MB of them. Nothing under src/ reads from
+# disk at runtime, so none of it belongs in a deployment either way.
+data/
+
+# Everything here is run by hand against a database from a laptop. The app
+# never imports it, and it reads data/, which is not there.
+prisma/build-roster.ts
+prisma/import-sicsr.ts
+prisma/import-students.ts
+prisma/import-faculty.ts
+prisma/build-courses.ts
+prisma/documents.ts
+prisma/observations.ts
+
+# Local database backups, if one is ever taken here.
+*.dump
+*.sql.gz
