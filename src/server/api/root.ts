@@ -1,4 +1,5 @@
 import { attendanceRouter } from "~/server/api/routers/attendance";
+import { calendarRouter } from "~/server/api/routers/calendar";
 import { coursesRouter } from "~/server/api/routers/courses";
 import { eventsRouter } from "~/server/api/routers/events";
 import { groupsRouter } from "~/server/api/routers/groups";
@@ -27,6 +28,7 @@ export const appRouter = createTRPCRouter({
   users: usersRouter,
   roles: rolesRouter,
   plans: plansRouter,
+  calendar: calendarRouter,
 });
 
 // export type definition of API

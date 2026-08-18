@@ -98,6 +98,7 @@ model Organization {
   attendance      AttendanceSession[]
   importBatches   ImportBatch[]
   schedulePlans   SchedulePlan[]
+  calendarLinks   CalendarConnection[]
 }
 
 model OrgSettings {
@@ -157,6 +158,7 @@ model User {
   planReviews     SchedulePlanReviewer[]
   planComments    SchedulePlanComment[]  @relation("PlanCommenter")
   attendanceTaken AttendanceSession[]    @relation("AttendanceMarker")
+  calendar        CalendarConnection?
 
   @@index([orgId, name])
   @@index([orgId, email])
@@ -973,4 +975,140 @@ model ImportBatch {
   createdAt DateTime @default(now())
 
   @@index([orgId, createdAt])
+}
+
+// ─── Google Calendar sync ───────────────────────────────────────────────────
+
+enum CalendarSyncStatus {
+  /// Tokens are good and work is being drained normally.
+  ACTIVE
+  /// Google refused the refresh token — consent withdrawn, password reset, or
+  /// the account was suspended. Only reconnecting fixes it, so we stop trying.
+  REVOKED
+  /// Switched off by the person themselves. Their mirrored events have been
+  /// removed; the row is kept so reconnecting is one click rather than a
+  /// fresh consent screen.
+  PAUSED
+}
+
+enum CalendarTaskStatus {
+  PENDING
+  DONE
+  /// Out of attempts. Kept rather than deleted: a row that failed twenty times
+  /// is the only evidence of why somebody's calendar is wrong.
+  FAILED
+}
+
+/// One person's connected Google Calendar.
+///
+/// Separate from `Account` on purpose. That row is NextAuth's and describes how
+/// somebody signs in; this one describes a standing permission they granted
+/// afterwards, which they can withdraw without losing their login. Keeping the
+/// two apart is also what lets sign-in stay on the narrow scopes it has always
+/// asked for — see `src/server/services/calendar/oauth.ts`.
+model CalendarConnection {
+  id     String       @id @default(cuid())
+  userId String       @unique
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id])
+
+  /// Google's immutable `sub`. The address can change under a rename; this
+  /// cannot, so it is what tells us the person reconnected a *different*
+  /// account and their old mirrors belong to a calendar we can no longer reach.
+  googleSub   String
+  googleEmail String
+
+  /// Sealed with AES-256-GCM before it ever reaches the database — see
+  /// `calendar/crypto.ts`. A refresh token is a standing write permission on
+  /// somebody's calendar, which is worth more than a session cookie.
+  refreshToken    String
+  accessToken     String?
+  accessExpiresAt DateTime?
+
+  /// The secondary calendar we create and own, never the primary. Deleting it
+  /// in Google is a complete, one-click undo of everything we ever wrote, and
+  /// nothing of theirs is mixed in with it.
+  calendarId String?
+
+  status    CalendarSyncStatus @default(ACTIVE)
+  lastError String?
+  /// When a full pass last completed, which is what the rolling horizon sweep
+  /// orders by — see `sweepStaleConnections`.
+  syncedAt  DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  mirrors CalendarMirror[]
+  tasks   CalendarSyncTask[]
+
+  @@index([status, syncedAt])
+  @@index([orgId])
+}
+
+/// One occurrence, as it currently stands in one person's Google Calendar.
+///
+/// Keyed on `(eventId, originalStart)` rather than on the occurrence id, and
+/// that is not a detail: `regenerateOccurrences` deletes and recreates every
+/// row for an event on any write, so occurrence ids do not survive an edit.
+/// `originalStart` — the slot the recurrence rule produced, before any
+/// exception moved it — does survive, and is what lets a reschedule become a
+/// patch of the same Google event rather than a delete and a re-create that
+/// would throw away the reminder somebody had set on it.
+model CalendarMirror {
+  id           String             @id @default(cuid())
+  connectionId String
+  connection   CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  /// Not a foreign key, and that is the point. A mirror records something that
+  /// exists in *Google*, so it must outlive the local row it came from: cascade
+  /// away the mirror when an event is deleted and the `googleEventId` needed to
+  /// clean up goes with it, leaving a ghost lecture in somebody's calendar for
+  /// ever. Reconcile treats "no occurrences for this event" as "delete these",
+  /// which handles a deleted event and an emptied series identically.
+  eventId       String
+  originalStart DateTime
+
+  /// The id Google gave the event we created.
+  googleEventId String
+  /// Fingerprint of what we last pushed. An occurrence whose digest is
+  /// unchanged costs no API call at all, which is what makes a resync of an
+  /// untouched timetable nearly free.
+  digest        String
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([connectionId, eventId, originalStart])
+  @@index([connectionId])
+  @@index([eventId])
+}
+
+/// Work owed to somebody's calendar: "this person's mirror of this event is out
+/// of date".
+///
+/// Deliberately coarse. A row per *occurrence* would mean 40 rows per student
+/// for one edit to a semester-long class — 2,400 for a lecture of sixty. One
+/// row per (person, event) collapses that to sixty, and the reconcile it
+/// triggers diffs digests, so the fan-out costs writes only where something
+/// actually changed.
+///
+/// The unique constraint is what makes re-dirtying idempotent: editing an event
+/// five times before the cron next runs leaves one pending row, not five.
+model CalendarSyncTask {
+  id           String             @id @default(cuid())
+  connectionId String
+  connection   CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  /// Plain string for the same reason as `CalendarMirror.eventId`: the work of
+  /// removing a deleted event from sixty calendars must survive the deletion.
+  eventId      String
+
+  status        CalendarTaskStatus @default(PENDING)
+  attempts      Int                @default(0)
+  /// Exponential backoff. The drain never picks up a row before this.
+  nextAttemptAt DateTime           @default(now())
+  lastError     String?
+  createdAt     DateTime           @default(now())
+
+  @@unique([connectionId, eventId])
+  @@index([status, nextAttemptAt])
 }

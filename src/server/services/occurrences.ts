@@ -18,6 +18,7 @@ import type {
 import { ExceptionType } from "../../../generated/prisma";
 
 import { expandSeries, hasCount, setCount, setUntil } from "~/lib/recurrence";
+import { enqueueForEvent } from "./calendar/sync";
 
 /** Prisma client or an interactive transaction — services accept either. */
 export type Db = PrismaClient | Prisma.TransactionClient;
@@ -106,6 +107,15 @@ export async function regenerateOccurrences(
   if (rows.length) {
     await db.eventOccurrence.createMany({ data: rows });
   }
+
+  // Everyone whose Google Calendar mirrors this event is now out of date.
+  //
+  // Here, and not in the routers, for the same reason regeneration itself is
+  // here: this function is the one place every write to a series passes
+  // through, so a new caller cannot forget it. It enqueues rows in the caller's
+  // transaction and talks to nobody — the cron does the talking — so a Google
+  // outage can never fail an edit to the timetable.
+  await enqueueForEvent(db, eventId);
 
   return { written: rows.length, prunedExceptions: orphanIds.length };
 }

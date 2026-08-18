@@ -40,6 +40,24 @@ export const env = createEnv({
 
     /** Bearer token guarding /api/cron/outbox. */
     CRON_SECRET: z.string().min(16).optional(),
+
+    // --- Google Calendar sync ---
+    /**
+     * Master switch. Off, nothing is enqueued and the connect button never
+     * appears, so a deployment that has not configured the Cloud console
+     * carries no half-working feature.
+     */
+    GOOGLE_CALENDAR_SYNC_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
+    /**
+     * 32 bytes, base64, sealing the refresh tokens at rest (`openssl rand
+     * -base64 32`). Checked below rather than here, because it is required
+     * only when sync is on — and a missing key must fail at boot rather than
+     * silently write plaintext tokens.
+     */
+    CALENDAR_TOKEN_KEY: z.string().optional(),
   },
 
   /**
@@ -70,6 +88,8 @@ export const env = createEnv({
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     SMTP_URL: process.env.SMTP_URL,
     CRON_SECRET: process.env.CRON_SECRET,
+    GOOGLE_CALENDAR_SYNC_ENABLED: process.env.GOOGLE_CALENDAR_SYNC_ENABLED,
+    CALENDAR_TOKEN_KEY: process.env.CALENDAR_TOKEN_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**
