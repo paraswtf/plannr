@@ -151,18 +151,28 @@ export function DatePicker({
         className={`bg-surface text-title flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] text-left font-medium lg:min-h-0 ${pad}`}
         style={{ boxShadow: "var(--ring)" }}
       >
-        <span className="inline-flex items-center gap-2 truncate">
+        {/*
+          `truncate` has to sit on the text itself. On the row it used to be on
+          it did nothing at all: that row is an inline-flex, and clipping a flex
+          container does not shorten the items inside it — so the date kept its
+          full width and pushed whatever held it. The icons are pinned for the
+          same reason, or they would be squeezed to slivers before the words
+          they sit beside gave up a single character.
+        */}
+        <span className="inline-flex min-w-0 items-center gap-2">
           <Icon
             name="calendar"
             size={size === "sm" ? 13 : 15}
             color="var(--muted)"
+            className="shrink-0"
           />
-          {formatFullDate(value, timeZone)}
+          <span className="truncate">{formatFullDate(value, timeZone)}</span>
         </span>
         <Icon
           name="chevronDown"
           size={size === "sm" ? 12 : 14}
           color="var(--muted)"
+          className="shrink-0"
         />
       </button>
 

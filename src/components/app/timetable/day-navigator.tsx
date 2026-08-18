@@ -48,14 +48,30 @@ export function DayNavigator({
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <div className="flex items-center gap-1.5">
+    // `min-w-0` on every box down this chain, because a flex item's automatic
+    // minimum size is its content: without it the row below cannot be made
+    // narrower than the date it holds, so on a 360px phone this whole navigator
+    // is wider than the screen — and the day strip, sized to the navigator
+    // rather than the window, is the part seen hanging off the edge. The strip
+    // scrolls perfectly well; it was being handed the wrong width to scroll in.
+    // `w-full` only while it is the whole line anyway. Left on at every width it
+    // would take a line of its own on a laptop too, pushing the controls that
+    // used to sit beside it — "view as", the building filter — down a row.
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto">
+      <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
         <Step
           icon="chevronLeft"
           label="Previous day"
           onClick={() => onChange(addDays(day, -1, timeZone))}
         />
+        {/*
+          The one part of the row that gives: the arrows and Today are fixed
+          shapes, so the date is what shortens when there is not enough room,
+          and it has a month grid and a week of tabs either side of it saying
+          the same thing.
+        */}
         <DatePicker
+          className="min-w-0 flex-1 sm:flex-none"
           value={day}
           timeZone={timeZone}
           onChange={onChange}
@@ -70,7 +86,7 @@ export function DayNavigator({
           type="button"
           disabled={isToday}
           onClick={() => onChange(startOfLocalDay(new Date(), timeZone))}
-          className="h-10 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
+          className="h-10 shrink-0 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
           style={{
             background: "rgba(68,88,121,0.07)",
             color: "var(--slate)",
@@ -90,7 +106,7 @@ export function DayNavigator({
        * clip the chosen pill's shadow, which is what the strip's own vertical
        * padding is there to protect.
        */}
-      <div className="w-full sm:w-auto">
+      <div className="w-full min-w-0 sm:w-auto">
         <Segmented
           items={strip}
           value={day.toISOString()}
@@ -121,7 +137,7 @@ function Step({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
+      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
       style={{ background: "rgba(68,88,121,0.07)" }}
     >
       <Icon name={icon} size={14} color="var(--slate)" stroke={2.2} />
