@@ -8,6 +8,7 @@ import {
   permissionProcedure,
   protectedProcedure,
 } from "~/server/api/trpc";
+import { enqueueForEvents } from "~/server/services/calendar/sync";
 import { OCCUPYING_STATUSES } from "~/server/services/conflicts";
 import { GroupKind } from "../../../../generated/prisma";
 
@@ -491,6 +492,16 @@ export const groupsRouter = createTRPCRouter({
         }
         // Occurrences cascade from their events.
         if (eventCount > 0) {
+          // Before the delete, while there is still a record of who was in
+          // these rooms — afterwards nobody could be told the classes are off.
+          const doomed = await tx.event.findMany({
+            where: { groupId: group.id },
+            select: { id: true },
+          });
+          await enqueueForEvents(
+            tx,
+            doomed.map((e) => e.id),
+          );
           await tx.event.deleteMany({ where: { groupId: group.id } });
         }
         await tx.group.delete({ where: { id: group.id } });

@@ -19,6 +19,7 @@ import {
   type Perspective,
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
+import { CalendarSync } from "./calendar-sync";
 import { DayCalendar } from "./day-calendar";
 import { dayWindow } from "./day-layout";
 import { DaySkeleton } from "./day-skeleton";
@@ -187,6 +188,13 @@ export function ScheduleView({
         <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <DayNavigator date={date} timeZone={timeZone} onChange={goTo} />
+
+            {/*
+              Only on your own day. Somebody else's classes are not yours to
+              put in your calendar, and the control would be claiming to sync
+              whatever is currently on screen.
+            */}
+            {!viewingAs && <CalendarSync />}
 
             {(views.length > 1 || canViewOthers) && (
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">

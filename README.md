@@ -103,6 +103,84 @@ Covered by `describe("the day the schedule opens on")` in
 `src/server/api/routers/timetable.integration.test.ts`, which places its classes
 relative to the real clock rather than a fixed date.
 
+## Google Calendar sync
+
+Off unless `GOOGLE_CALENDAR_SYNC_ENABLED=true`. On, anyone can connect their own
+Google account from the schedule screen, and the classes they attend or teach
+are mirrored into a calendar Plannr creates — cancellations and reschedules
+follow within about a minute.
+
+**Opt-in, per person, and separate from signing in.** Sign-in keeps the narrow
+scopes it always had; calendar access is a second consent that most people will
+never grant, and revoking it does not affect their login. The scope asked for is
+`calendar.app.created`, which can only touch calendars this app itself made — we
+are not able to read or write anyone's personal calendar, which is both a
+smaller thing to ask for and a smaller thing to get wrong.
+
+### How it flows
+
+1. Any write to an event funnels through `regenerateOccurrences`, which enqueues
+   one `CalendarSyncTask` per affected person **in the same transaction**. The
+   edit and the obligation to sync commit together or not at all.
+2. `/api/cron/calendar` drains the queue. It is the only place in the app that
+   talks to Google.
+3. Each task **reconciles** rather than replays: it re-derives what that
+   person's calendar should hold and sends only the difference. So a task that
+   runs twice is harmless, one that runs late still converges, and one lost
+   entirely is repaired by the next sweep.
+
+Three details carry most of the weight:
+
+- **Tasks are per (person, event), not per occurrence.** One edit to a
+  semester-long class with sixty students is sixty rows, not 2,400.
+- **Mirrors are keyed on `(eventId, originalStart)`, never the occurrence id** —
+  regeneration reissues those ids on every write. `originalStart` survives, which
+  is what makes a reschedule a *patch* to the same Google event, preserving the
+  reminder someone set on it.
+- **A digest of the rendered body decides whether to call Google at all.** An
+  unchanged class costs one database read and no API call, which is what makes
+  the nightly full resync affordable.
+
+Cancelled classes are retitled `Cancelled — <class>` and marked free rather than
+deleted. A class that silently vanishes is indistinguishable from a sync that
+broke, and the person who never opens Plannr is exactly the one who would turn
+up to an empty room.
+
+### Setup
+
+1. Google Cloud console → **APIs & Services → Library → Google Calendar API →
+   Enable**, on the same project as the sign-in OAuth client.
+2. **Credentials → your OAuth 2.0 Client ID → Authorised redirect URIs**, add
+   `https://<your-domain>/api/calendar/callback` (and the localhost one).
+3. Set `GOOGLE_CALENDAR_SYNC_ENABLED=true`, `CALENDAR_TOKEN_KEY`
+   (`openssl rand -base64 32`) and `CRON_SECRET`.
+4. Deploy. `vercel.json` schedules the drain every minute — **note that Vercel's
+   Hobby plan only permits daily crons**, so anything below Pro will sync once a
+   day rather than once a minute. Nothing else changes; the queue simply waits.
+
+Refresh tokens are sealed with AES-256-GCM before storage
+(`calendar/crypto.ts`): unlike the rest of the schema, that column is a standing
+permission on someone's calendar, redeemable by anyone holding it.
+
+### Known bounds
+
+- **Only ±the horizon is mirrored** — 7 days back, 120 days forward. The window
+  slides, so `sweepStaleConnections` re-queues each connection roughly daily to
+  pull newly-in-range classes in. That sweep is not an optimisation; without it
+  calendars would quietly stop a few months out.
+- **Group membership changes are not hooked**, so a student added to or removed
+  from a section gets the corresponding classes on the next daily sweep rather
+  than immediately. Timetable edits — the ones this feature is about — are
+  immediate.
+- **"Cancel this and following"** truncates the recurrence rule, so those
+  sittings stop existing rather than becoming cancelled rows. They are therefore
+  *removed* from calendars rather than retitled, unlike a single or whole-series
+  cancellation.
+- Entitlement deliberately matches `/schedule` exactly — an occurrence is yours
+  if its group is one of yours or its faculty is you. For a combined lecture
+  that is the primary section only; if that is ever widened, widen
+  `audienceFor` in step or the two screens will disagree.
+
 ## Commands
 
 | Command | What it does |
@@ -111,7 +189,7 @@ relative to the real clock rather than a fixed date.
 | `npm test` | Unit tests (no database needed) |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
-| `npm run test:integration` | Router tests against the local container only |
+| `npm run test:integration` | Router and sync tests against the local container only |
 | `npm run db:start` / `db:stop` | Local Postgres container |
 | `npm run db:migrate` | Apply migrations to whatever `DIRECT_URL` points at |
 | `npm run db:seed` | Reset demo data |

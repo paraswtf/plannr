@@ -7,6 +7,7 @@ import {
   permissionProcedure,
   protectedProcedure,
 } from "~/server/api/trpc";
+import { enqueueForEvents } from "~/server/services/calendar/sync";
 import { OCCUPYING_STATUSES } from "~/server/services/conflicts";
 import { findNextFreeSlot } from "~/server/services/free-slots";
 import { RoomFeature, RoomType } from "../../../../generated/prisma";
@@ -266,7 +267,16 @@ export const roomsRouter = createTRPCRouter({
               `This room has ${eventCount} scheduled event(s). Archive it, or confirm deletion.`,
             );
           }
-          // Occurrences cascade from their events.
+          // Occurrences cascade from their events. Whoever was due in this
+          // room has to be told first — see `enqueueForEvents`.
+          const doomed = await tx.event.findMany({
+            where: { roomId: room.id },
+            select: { id: true },
+          });
+          await enqueueForEvents(
+            tx,
+            doomed.map((e) => e.id),
+          );
           await tx.event.deleteMany({ where: { roomId: room.id } });
         }
 
