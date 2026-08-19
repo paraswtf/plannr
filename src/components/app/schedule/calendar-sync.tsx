@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Dialog } from "~/components/ui/dialog";
@@ -27,9 +27,9 @@ export function CalendarSync() {
   const [open, setOpen] = useState(false);
 
   const { data } = api.calendar.status.useQuery(undefined, {
-    // Work is drained by a cron a minute at a time, so a freshly connected
-    // calendar fills in behind this. Slow enough not to be a poll for its own
-    // sake, quick enough that "catching up" turns into a time.
+    // A freshly connected calendar fills in behind this, whether from the
+    // hourly cron or from somebody pressing "Sync now". Slow enough not to be a
+    // poll for its own sake, quick enough that "catching up" turns into a time.
     refetchInterval: (query) =>
       query.state.data?.connected && query.state.data.pending > 0
         ? 15_000
@@ -45,16 +45,32 @@ export function CalendarSync() {
     onError: () => toast.error("Could not disconnect. Try again in a moment."),
   });
 
+  // A first sync is more work than one request can finish, so the button keeps
+  // asking until the queue is empty. Bounded, because the alternative is a
+  // button that quietly hammers Google for as long as the dialog stays open;
+  // whatever is left over is still queued for the cron.
+  const rounds = useRef(0);
+
   const resync = api.calendar.resync.useMutation({
-    onSuccess: async ({ queued }) => {
-      toast.success(
-        queued > 0
-          ? "Queued. Your calendar catches up within a minute."
-          : "Already up to date.",
-      );
+    onSuccess: async (result) => {
       await utils.calendar.status.invalidate();
+
+      // Nothing claimed with work still owed means the rest is leased or
+      // backing off, and going round again would only burn a request.
+      const worthRetrying = result.remaining > 0 && result.claimed > 0;
+      if (worthRetrying && rounds.current < MAX_SYNC_ROUNDS) {
+        rounds.current += 1;
+        resync.mutate();
+        return;
+      }
+
+      rounds.current = 0;
+      toast.success(summarise(result));
     },
-    onError: () => toast.error("Could not queue a resync."),
+    onError: () => {
+      rounds.current = 0;
+      toast.error("Could not sync. Try again in a moment.");
+    },
   });
 
   // The OAuth round trip comes back to this page with its outcome in the query
@@ -166,11 +182,14 @@ export function CalendarSync() {
                 <button
                   type="button"
                   disabled={resync.isPending}
-                  onClick={() => resync.mutate()}
+                  onClick={() => {
+                    rounds.current = 0;
+                    resync.mutate();
+                  }}
                   className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
                   style={{ background: "rgba(68,88,121,0.07)", color: "var(--slate)" }}
                 >
-                  {resync.isPending ? "Queueing…" : "Sync now"}
+                  {resync.isPending ? "Syncing…" : "Sync now"}
                 </button>
               )}
               <button
@@ -209,6 +228,25 @@ const OUTCOMES: Record<string, string> = {
   disabled: "Google Calendar sync is not switched on for this institution.",
   failed: "Could not connect to Google Calendar. Please try again.",
 };
+
+/** How many times "Sync now" will go back for more before giving up. */
+const MAX_SYNC_ROUNDS = 5;
+
+/**
+ * What to say once the chasing stops.
+ *
+ * "Already up to date" is the common case by far — the digest check means an
+ * unchanged timetable reaches Google not at all — and saying so is more use
+ * than a count of zero.
+ */
+function summarise(result: { changed: number; remaining: number }): string {
+  if (result.remaining > 0) {
+    return `Synced what it could. ${result.remaining} left, finishing on the next pass.`;
+  }
+  return result.changed > 0
+    ? "Calendar updated."
+    : "Already up to date.";
+}
 
 /** "3 minutes ago", give or take — precision here would be false. */
 function relative(at: Date): string {

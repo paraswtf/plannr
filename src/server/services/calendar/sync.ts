@@ -54,6 +54,12 @@ const MAX_ATTEMPTS = 6;
 /** How long a claimed task is hidden from other drains. */
 const LEASE_MS = 5 * 60_000;
 
+/**
+ * How many tasks an inline sync takes at a time. Small, so its clock is
+ * checked often — it is running inside somebody's HTTP request.
+ */
+const INLINE_BATCH = 5;
+
 /** A connection idle longer than this is swept for horizon drift. */
 const RESYNC_AFTER_MS = 20 * 60 * 60_000;
 
@@ -306,7 +312,19 @@ export async function drain(
   db: PrismaClient,
   limit = 50,
 ): Promise<DrainReport> {
-  const report: DrainReport = {
+  const report = emptyReport();
+  if (!syncEnabled()) return report;
+
+  const tasks = await claim(db, limit);
+  report.claimed = tasks.length;
+  await runTasks(db, tasks, report);
+
+  return report;
+}
+
+/** A fresh, zeroed tally. */
+function emptyReport(): DrainReport {
+  return {
     claimed: 0,
     done: 0,
     failed: 0,
@@ -315,11 +333,61 @@ export async function drain(
     patched: 0,
     deleted: 0,
   };
-  if (!syncEnabled()) return report;
+}
 
-  const tasks = await claim(db, limit);
-  report.claimed = tasks.length;
+/**
+ * Brings one person's calendar up to date while they wait for it.
+ *
+ * The cron is what keeps every calendar true. This exists because that cron is
+ * hourly on Hobby (see `vercel.json`), which would leave a button called "sync
+ * now" meaning "sync within the hour". Same claim-reconcile-mark loop, narrowed
+ * to one connection and stopped by a clock rather than a count, because it is
+ * holding an HTTP request open while it runs.
+ *
+ * A first-ever sync is a term of classes and will not fit in one request, so
+ * this deliberately does not try to finish. Whatever is left is still queued
+ * and still leased — the caller is told how much, and the cron completes it
+ * even if they close the tab.
+ */
+export async function drainConnection(
+  db: PrismaClient,
+  connectionId: string,
+  budgetMs = 6_000,
+): Promise<DrainReport & { remaining: number }> {
+  const report = emptyReport();
+  if (!syncEnabled()) return { ...report, remaining: 0 };
 
+  const deadline = Date.now() + budgetMs;
+  // The clock is checked between batches, never inside one: a batch that has
+  // been claimed is always worked to the end rather than abandoned half-done.
+  while (Date.now() < deadline) {
+    const tasks = await claim(db, INLINE_BATCH, connectionId);
+    if (tasks.length === 0) break;
+    report.claimed += tasks.length;
+    await runTasks(db, tasks, report);
+  }
+
+  // Everything still owed, including tasks backing off after a failure. Counted
+  // the same way the `status` query counts it, so the two never disagree in
+  // front of the same person.
+  const remaining = await db.calendarSyncTask.count({
+    where: { connectionId, status: CalendarTaskStatus.PENDING },
+  });
+
+  return { ...report, remaining };
+}
+
+/**
+ * The task loop itself, shared by the cron drain and the inline one.
+ *
+ * Each task is marked as it finishes rather than at the end, which is what lets
+ * either caller be killed mid-pass without losing the work it had done.
+ */
+async function runTasks(
+  db: PrismaClient,
+  tasks: Awaited<ReturnType<typeof claim>>,
+  report: DrainReport,
+): Promise<void> {
   for (const task of tasks) {
     try {
       const counts = await reconcile(db, task.connectionId, task.eventId);
@@ -350,8 +418,6 @@ export async function drain(
       else report.retried += 1;
     }
   }
-
-  return report;
 }
 
 function backoffMs(attempts: number): number {
@@ -366,11 +432,20 @@ function backoffMs(attempts: number): number {
  * tasks to be picked up five minutes later rather than stuck in CLAIMED for
  * ever.
  */
-async function claim(db: PrismaClient, limit: number) {
+async function claim(
+  db: PrismaClient,
+  limit: number,
+  /** Given, only this person's queue is touched. */
+  connectionId?: string,
+) {
   const now = new Date();
   return db.$transaction(async (tx) => {
     const tasks = await tx.calendarSyncTask.findMany({
-      where: { status: CalendarTaskStatus.PENDING, nextAttemptAt: { lte: now } },
+      where: {
+        status: CalendarTaskStatus.PENDING,
+        nextAttemptAt: { lte: now },
+        ...(connectionId ? { connectionId } : {}),
+      },
       orderBy: { nextAttemptAt: "asc" },
       take: limit,
       select: { id: true, connectionId: true, eventId: true, attempts: true },

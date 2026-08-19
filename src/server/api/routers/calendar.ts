@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
   disconnect,
+  drainConnection,
   enqueueFullResync,
   syncEnabled,
 } from "~/server/services/calendar/sync";
@@ -56,20 +57,42 @@ export const calendarRouter = createTRPCRouter({
   }),
 
   /**
-   * Queues a full pass over the caller's own calendar.
+   * Brings the caller's own calendar up to date, now.
    *
-   * Enqueues rather than syncing inline: a term's worth of classes is hundreds
-   * of API calls, which is not something to hold an HTTP request open for. The
-   * cron picks it up on its next minute.
+   * Queues a full pass and then works it off in this request instead of leaving
+   * it to the cron. That used to be the other way round, which was right when
+   * the cron ran every minute; it drains hourly on Hobby now, and a button
+   * called "Sync now" cannot mean "some time within the hour".
+   *
+   * The budget is deliberately short — a term's worth of classes is hundreds of
+   * API calls and will not fit in one request. What it cannot finish stays
+   * queued: `remaining` says how much, so the caller can ask again, and the
+   * cron completes it either way.
    */
   resync: protectedProcedure.mutation(async ({ ctx }) => {
     const connection = await ctx.db.calendarConnection.findUnique({
       where: { userId: ctx.actor.id },
       select: { id: true, status: true },
     });
-    if (connection?.status !== CalendarSyncStatus.ACTIVE) return { queued: 0 };
+    if (connection?.status !== CalendarSyncStatus.ACTIVE) {
+      return { queued: 0, claimed: 0, changed: 0, remaining: 0 };
+    }
+
     const queued = await enqueueFullResync(ctx.db, connection.id);
-    return { queued };
+    const report = await drainConnection(ctx.db, connection.id);
+
+    return {
+      queued,
+      /**
+       * Tasks this pass actually took. Zero with work still `remaining` means
+       * everything left is leased or backing off, so asking again immediately
+       * would achieve nothing.
+       */
+      claimed: report.claimed,
+      /** Entries actually written to Google, so the UI can stay quiet if none. */
+      changed: report.inserted + report.patched + report.deleted,
+      remaining: report.remaining,
+    };
   }),
 
   /** Switches sync off and removes the calendar we created. */
