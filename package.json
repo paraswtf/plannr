@@ -29,6 +29,7 @@
     "db:import": "tsx prisma/import-sicsr.ts",
     "db:sync-schedule": "tsx prisma/sync-schedule.ts",
     "db:cancel-classes": "tsx prisma/cancel-classes.ts",
+    "db:verify-schedule": "tsx prisma/verify-schedule.ts",
     "roster": "tsx prisma/build-roster.ts",
     "db:students": "tsx prisma/import-students.ts",
     "db:courses": "tsx prisma/build-courses.ts",
