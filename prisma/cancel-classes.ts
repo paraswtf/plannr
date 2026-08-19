@@ -16,7 +16,9 @@
  *
  * `--group` narrows it further when two cohorts share a subject, `--reason`
  * replaces the note students see, and `--dry` shows what would be called off
- * without touching anything.
+ * without touching anything. A class somebody has already taken a register at
+ * is left alone unless `--force` says otherwise, because calling it off would
+ * take the register with it.
  */
 
 import { ExceptionType, PrismaClient } from "../generated/prisma";
@@ -46,6 +48,8 @@ const titled = flag("titled");
 const group = flag("group");
 const reason = flag("reason") ?? "Cancelled by the department";
 const dryRun = process.argv.includes("--dry");
+/** Say so twice before throwing away a register. */
+const force = process.argv.includes("--force");
 
 if (!on || !titled) {
   throw new Error(
@@ -59,6 +63,8 @@ const db = new PrismaClient({
     db: { url: process.env.TARGET_DATABASE_URL ?? process.env.DATABASE_URL },
   },
 });
+
+let held = 0;
 
 async function main() {
   const from = new Date(`${on}T00:00:00${ZONE}`);
@@ -105,6 +111,15 @@ async function main() {
     );
     if (dryRun) continue;
 
+    // Calling a class off rebuilds its sittings, and a register hangs off the
+    // sitting it was taken at, so cancelling a lecture somebody has already
+    // marked attendance for would delete the register with it. That is not a
+    // thing to do by accident from a command line, where there is no undo.
+    if (sitting.attendance.length > 0 && !force) {
+      held++;
+      continue;
+    }
+
     // Occurrence scope: the series carries on, this one sitting does not.
     await db.$transaction(async (tx) => {
       await tx.eventException.upsert({
@@ -126,10 +141,16 @@ async function main() {
     });
   }
 
+  if (held > 0) {
+    console.log(
+      `\n  ! ${held} left alone: a register was taken at them, and calling them off` +
+        ` now would delete it. Pass --force if that is really what you want.`,
+    );
+  }
   console.log(
     dryRun
       ? `\n— dry run: ${sittings.length} classes would be called off —`
-      : `\n✓ ${sittings.length} classes called off: ${reason}`,
+      : `\n✓ ${sittings.length - held} classes called off: ${reason}`,
   );
   await db.$disconnect();
 }

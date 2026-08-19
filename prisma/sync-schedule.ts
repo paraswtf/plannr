@@ -60,7 +60,7 @@ const selectEvent = {
   rrule: true,
   room: { select: { code: true } },
   group: { select: { name: true } },
-  faculty: { select: { user: { select: { name: true } } }, },
+  faculty: { select: { user: { select: { name: true } } } },
   semester: { select: { name: true } },
   groups: { select: { group: { select: { name: true } } } },
   exceptions: {
@@ -78,8 +78,21 @@ const selectEvent = {
 
 type Class = Awaited<ReturnType<typeof load>>[number];
 
+/**
+ * The classes the college published — and only those.
+ *
+ * MRBS is the room-booking system as well as the timetable, but the app has one
+ * too, and a room somebody books here is never sent back to the college. So a
+ * booking made in the app cannot exist in the export, would look to this script
+ * exactly like a class the college has dropped, and would be deleted the next
+ * time anybody synced. The importer never sets `createdById` and the app always
+ * does, which is the line between the two.
+ */
 async function load(db: PrismaClient, orgId: string) {
-  return db.event.findMany({ where: { orgId }, select: selectEvent });
+  return db.event.findMany({
+    where: { orgId, createdById: null },
+    select: selectEvent,
+  });
 }
 
 /**
@@ -120,11 +133,24 @@ async function main() {
     );
   }
 
+  const theirOwn = await there.event.count({
+    where: { orgId: theirs.id, createdById: { not: null } },
+  });
+  if (theirOwn > 0) {
+    console.log(
+      `  · ${theirOwn} events made in the app are not the college's, and are left alone`,
+    );
+  }
+
   const wanted = new Map(source.map((event) => [signatureOf(event), event]));
   const present = new Map(existing.map((event) => [signatureOf(event), event]));
 
-  const toAdd = [...wanted].filter(([key]) => !present.has(key)).map(([, e]) => e);
-  const toDrop = [...present].filter(([key]) => !wanted.has(key)).map(([, e]) => e);
+  const toAdd = [...wanted]
+    .filter(([key]) => !present.has(key))
+    .map(([, e]) => e);
+  const toDrop = [...present]
+    .filter(([key]) => !wanted.has(key))
+    .map(([, e]) => e);
   const toRetitle = [...wanted]
     .filter(([key, event]) => {
       const already = present.get(key);
@@ -145,13 +171,22 @@ async function main() {
 
   // Everything a class hangs off already exists there; this only ever reads it.
   const [rooms, groups, faculty, semesters] = await Promise.all([
-    there.room.findMany({ where: { orgId: theirs.id }, select: { id: true, code: true } }),
-    there.group.findMany({ where: { orgId: theirs.id }, select: { id: true, name: true } }),
+    there.room.findMany({
+      where: { orgId: theirs.id },
+      select: { id: true, code: true },
+    }),
+    there.group.findMany({
+      where: { orgId: theirs.id },
+      select: { id: true, name: true },
+    }),
     there.facultyProfile.findMany({
       where: { orgId: theirs.id },
       select: { id: true, user: { select: { name: true } } },
     }),
-    there.semester.findMany({ where: { orgId: theirs.id }, select: { id: true, name: true } }),
+    there.semester.findMany({
+      where: { orgId: theirs.id },
+      select: { id: true, name: true },
+    }),
   ]);
   const roomId = new Map(rooms.map((r) => [r.code, r.id]));
   const groupId = new Map(groups.map((g) => [g.name, g.id]));
@@ -179,7 +214,8 @@ async function main() {
     .map(([key, event]) => ({ mine: event, theirs: present.get(key)! }));
 
   type Exception = Class["exceptions"][number];
-  const fromTimetable = (exception: Exception) => exception.reason === FROM_TIMETABLE;
+  const fromTimetable = (exception: Exception) =>
+    exception.reason === FROM_TIMETABLE;
   const skipKey = (exception: Exception, code: string | null) =>
     [
       exception.originalStart.toISOString(),
@@ -194,7 +230,9 @@ async function main() {
     new Set(
       event.exceptions
         .filter(fromTimetable)
-        .map((e) => skipKey(e, e.newRoomId ? (codeOf.get(e.newRoomId) ?? null) : null)),
+        .map((e) =>
+          skipKey(e, e.newRoomId ? (codeOf.get(e.newRoomId) ?? null) : null),
+        ),
     );
 
   // An earlier copy of this script wrote the weeks across without their reason,
@@ -205,7 +243,9 @@ async function main() {
   const toStamp: { id: string; at: Date }[] = [];
   for (const { mine, theirs } of matched) {
     const skipped = new Set(
-      mine.exceptions.filter(fromTimetable).map((e) => e.originalStart.toISOString()),
+      mine.exceptions
+        .filter(fromTimetable)
+        .map((e) => e.originalStart.toISOString()),
     );
     for (const exception of theirs.exceptions) {
       if (exception.reason !== null) continue;
@@ -215,21 +255,28 @@ async function main() {
     }
   }
   if (toStamp.length > 0) {
-    console.log(`  ${toStamp.length} skipped weeks an older sync copied without saying they were the college's`);
+    console.log(
+      `  ${toStamp.length} skipped weeks an older sync copied without saying they were the college's`,
+    );
   }
 
   const toReskip = matched.filter(({ mine, theirs }) => {
     const ours = skipsOf(mine, sourceRoomCode);
     const yours = skipsOf(theirs, targetRoomCode);
-    return ours.size !== yours.size || [...ours].some((week) => !yours.has(week));
+    return (
+      ours.size !== yours.size || [...ours].some((week) => !yours.has(week))
+    );
   });
   if (toReskip.length > 0) {
-    console.log(`  ${toReskip.length} classes the college has called off, or put back on, since`);
+    console.log(
+      `  ${toReskip.length} classes the college has called off, or put back on, since`,
+    );
   }
 
   const unplaceable: string[] = [];
   for (const event of toAdd) {
-    if (!roomId.has(event.room.code)) unplaceable.push(`room ${event.room.code}`);
+    if (!roomId.has(event.room.code))
+      unplaceable.push(`room ${event.room.code}`);
     if (event.group && !groupId.has(event.group.name)) {
       unplaceable.push(`group ${event.group.name}`);
     }
@@ -243,15 +290,21 @@ async function main() {
   if (dryRun) {
     console.log("\n— dry run, nothing written —");
     for (const event of toAdd.slice(0, 8)) {
-      console.log(`  + ${event.startTime.toISOString().slice(0, 16)} ${event.room.code.padEnd(6)} ${event.title.slice(0, 60)}`);
+      console.log(
+        `  + ${event.startTime.toISOString().slice(0, 16)} ${event.room.code.padEnd(6)} ${event.title.slice(0, 60)}`,
+      );
     }
     for (const event of toDrop.slice(0, 8)) {
-      console.log(`  - ${event.startTime.toISOString().slice(0, 16)} ${event.room.code.padEnd(6)} ${event.title.slice(0, 60)}`);
+      console.log(
+        `  - ${event.startTime.toISOString().slice(0, 16)} ${event.room.code.padEnd(6)} ${event.title.slice(0, 60)}`,
+      );
     }
     for (const { mine, theirs } of toReskip.slice(0, 8)) {
       const ours = skipsOf(mine, sourceRoomCode).size;
       const yours = skipsOf(theirs, targetRoomCode).size;
-      console.log(`  ~ ${mine.room.code.padEnd(6)} ${mine.title.slice(0, 46).padEnd(46)} ${yours} → ${ours} weeks off`);
+      console.log(
+        `  ~ ${mine.room.code.padEnd(6)} ${mine.title.slice(0, 46).padEnd(46)} ${yours} → ${ours} weeks off`,
+      );
     }
     await Promise.all([here.$disconnect(), there.$disconnect()]);
     return;
@@ -271,51 +324,66 @@ async function main() {
       .map((g) => groupId.get(g.group.name))
       .filter((id): id is string => Boolean(id));
 
-    const created = await there.event.create({
-      data: {
-        orgId: theirs.id,
-        kind: event.kind,
-        status: event.status,
-        title: event.title,
-        notes: event.notes,
-        roomId: room,
-        groupId: primary ?? null,
-        facultyId: facultyId.get(event.faculty?.user.name ?? "") ?? null,
-        semesterId: semester ?? null,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        timezone: event.timezone,
-        rrule: event.rrule,
-        ...(attending.length > 0
-          ? { groups: { create: [...new Set(attending)].map((id) => ({ groupId: id })) } }
-          : {}),
-      },
-    });
+    // One transaction, because a class that exists without its sittings is
+    // invisible to every screen in the app and no later run repairs it: the
+    // signature still matches, so the sync considers it present and moves on.
+    await there.$transaction(
+      async (tx) => {
+        const created = await tx.event.create({
+          data: {
+            orgId: theirs.id,
+            kind: event.kind,
+            status: event.status,
+            title: event.title,
+            notes: event.notes,
+            roomId: room,
+            groupId: primary ?? null,
+            facultyId: facultyId.get(event.faculty?.user.name ?? "") ?? null,
+            semesterId: semester ?? null,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            timezone: event.timezone,
+            rrule: event.rrule,
+            ...(attending.length > 0
+              ? {
+                  groups: {
+                    create: [...new Set(attending)].map((id) => ({
+                      groupId: id,
+                    })),
+                  },
+                }
+              : {}),
+          },
+        });
 
-    // The weeks the college skips are part of the class, not a detail: without
-    // them the rule would put a lecture on a holiday. The reason comes with
-    // them, because it is what says the college skipped the week rather than
-    // somebody here calling the lecture off — and a copy that forgot would be
-    // treated as the second and left in place for ever.
-    for (const exception of event.exceptions) {
-      await there.eventException.create({
-        data: {
-          eventId: created.id,
-          originalStart: exception.originalStart,
-          type: exception.type,
-          newStartTime: exception.newStartTime,
-          newEndTime: exception.newEndTime,
-          newTitle: exception.newTitle,
-          reason: exception.reason,
-          // Room ids differ between databases, so an override is translated
-          // through the code, which does not.
-          newRoomId: exception.newRoomId
-            ? (roomId.get(sourceRoomCode.get(exception.newRoomId) ?? "") ?? null)
-            : null,
-        },
-      });
-    }
-    await regenerateOccurrences(there, created.id);
+        // The weeks the college skips are part of the class, not a detail: without
+        // them the rule would put a lecture on a holiday. The reason comes with
+        // them, because it is what says the college skipped the week rather than
+        // somebody here calling the lecture off — and a copy that forgot would be
+        // treated as the second and left in place for ever.
+        for (const exception of event.exceptions) {
+          await tx.eventException.create({
+            data: {
+              eventId: created.id,
+              originalStart: exception.originalStart,
+              type: exception.type,
+              newStartTime: exception.newStartTime,
+              newEndTime: exception.newEndTime,
+              newTitle: exception.newTitle,
+              reason: exception.reason,
+              // Room ids differ between databases, so an override is translated
+              // through the code, which does not.
+              newRoomId: exception.newRoomId
+                ? (roomId.get(sourceRoomCode.get(exception.newRoomId) ?? "") ??
+                  null)
+                : null,
+            },
+          });
+        }
+        await regenerateOccurrences(tx, created.id);
+      },
+      { timeout: 60_000, maxWait: 20_000 },
+    );
     added++;
   }
 
@@ -353,7 +421,11 @@ async function main() {
   const marked = new Set(
     (
       await there.attendanceSession.findMany({
-        where: { occurrence: { eventId: { in: toReskip.map((pair) => pair.theirs.id) } } },
+        where: {
+          occurrence: {
+            eventId: { in: toReskip.map((pair) => pair.theirs.id) },
+          },
+        },
         select: { occurrence: { select: { eventId: true } } },
       })
     ).map((session) => session.occurrence.eventId),
@@ -381,28 +453,36 @@ async function main() {
         .filter((exception) => !fromTimetable(exception))
         .map((exception) => exception.originalStart.toISOString()),
     );
-    await there.eventException.deleteMany({
-      where: { eventId: theirs.id, reason: FROM_TIMETABLE },
-    });
-    await there.eventException.createMany({
-      data: mine.exceptions
-        .filter(fromTimetable)
-        .filter((exception) => !ours.has(exception.originalStart.toISOString()))
-        .map((exception) => ({
-          eventId: theirs.id,
-          originalStart: exception.originalStart,
-          type: exception.type,
-          newStartTime: exception.newStartTime,
-          newEndTime: exception.newEndTime,
-          newTitle: exception.newTitle,
-          newRoomId: exception.newRoomId
-            ? (roomId.get(sourceRoomCode.get(exception.newRoomId) ?? "") ?? null)
-            : null,
-          reason: FROM_TIMETABLE,
-        })),
-      skipDuplicates: true,
-    });
-    await regenerateOccurrences(there, theirs.id);
+    await there.$transaction(
+      async (tx) => {
+        await tx.eventException.deleteMany({
+          where: { eventId: theirs.id, reason: FROM_TIMETABLE },
+        });
+        await tx.eventException.createMany({
+          data: mine.exceptions
+            .filter(fromTimetable)
+            .filter(
+              (exception) => !ours.has(exception.originalStart.toISOString()),
+            )
+            .map((exception) => ({
+              eventId: theirs.id,
+              originalStart: exception.originalStart,
+              type: exception.type,
+              newStartTime: exception.newStartTime,
+              newEndTime: exception.newEndTime,
+              newTitle: exception.newTitle,
+              newRoomId: exception.newRoomId
+                ? (roomId.get(sourceRoomCode.get(exception.newRoomId) ?? "") ??
+                  null)
+                : null,
+              reason: FROM_TIMETABLE,
+            })),
+          skipDuplicates: true,
+        });
+        await regenerateOccurrences(tx, theirs.id);
+      },
+      { timeout: 60_000, maxWait: 20_000 },
+    );
     reskipped++;
   }
   if (held > 0) {
@@ -417,8 +497,12 @@ async function main() {
       (skipped > 0 ? `, ${skipped} skipped for want of a room` : ""),
   );
 
-  const after = await there.eventOccurrence.count({ where: { orgId: theirs.id } });
-  const mineNow = await here.eventOccurrence.count({ where: { orgId: mine.id } });
+  const after = await there.eventOccurrence.count({
+    where: { orgId: theirs.id },
+  });
+  const mineNow = await here.eventOccurrence.count({
+    where: { orgId: mine.id },
+  });
   console.log(`  sittings: here ${mineNow}, there ${after}`);
 
   await Promise.all([here.$disconnect(), there.$disconnect()]);
