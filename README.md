@@ -195,6 +195,102 @@ permission on someone's calendar, redeemable by anyone holding it.
   that is the primary section only; if that is ever widened, widen
   `audienceFor` in step or the two screens will disagree.
 
+## Keeping the timetable in step
+
+The college's timetable is not a feed. It is an MRBS install at
+`time-table.sicsr.ac.in`, edited by hand all term — a room changes, a lecture is
+moved, a week is dropped for an exam — and nothing announces any of it. So the
+app's copy goes stale quietly, and the only way to know is to go and ask.
+
+There are two databases to keep level with it, and they want opposite
+treatment. This laptop's is disposable: `db:import` clears the institution and
+rebuilds it from the export, which is the honest way to re-read a source that
+has no version and no diff. Production is not disposable — students have signed
+in, coordinators have taken registers, people have made plans against it — so
+nothing there is ever rebuilt. `db:sync-schedule` reconciles instead: it works
+out which classes have appeared, which the college has dropped, and which weeks
+it has called off since, and changes only those.
+
+Run `/sync-timetable` and Claude will walk the whole sequence. By hand it is:
+
+```bash
+npm run db:import          # re-read the college's term, rebuilding this database
+npm run db:students        # put the roster back (needs data/students.csv)
+npm run db:courses         # re-derive the subjects and who teaches them
+npm run db:faculty         # give the teachers their real addresses again
+npm run db:verify-schedule # ask the college whether we got it right
+```
+
+Then, and only once that last command is happy, push it:
+
+```bash
+PROD=$(grep '^DIRECT_URL=' .env.prod | cut -d'"' -f2)
+TARGET_DATABASE_URL="$PROD" npm run db:sync-schedule -- --dry
+TARGET_DATABASE_URL="$PROD" npm run db:sync-schedule
+TARGET_DATABASE_URL="$PROD" npm run db:verify-schedule
+```
+
+The details that carry the weight:
+
+- **`db:import` reads a hardcoded term.** `TERM` in `prisma/import-sicsr.ts`
+  names the semester and its first and last day, and two URLs beside it read the
+  cohort key and room capacities off a hardcoded 13 August. A new semester means
+  editing both, creating the semester in production by hand, and pointing the
+  organisation's active semester at it — the sync creates neither.
+- **The first four steps are one unit.** `db:import` clears the groups and
+  events everything else hangs off, so the three after it have to run again
+  every time. It spares anybody who has ever signed in; the rest of the
+  institution — classes, groups, intakes, programmes, rooms, buildings, the
+  semester and its courses — is replaced. None of it is transactional, so an
+  interrupted import leaves a plausible-looking partial timetable that must
+  never be synced from.
+- **Never run `db:import` against production.** It would delete every class,
+  group and room, take every register hanging off them, and gut every schedule
+  plan — whose requirements and placements hang off those groups, leaving the
+  plan behind with nothing in it. The reconciling path exists precisely so that
+  is never necessary.
+- **Never source `.env.prod` into the shell before syncing.** It sets
+  `DATABASE_URL` as well, so both ends of the sync open production and it
+  would compare the database with itself. The script refuses outright — cuids
+  cannot collide across databases, so a shared id proves both handles found the
+  same one — but the point is to pass `TARGET_DATABASE_URL` alone rather than to
+  rely on the guard.
+- **A sync matches classes on room, times, recurrence and the college's own
+  line.** It therefore cannot see a lecturer or a section being reassigned on a
+  class that is otherwise unchanged — those have to be corrected in production
+  by hand, since `db:import` is never an option there. It also refuses to delete
+  more than 40% of the target's classes, which is what a mispointed sync looks
+  like. Anything made in the app — a room somebody booked — is left alone
+  entirely, on the strength of having a creator, which the importer never sets.
+- **Registers win.** A class somebody has marked attendance for is never
+  deleted and never rebuilt, so its skipped weeks stop converging. The real run
+  says so; the dry run lists those classes as removals. The class then keeps
+  every future sitting, so call them off with `db:cancel-classes` or the message
+  returns on every sync.
+- **Cancellations belong to the app, not the college.** A class called off with
+  `db:cancel-classes` is stamped with a reason the importer never uses, which is
+  how a sync tells "the college never published this week" from "somebody called
+  this lecture off" and leaves the second alone. Production keeps them; this
+  laptop's copy is wiped by the next `db:import`, which is fine — it is a
+  rehearsal, not the record. Production keeps them only as long as the class
+  itself survives: one the college drops, or whose room or time it changes, is
+  replaced outright and its cancellations go with it.
+
+`db:verify-schedule` is the one that tells the truth about all of it. It fetches
+the college's export for three days, compares them class by class including the
+text of each, and exits non-zero if they disagree. Classes called off here are
+reported separately rather than counted as errors, bookings made in the app are
+left out, and a day the college published nothing on counts as no check at all
+rather than as a pass. What it compares is rooms, clock times and class text, so
+a class attached to the wrong cohort, to no course or to no semester still
+passes — a ✓ means the timetable is right, not everything hanging off it.
+
+Two things the sync cannot carry, which is why they are worth saying twice: a
+class it adds arrives with no course, and attendance only counts classes that
+have one; and `EventGroup` is written only for classes being added, so who
+attends an existing class never changes through this pipeline — that goes
+through the app's people and group screens.
+
 ## Commands
 
 | Command | What it does |
@@ -203,11 +299,17 @@ permission on someone's calendar, redeemable by anyone holding it.
 | `npm test` | Unit tests (no database needed) |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
-| `npm run test:integration` | Router and sync tests against the local container only |
+| `npm run test:integration` | Router and Google-Calendar-sync tests against the local container only |
 | `npm run db:start` / `db:stop` | Local Postgres container |
 | `npm run db:migrate` | Apply migrations to whatever `DIRECT_URL` points at |
 | `npm run db:seed` | Reset demo data |
 | `npm run db:studio` | Browse the database |
+| `npm run db:import` | Re-read the college's timetable into this database — destructive |
+| `npm run roster` | Rebuild `data/students.csv` from the documents under `data/` — no database |
+| `npm run db:students` / `db:courses` / `db:faculty` | Put the roster, subjects and teachers back after an import (need `data/students.csv` and a `faculty*.csv`) |
+| `npm run db:verify-schedule` | Compare a database against the live college timetable |
+| `npm run db:sync-schedule` | Carry this timetable to the database in `TARGET_DATABASE_URL`, class by class (`-- --dry` first) |
+| `npm run db:cancel-classes` | Call off one day's sittings of a named class — a cancellation the college's timetable never carries |
 
 ## Deployment
 
@@ -221,11 +323,14 @@ serverless runtime and a migration want opposite things from a connection.
 | Variable | Port | Why that one |
 | --- | --- | --- |
 | `DATABASE_URL` | `6543` | Transaction pooler. A query borrows a connection and returns it at once, which is how a few hundred lambdas share the ~60 connections Postgres will hand out. It cannot hold a session, so the URL carries `?pgbouncer=true&connection_limit=1` and Prisma stops naming prepared statements it would never see again. |
-| `DIRECT_URL` | `5432` | Session pooler. One connection held for a whole run — what DDL and Prisma's migration advisory lock need. Only `prisma migrate` uses it. |
+| `DIRECT_URL` | `5432` | Session pooler. One connection held for a whole run — what DDL and Prisma's migration advisory lock need. `prisma migrate` uses it, and so do the timetable scripts, which write in long sequential batches the transaction pooler handles badly. |
 
 Both go through `aws-0-ap-south-1.pooler.supabase.com`, not the direct
 `db.<ref>.supabase.co` host: that one resolves to IPv6 only, and Vercel's
-functions cannot dial it without the IPv4 add-on.
+functions cannot dial it without the IPv4 add-on. (`.env.prod` deliberately
+points `DIRECT_URL` at the direct host anyway, because the laptop running the
+timetable scripts has IPv6 and Vercel never reads that file. On a network
+without it, use the session pooler there instead.)
 
 `vercel.json` pins functions to `bom1` for the same reason the region is worth
 naming — the database is in Mumbai, sessions are stored in it, and every page
@@ -257,7 +362,7 @@ if one is missing.
 | Variable | Notes |
 | --- | --- |
 | `DATABASE_URL` | Pooler, port 6543, with `?pgbouncer=true&connection_limit=1` |
-| `DIRECT_URL` | Pooler, port 5432 |
+| `DIRECT_URL` | Session pooler, port 5432 — or, in `.env.prod`, the IPv6-only direct host, which the timetable scripts use from a laptop |
 | `AUTH_SECRET` | `npx auth secret`; must be ≥32 chars in production |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From the Google Cloud console |
 | `GOOGLE_WORKSPACE_DOMAIN` | `sicsr.ac.in` — nobody outside it can sign in |
