@@ -108,7 +108,8 @@ relative to the real clock rather than a fixed date.
 Off unless `GOOGLE_CALENDAR_SYNC_ENABLED=true`. On, anyone can connect their own
 Google account from the schedule screen, and the classes they attend or teach
 are mirrored into a calendar Plannr creates — cancellations and reschedules
-follow within about a minute.
+follow on the next drain, which is hourly on Vercel's Hobby plan and can be
+per-minute on Pro.
 
 **Opt-in, per person, and separate from signing in.** Sign-in keeps the narrow
 scopes it always had; calendar access is a second consent that most people will
@@ -154,9 +155,22 @@ up to an empty room.
    `https://<your-domain>/api/calendar/callback` (and the localhost one).
 3. Set `GOOGLE_CALENDAR_SYNC_ENABLED=true`, `CALENDAR_TOKEN_KEY`
    (`openssl rand -base64 32`) and `CRON_SECRET`.
-4. Deploy. `vercel.json` schedules the drain every minute — **note that Vercel's
-   Hobby plan only permits daily crons**, so anything below Pro will sync once a
-   day rather than once a minute. Nothing else changes; the queue simply waits.
+4. Deploy. `vercel.json` registers `/api/cron/calendar` **twenty-four times**,
+   once per hour of the day (`0 0 * * *` through `0 23 * * *`).
+
+   That shape is dictated by the Hobby plan, which rejects at deploy time any
+   cron expression running more than once a day — it does not quietly downgrade
+   one. What it does allow is 100 separate jobs per project, and multiple jobs
+   on the same path, so twenty-four once-daily entries add up to an hourly
+   drain. Each fires somewhere inside its hour (Hobby is accurate to ±59
+   minutes), so a change lands within about two hours worst case, one on
+   average.
+
+   Overlap is harmless if two happen to fire close together: `claim` leases its
+   batch inside a transaction, and reconciling is idempotent.
+
+   On Pro, delete the twenty-four and put back a single `* * * * *`. Nothing in
+   the code depends on the cadence.
 
 Refresh tokens are sealed with AES-256-GCM before storage
 (`calendar/crypto.ts`): unlike the rest of the schema, that column is a standing

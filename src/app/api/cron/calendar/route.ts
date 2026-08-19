@@ -1,10 +1,16 @@
 /**
  * The drain: the only place in the app that talks to Google Calendar.
  *
- * Vercel calls this on a schedule (see `vercel.json`). It does a bounded amount
- * of work and returns a tally, so a run that hits the function's time limit has
- * still committed everything it finished — each task is marked as it completes,
- * not at the end.
+ * Vercel calls this on a schedule (see `vercel.json`), where it is registered
+ * 24 times over — one entry per hour of the day, all pointing here. That is a
+ * Hobby-plan workaround, not a design: Hobby rejects any expression running
+ * more than once a day, but grants 100 separate jobs, so twenty-four daily
+ * ones bought an hourly drain. Sharing a path is explicitly supported, and the
+ * schedule that fired is echoed back in the report to keep the logs readable.
+ *
+ * It does a bounded amount of work and returns a tally, so a run that hits the
+ * function's time limit has still committed everything it finished — each task
+ * is marked as it completes, not at the end.
  *
  * It always answers 200 with a report, even when individual tasks failed.
  * Failing the response would make Vercel retry the whole batch, re-doing work
@@ -43,7 +49,13 @@ async function run(request: NextRequest) {
   const swept = await sweepStaleConnections(db);
   const report = await drain(db);
 
-  return NextResponse.json({ swept, ...report });
+  return NextResponse.json({
+    // Which of the 24 daily entries this was, so a gap in coverage is legible
+    // in the logs rather than guesswork.
+    schedule: request.headers.get("x-vercel-cron-schedule"),
+    swept,
+    ...report,
+  });
 }
 
 /**
