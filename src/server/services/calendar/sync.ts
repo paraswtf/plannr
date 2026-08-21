@@ -16,7 +16,7 @@
  * be trusted.
  */
 
-import { env } from "~/env";
+import { appUrl, env } from "~/env";
 import {
   CalendarSyncStatus,
   CalendarTaskStatus,
@@ -763,7 +763,7 @@ async function ensureCalendar(
   const created = await google.createCalendar(
     accessToken,
     calendarSummary(org?.name ?? "Plannr"),
-    calendarDescription(env.NEXT_PUBLIC_APP_URL),
+    calendarDescription(appUrl),
     org?.timezone ?? "Asia/Kolkata",
   );
   await db.calendarConnection.update({

@@ -10,7 +10,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { env } from "~/env";
+import { appUrl } from "~/env";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 import { CALENDAR_SCOPE, exchangeCode, identityFromIdToken } from "~/server/services/calendar/google";
@@ -18,9 +18,7 @@ import { decodeState } from "~/server/services/calendar/oauth";
 import { recordConnection, syncEnabled } from "~/server/services/calendar/sync";
 
 function back(reason: string): NextResponse {
-  return NextResponse.redirect(
-    new URL(`/schedule?calendar=${reason}`, env.NEXT_PUBLIC_APP_URL),
-  );
+  return NextResponse.redirect(new URL(`/schedule?calendar=${reason}`, appUrl));
 }
 
 export async function GET(request: NextRequest) {
@@ -28,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.redirect(new URL("/login", env.NEXT_PUBLIC_APP_URL));
+    return NextResponse.redirect(new URL("/login", appUrl));
   }
 
   const params = request.nextUrl.searchParams;

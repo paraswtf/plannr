@@ -7,7 +7,7 @@ import {
   Space_Grotesk,
 } from "next/font/google";
 
-import { env } from "~/env";
+import { appUrl } from "~/env";
 import { TRPCReactProvider } from "~/trpc/react";
 
 const APP_NAME = "Plannr";
@@ -21,7 +21,7 @@ const APP_DESCRIPTION =
  * is the one thing link-preview scrapers will not do for us.
  */
 export const metadata: Metadata = {
-  metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
+  metadataBase: new URL(appUrl),
   title: { default: APP_TITLE, template: "%s · Plannr" },
   description: APP_DESCRIPTION,
   applicationName: APP_NAME,

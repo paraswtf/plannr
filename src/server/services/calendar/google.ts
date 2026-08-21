@@ -10,7 +10,7 @@
  * withdrawn consent and no amount of retrying will help" — is decided once.
  */
 
-import { env } from "~/env";
+import { appUrl, env } from "~/env";
 
 const OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -56,7 +56,7 @@ interface TokenResponse {
 
 /** Where Google sends somebody back to after they consent. */
 export function redirectUri(): string {
-  return `${env.NEXT_PUBLIC_APP_URL}/api/calendar/callback`;
+  return `${appUrl}/api/calendar/callback`;
 }
 
 /**

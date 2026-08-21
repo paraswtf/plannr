@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 
+import { appUrl } from "~/env";
 import { auth } from "~/server/auth";
 import { consentUrl } from "~/server/services/calendar/google";
 import { encodeState } from "~/server/services/calendar/oauth";
@@ -17,11 +18,11 @@ import { syncEnabled } from "~/server/services/calendar/sync";
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_APP_URL));
+    return NextResponse.redirect(new URL("/login", appUrl));
   }
   if (!syncEnabled()) {
     return NextResponse.redirect(
-      new URL("/schedule?calendar=disabled", process.env.NEXT_PUBLIC_APP_URL),
+      new URL("/schedule?calendar=disabled", appUrl),
     );
   }
 

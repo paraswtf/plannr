@@ -66,7 +66,11 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+    /**
+     * Optional override for the app's own origin. Left unset on Vercel, where
+     * VERCEL_PROJECT_PRODUCTION_URL supplies it — see `appUrl` below.
+     */
+    NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   },
 
   /**
@@ -103,3 +107,39 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 });
+
+/**
+ * The app's own origin, e.g. "https://plannr.example.edu".
+ *
+ * Vercel sets VERCEL_PROJECT_PRODUCTION_URL to the shortest production custom
+ * domain. It is stable across deployments and present even in previews, which
+ * is what an OAuth redirect_uri needs: Google only accepts URIs registered
+ * ahead of time, so a value that changes per deploy can never be one. Its
+ * neighbour VERCEL_URL is the generated per-deployment host and is exactly the
+ * wrong choice for the same reason.
+ *
+ * Read from process.env rather than the validated object because it is a
+ * server-only value and this module is imported from both sides.
+ */
+export const appUrl = (() => {
+  const explicit = env.NEXT_PUBLIC_APP_URL;
+
+  // A localhost origin inside a deployment is the specific bug this exists to
+  // prevent: every OAuth consent comes back to somebody's laptop, and every
+  // link preview points at a machine the scraper cannot reach.
+  if (
+    explicit &&
+    process.env.VERCEL &&
+    new URL(explicit).hostname === "localhost"
+  ) {
+    throw new Error(
+      "NEXT_PUBLIC_APP_URL is set to a localhost origin inside a Vercel deployment. " +
+        "Delete it from the project's environment variables and let " +
+        "VERCEL_PROJECT_PRODUCTION_URL supply the domain, or set it to the real one.",
+    );
+  }
+  if (explicit) return explicit;
+
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return production ? `https://${production}` : "http://localhost:3000";
+})();
