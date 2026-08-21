@@ -51,6 +51,10 @@ export interface GoogleEventBody {
 /**
  * How a cancelled class is written.
  *
+ * Unreachable from `reconcile` as things stand: `desiredOccurrences` selects
+ * only CONFIRMED sittings, so nothing cancelled ever reaches here. Kept because
+ * the decision is a product one and may well swing back.
+ *
  * It stays on the calendar rather than disappearing, because a class that
  * silently vanishes is indistinguishable from a sync that broke — and the
  * person who never opens Plannr is exactly the person who would turn up to an

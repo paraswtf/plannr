@@ -277,19 +277,20 @@ describe("when a class is cancelled", () => {
     expect(await pendingFor(connectionId)).toBe(1);
   });
 
-  it("changes the class they already have rather than adding another", async () => {
-    // A delete-and-recreate would lose whatever reminder they had set, and for
-    // a moment show nothing at all where the class used to be.
+  it("takes the class out of the calendar rather than restyling it", async () => {
+    // It used to be patched to "Cancelled — ..." and left in place. A room
+    // change writes a cancelled sitting in the old room beside a live one in
+    // the new, so that showed every move as a doubled entry — while Plannr's
+    // own schedule showed one. The calendar now says what the schedule says.
     await drain(db);
-    expect(calls.patched).toHaveLength(1);
+    expect(calls.deleted).toHaveLength(1);
+    expect(calls.patched).toHaveLength(0);
     expect(calls.inserted).toHaveLength(0);
-    expect(calls.deleted).toHaveLength(0);
   });
 
-  it("says it is cancelled, and stops holding the hour", async () => {
+  it("forgets the mirror, so nothing is left pointing at a deleted event", async () => {
     await drain(db);
-    expect(calls.patched[0]?.body.summary).toBe("Cancelled — Calendars, Applied");
-    expect(calls.patched[0]?.body.transparency).toBe("transparent");
+    expect(await db.calendarMirror.count({ where: { connectionId } })).toBe(0);
   });
 });
 

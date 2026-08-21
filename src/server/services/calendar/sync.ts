@@ -597,12 +597,21 @@ async function desiredOccurrences(
       eventId,
       start: { lt: to },
       end: { gt: from },
-      // A booking nobody has granted yet is not on anyone's timetable, and must
-      // not appear in their calendar either: a request made on Monday would
-      // otherwise show up as a real lecture until it was refused on Friday.
-      // CANCELLED stays — a cancelled sitting is deliberately mirrored as a
-      // struck-through entry so people see the class is off.
-      status: { in: ["CONFIRMED", "CANCELLED"] },
+      // Only sittings that are actually happening. A booking nobody has granted
+      // yet is not on anyone's timetable and must not appear in their calendar
+      // either — a request made on Monday would otherwise show as a real
+      // lecture until it was refused on Friday.
+      //
+      // Cancelled sittings used to be mirrored as struck-through entries, on
+      // the reasoning that a class which silently vanishes is indistinguishable
+      // from a sync that broke. In practice a room change writes both a
+      // cancelled sitting in the old room and a live one in the new, and the
+      // calendar showed the pair while Plannr itself showed only the live one —
+      // so the calendar read as broken precisely where it was trying not to.
+      // Dropping them here is enough to clean up: a mirror with no matching
+      // occurrence falls to the stale branch in `reconcile` and its Google
+      // event is deleted.
+      status: "CONFIRMED",
       OR: [
         ...(scope.groupIds.length ? [{ groupId: { in: scope.groupIds } }] : []),
         ...(scope.facultyId ? [{ facultyId: scope.facultyId }] : []),
