@@ -50,25 +50,33 @@ export function CalendarSync() {
   // button that quietly hammers Google for as long as the dialog stays open;
   // whatever is left over is still queued for the cron.
   const rounds = useRef(0);
+  const changed = useRef(0);
 
   const resync = api.calendar.resync.useMutation({
     onSuccess: async (result) => {
       await utils.calendar.status.invalidate();
+      changed.current += result.changed;
 
       // Nothing claimed with work still owed means the rest is leased or
       // backing off, and going round again would only burn a request.
       const worthRetrying = result.remaining > 0 && result.claimed > 0;
       if (worthRetrying && rounds.current < MAX_SYNC_ROUNDS) {
         rounds.current += 1;
-        resync.mutate();
+        // `resume` so the continuation drains rather than queueing afresh —
+        // queueing again would put the finished tasks back and never converge.
+        resync.mutate({ resume: true });
         return;
       }
 
+      toast.success(
+        summarise({ changed: changed.current, remaining: result.remaining }),
+      );
       rounds.current = 0;
-      toast.success(summarise(result));
+      changed.current = 0;
     },
     onError: () => {
       rounds.current = 0;
+      changed.current = 0;
       toast.error("Could not sync. Try again in a moment.");
     },
   });
@@ -184,7 +192,8 @@ export function CalendarSync() {
                   disabled={resync.isPending}
                   onClick={() => {
                     rounds.current = 0;
-                    resync.mutate();
+                    changed.current = 0;
+                    resync.mutate({});
                   }}
                   className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
                   style={{ background: "rgba(68,88,121,0.07)", color: "var(--slate)" }}
@@ -229,8 +238,16 @@ const OUTCOMES: Record<string, string> = {
   failed: "Could not connect to Google Calendar. Please try again.",
 };
 
-/** How many times "Sync now" will go back for more before giving up. */
-const MAX_SYNC_ROUNDS = 5;
+/**
+ * How many times "Sync now" will go back for more before giving up.
+ *
+ * Each round is its own short request, and the loop stops the moment the queue
+ * empties, so this only ever bites on a first sync — where a term of classes is
+ * hundreds of Google inserts and six seconds a round does not cover it. Set
+ * high enough that connecting a calendar usually finishes while the dialog is
+ * open, rather than trailing off to an hourly cron.
+ */
+const MAX_SYNC_ROUNDS = 12;
 
 /**
  * What to say once the chasing stops.

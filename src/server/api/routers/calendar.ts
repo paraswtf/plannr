@@ -66,34 +66,42 @@ export const calendarRouter = createTRPCRouter({
    *
    * The budget is deliberately short — a term's worth of classes is hundreds of
    * API calls and will not fit in one request. What it cannot finish stays
-   * queued: `remaining` says how much, so the caller can ask again, and the
-   * cron completes it either way.
+   * queued: `remaining` says how much, so the caller can ask again with
+   * `resume`, and the cron completes it either way.
    */
-  resync: protectedProcedure.mutation(async ({ ctx }) => {
-    const connection = await ctx.db.calendarConnection.findUnique({
-      where: { userId: ctx.actor.id },
-      select: { id: true, status: true },
-    });
-    if (connection?.status !== CalendarSyncStatus.ACTIVE) {
-      return { queued: 0, claimed: 0, changed: 0, remaining: 0 };
-    }
+  resync: protectedProcedure
+    .input(z.object({ resume: z.boolean().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const connection = await ctx.db.calendarConnection.findUnique({
+        where: { userId: ctx.actor.id },
+        select: { id: true, status: true },
+      });
+      if (connection?.status !== CalendarSyncStatus.ACTIVE) {
+        return { queued: 0, claimed: 0, changed: 0, remaining: 0 };
+      }
 
-    const queued = await enqueueFullResync(ctx.db, connection.id);
-    const report = await drainConnection(ctx.db, connection.id);
+      // Only the first press queues a pass. `enqueueFullResync` resets every task
+      // for the connection to PENDING — including the ones just finished — so a
+      // continuation that re-queued would re-arm the very queue it is draining,
+      // and the count would rise and fall for ever instead of reaching zero.
+      const queued = input?.resume
+        ? 0
+        : await enqueueFullResync(ctx.db, connection.id);
+      const report = await drainConnection(ctx.db, connection.id);
 
-    return {
-      queued,
-      /**
-       * Tasks this pass actually took. Zero with work still `remaining` means
-       * everything left is leased or backing off, so asking again immediately
-       * would achieve nothing.
-       */
-      claimed: report.claimed,
-      /** Entries actually written to Google, so the UI can stay quiet if none. */
-      changed: report.inserted + report.patched + report.deleted,
-      remaining: report.remaining,
-    };
-  }),
+      return {
+        queued,
+        /**
+         * Tasks this pass actually took. Zero with work still `remaining` means
+         * everything left is leased or backing off, so asking again immediately
+         * would achieve nothing.
+         */
+        claimed: report.claimed,
+        /** Entries actually written to Google, so the UI can stay quiet if none. */
+        changed: report.inserted + report.patched + report.deleted,
+        remaining: report.remaining,
+      };
+    }),
 
   /** Switches sync off and removes the calendar we created. */
   disconnect: protectedProcedure
