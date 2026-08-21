@@ -246,8 +246,14 @@ export function TimetableView({
   };
 
   const move = api.events.update.useMutation({
-    onSuccess: async () => {
-      setFlash({ text: "Moved" });
+    onSuccess: async (result) => {
+      // Somebody without the authority to rewrite the timetable has asked for
+      // this rather than done it, and the block is about to spring back to
+      // where it was. Saying so is the difference between "my drag was filed"
+      // and "the app ignored me".
+      setFlash({
+        text: result.applied ? "Moved" : "Change requested — waiting for approval",
+      });
       await utils.timetable.invalidate();
       router.refresh();
     },

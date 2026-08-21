@@ -15,6 +15,13 @@ import {
   type Conflict,
 } from "~/server/services/conflicts";
 import {
+  lockResources,
+  proposedSlots,
+  verdictFor,
+  verdictSeverity,
+  type Verdict,
+} from "~/server/services/approvals";
+import {
   regenerateOccurrences,
   splitSeriesAt,
   type Db,
@@ -23,6 +30,8 @@ import {
   EventKind,
   EventStatus,
   ExceptionType,
+  RequestScope,
+  RequestStatus,
 } from "../../../../generated/prisma";
 
 /**
@@ -366,6 +375,56 @@ export const eventsRouter = createTRPCRouter({
         });
       }
 
+      // Somebody without institutional authority may still change a booking of
+      // their own that nobody has granted yet — it is a request either way, and
+      // amending it before it is decided is not a change to anybody's day. The
+      // limits still apply, or a two-hour cap is escaped by booking for one
+      // hour and then editing it to eight.
+      const ownUndecidedBooking =
+        event.status === EventStatus.PENDING && event.createdById === ctx.actor.id;
+      const mayWriteDirectly =
+        ctx.bits.hasAny(PermissionFlags.ManageAllEvents) ||
+        !settings.requireApprovalChanges ||
+        ownUndecidedBooking;
+
+      if (!ctx.bits.hasAny(PermissionFlags.ManageAllEvents)) {
+        const minutes = (endTime.getTime() - startTime.getTime()) / 60_000;
+        if (
+          event.kind !== EventKind.CLASS &&
+          minutes > settings.maxStudentBookingMinutes
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Self-service bookings are limited to ${settings.maxStudentBookingMinutes} minutes.`,
+          });
+        }
+      }
+
+      // Not authorised to write, so it becomes a proposal instead. The event
+      // goes on being what it is until somebody decides.
+      if (!mayWriteDirectly) {
+        const request = await ctx.db.eventChangeRequest.create({
+          data: {
+            orgId: ctx.orgId,
+            eventId: event.id,
+            requestedById: ctx.actor.id,
+            scope: RequestScope[input.scope.toUpperCase() as keyof typeof RequestScope],
+            originalStart: input.originalStart ?? null,
+            newRoomId: input.patch.roomId ?? null,
+            newStartTime: input.patch.startTime ?? null,
+            newEndTime: input.patch.endTime ?? null,
+            newTitle: input.patch.title ?? null,
+            reason: input.patch.notes ?? null,
+          },
+        });
+        return {
+          eventId: event.id,
+          scope: input.scope,
+          applied: false as const,
+          requestId: request.id,
+        };
+      }
+
       return ctx.db.$transaction(async (tx) => {
         const conflicts = await checkConflicts(tx, {
           orgId: ctx.orgId,
@@ -420,7 +479,7 @@ export const eventsRouter = createTRPCRouter({
             },
           });
           await regenerateOccurrences(tx, event.id);
-          return { eventId: event.id, scope: input.scope };
+          return { eventId: event.id, scope: input.scope, applied: true as const };
         }
 
         if (input.scope === "following") {
@@ -438,7 +497,7 @@ export const eventsRouter = createTRPCRouter({
               notes: input.patch.notes,
             },
           );
-          return { eventId: newId, scope: input.scope };
+          return { eventId: newId, scope: input.scope, applied: true as const };
         }
 
         await tx.event.update({
@@ -456,7 +515,7 @@ export const eventsRouter = createTRPCRouter({
           },
         });
         await regenerateOccurrences(tx, event.id);
-        return { eventId: event.id, scope: input.scope };
+        return { eventId: event.id, scope: input.scope, applied: true as const };
       });
     }),
 
@@ -569,8 +628,154 @@ export const eventsRouter = createTRPCRouter({
     },
   ),
 
+  /**
+   * Everything waiting for a decision, in one list.
+   *
+   * Bookings and changes are stored differently but compete for the same rooms,
+   * so they are read as one queue: two items asking for the same hour have to
+   * be visible together or they get decided as though they were independent.
+   * Each carries a verdict worked out server-side — what it would clash with,
+   * and which other undecided requests want the same slot — because that is the
+   * question the approver is actually answering, and they should not have to
+   * open five tabs to answer it.
+   */
+  approvalQueue: permissionProcedure(PermissionFlags.ApproveBookings)
+    .input(z.object({ take: z.number().min(1).max(100).default(50) }).optional())
+    .query(async ({ ctx, input }) => {
+      const take = input?.take ?? 50;
+
+      const [bookings, changes] = await Promise.all([
+        ctx.db.event.findMany({
+          where: {
+            orgId: ctx.orgId,
+            status: EventStatus.PENDING,
+            kind: EventKind.BOOKING,
+          },
+          include: {
+            room: { select: { code: true, capacity: true } },
+            groups: { select: { groupId: true } },
+            group: { select: { name: true, label: true } },
+            createdBy: { select: { id: true, name: true, email: true } },
+            exceptions: {
+              where: { type: ExceptionType.CANCELLED },
+              select: { originalStart: true },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+          take,
+        }),
+        ctx.db.eventChangeRequest.findMany({
+          where: { orgId: ctx.orgId, status: RequestStatus.PENDING },
+          include: {
+            requestedBy: { select: { id: true, name: true, email: true } },
+            newRoom: { select: { code: true, capacity: true } },
+            event: {
+              include: {
+                room: { select: { code: true, capacity: true } },
+                group: { select: { name: true, label: true } },
+                groups: { select: { groupId: true } },
+                faculty: { select: { user: { select: { name: true } } } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+          take,
+        }),
+      ]);
+
+      const bookingItems = await Promise.all(
+        bookings.map(async (event) => ({
+          kind: "booking" as const,
+          id: event.id,
+          title: event.title,
+          requestedAt: event.createdAt,
+          requestedBy: event.createdBy,
+          reason: event.notes,
+          room: event.room,
+          cohort: event.group?.label ?? event.group?.name ?? null,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          rrule: event.rrule,
+          recurrenceText: event.rrule ? describeRRule(event.rrule) : null,
+          scope: null,
+          was: null,
+          verdict: await verdictFor(
+            ctx.db,
+            {
+              orgId: ctx.orgId,
+              roomId: event.roomId,
+              groupId: event.groupId,
+              groupIds: event.groups.map((g) => g.groupId),
+              facultyId: event.facultyId,
+              startTime: event.startTime,
+              endTime: event.endTime,
+              timezone: event.timezone,
+              rrule: event.rrule,
+              excludeEventId: event.id,
+            },
+            { skipDates: event.exceptions.map((e) => e.originalStart) },
+          ),
+        })),
+      );
+
+      const changeItems = await Promise.all(
+        changes.map(async (request) => {
+          const slots = proposedSlots(request);
+          const first = slots[0];
+          return {
+            kind: "change" as const,
+            id: request.id,
+            title: request.newTitle ?? request.event.title,
+            requestedAt: request.createdAt,
+            requestedBy: request.requestedBy,
+            reason: request.reason,
+            room: request.newRoom ?? request.event.room,
+            cohort: request.event.group?.label ?? request.event.group?.name ?? null,
+            startTime: first?.start ?? request.event.startTime,
+            endTime: first?.end ?? request.event.endTime,
+            rrule: request.event.rrule,
+            recurrenceText: request.event.rrule ? describeRRule(request.event.rrule) : null,
+            scope: request.scope,
+            cancelling: request.cancelling,
+            // What it looks like today, so the approver sees a change rather
+            // than a proposal with no context.
+            was: {
+              title: request.event.title,
+              roomCode: request.event.room.code,
+              startTime: request.event.startTime,
+              endTime: request.event.endTime,
+              faculty: request.event.faculty?.user.name ?? null,
+            },
+            verdict: request.cancelling
+              ? ({ hard: [], warnings: [], contested: [] } satisfies Verdict)
+              : await verdictFor(
+                  ctx.db,
+                  {
+                    orgId: ctx.orgId,
+                    roomId: request.newRoomId ?? request.event.roomId,
+                    groupId: request.event.groupId,
+                    groupIds: request.event.groups.map((g) => g.groupId),
+                    facultyId: request.event.facultyId,
+                    startTime: first?.start ?? request.event.startTime,
+                    endTime: first?.end ?? request.event.endTime,
+                    timezone: request.event.timezone,
+                    // One sitting moving occupies one slot, whatever the rule.
+                    rrule: request.scope === RequestScope.OCCURRENCE ? null : request.event.rrule,
+                    excludeEventId: request.eventId,
+                  },
+                  { excludeRequestId: request.id },
+                ),
+          };
+        }),
+      );
+
+      return [...bookingItems, ...changeItems]
+        .map((item) => ({ ...item, severity: verdictSeverity(item.verdict) }))
+        .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
+    }),
+
   approve: permissionProcedure(PermissionFlags.ApproveBookings)
-    .input(z.object({ id: z.string().cuid() }))
+    .input(z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }))
     .mutation(async ({ ctx, input }) => {
       const settings = await ctx.db.orgSettings.findUniqueOrThrow({
         where: { orgId: ctx.orgId },
@@ -579,32 +784,77 @@ export const eventsRouter = createTRPCRouter({
       return ctx.db.$transaction(async (tx) => {
         const event = await tx.event.findFirst({
           where: { id: input.id, orgId: ctx.orgId },
+          include: {
+            groups: { select: { groupId: true } },
+            exceptions: {
+              where: { type: ExceptionType.CANCELLED },
+              select: { originalStart: true },
+            },
+          },
         });
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
 
-        // The slot may have been taken while the request sat in the queue, so
-        // approving re-checks rather than trusting the original preflight.
-        const conflicts = await checkConflicts(tx, {
-          orgId: ctx.orgId,
+        // Only a request can be granted. Without this, an id is enough to bring
+        // a refused or cancelled booking back to life.
+        if (event.status !== EventStatus.PENDING) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That booking is not waiting for a decision.",
+          });
+        }
+
+        // Nothing else may approve into this room until the transaction ends,
+        // so the re-check below reads a settled timetable rather than racing
+        // another approval of a request for the same slot.
+        await lockResources(tx, {
           roomId: event.roomId,
-          groupId: event.groupId,
           facultyId: event.facultyId,
-          startTime: event.startTime,
-          endTime: event.endTime,
-          timezone: event.timezone,
-          rrule: event.rrule,
-          excludeEventId: event.id,
+          groupIds: event.groups.map((g) => g.groupId),
         });
-        if (settings.blockConflicts && hasHardConflict(conflicts)) {
-          throw conflictError(conflicts);
+
+        // The slot may have been taken while the request sat in the queue, so
+        // approving re-checks rather than trusting the original preflight —
+        // and checks everything the request itself was checked against, or a
+        // booking could be approved into a clash that would have blocked it.
+        const verdict = await verdictFor(
+          tx,
+          {
+            orgId: ctx.orgId,
+            roomId: event.roomId,
+            groupId: event.groupId,
+            groupIds: event.groups.map((g) => g.groupId),
+            facultyId: event.facultyId,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            timezone: event.timezone,
+            rrule: event.rrule,
+            excludeEventId: event.id,
+          },
+          // Weeks the requester asked to skip are not being booked, so whatever
+          // is in the room those weeks is not this booking's problem.
+          { skipDates: event.exceptions.map((e) => e.originalStart) },
+        );
+        if (settings.blockConflicts && verdict.hard.length > 0) {
+          throw conflictError(verdict.hard);
         }
 
         await tx.event.update({
           where: { id: event.id },
-          data: { status: EventStatus.CONFIRMED },
+          data: {
+            status: EventStatus.CONFIRMED,
+            decidedById: ctx.actor.id,
+            decidedAt: new Date(),
+            decisionNote: input.note ?? null,
+          },
         });
         await regenerateOccurrences(tx, event.id);
-        return { approved: true };
+        return {
+          approved: true,
+          warnings: verdict.warnings,
+          // Said out loud rather than swallowed: these are the requests that
+          // wanted the same slot and have just lost it.
+          contested: verdict.contested,
+        };
       });
     }),
 
@@ -617,14 +867,325 @@ export const eventsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
-        await tx.event.updateMany({
+        const event = await tx.event.findFirst({
           where: { id: input.id, orgId: ctx.orgId },
-          data: { status: EventStatus.REJECTED, notes: input.reason },
+          select: { id: true, status: true },
         });
-        await regenerateOccurrences(tx, input.id);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        if (event.status !== EventStatus.PENDING) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That booking is not waiting for a decision.",
+          });
+        }
+
+        // The reason goes in its own column. `notes` is what the person asking
+        // wrote, and overwriting it destroys the only record of what they
+        // wanted — including for the appeal.
+        await tx.event.update({
+          where: { id: event.id },
+          data: {
+            status: EventStatus.REJECTED,
+            decidedById: ctx.actor.id,
+            decidedAt: new Date(),
+            decisionNote: input.reason ?? null,
+          },
+        });
+        await regenerateOccurrences(tx, event.id);
         return { rejected: true };
       });
     }),
+
+  /**
+   * Asks for a class or a booking to be changed, rather than changing it.
+   *
+   * The event goes on being exactly what it is: sixty people have this lecture
+   * in their week already, and a proposal nobody has agreed to must not move
+   * it under them. `update` files one of these automatically when the person
+   * editing has not got the authority to write directly, so the client does not
+   * have to know which case it is in.
+   */
+  requestChange: protectedProcedure
+    .input(
+      z.object({
+        eventId: z.string().cuid(),
+        scope: scopeInput.default("series"),
+        originalStart: z.date().optional(),
+        newRoomId: z.string().cuid().optional(),
+        newStartTime: z.date().optional(),
+        newEndTime: z.date().optional(),
+        newTitle: z.string().min(1).max(160).optional(),
+        cancelling: z.boolean().default(false),
+        reason: z.string().max(300).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const event = await ctx.db.event.findFirst({
+        where: { id: input.eventId, orgId: ctx.orgId },
+      });
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      // Asking is not editing, but it is not open to strangers either: the
+      // people who may ask are the people who could have edited it directly if
+      // the setting were off.
+      await assertMayEdit(ctx, event);
+
+      if (input.scope !== "series" && !input.originalStart) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Changing a single sitting needs the sitting's date.",
+        });
+      }
+      const asked =
+        input.newRoomId ??
+        input.newStartTime ??
+        input.newEndTime ??
+        input.newTitle ??
+        (input.cancelling ? "cancel" : undefined);
+      if (asked === undefined) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A change request has to ask for something.",
+        });
+      }
+      const start = input.newStartTime ?? event.startTime;
+      const end = input.newEndTime ?? event.endTime;
+      if (end <= start) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The end time must be after the start time.",
+        });
+      }
+
+      return ctx.db.eventChangeRequest.create({
+        data: {
+          orgId: ctx.orgId,
+          eventId: event.id,
+          requestedById: ctx.actor.id,
+          scope: RequestScope[input.scope.toUpperCase() as keyof typeof RequestScope],
+          originalStart: input.originalStart ?? null,
+          newRoomId: input.newRoomId ?? null,
+          newStartTime: input.newStartTime ?? null,
+          newEndTime: input.newEndTime ?? null,
+          newTitle: input.newTitle ?? null,
+          cancelling: input.cancelling,
+          reason: input.reason ?? null,
+        },
+      });
+    }),
+
+  /** Grants a change, and makes it — through the same path an edit takes. */
+  approveChange: permissionProcedure(PermissionFlags.ApproveBookings)
+    .input(z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const settings = await ctx.db.orgSettings.findUniqueOrThrow({
+        where: { orgId: ctx.orgId },
+      });
+
+      return ctx.db.$transaction(async (tx) => {
+        const request = await tx.eventChangeRequest.findFirst({
+          where: { id: input.id, orgId: ctx.orgId },
+          include: { event: { include: { groups: { select: { groupId: true } } } } },
+        });
+        if (!request) throw new TRPCError({ code: "NOT_FOUND" });
+        if (request.status !== RequestStatus.PENDING) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That request has already been decided.",
+          });
+        }
+
+        const event = request.event;
+        const roomId = request.newRoomId ?? event.roomId;
+        await lockResources(tx, {
+          roomId,
+          facultyId: event.facultyId,
+          groupIds: event.groups.map((g) => g.groupId),
+        });
+
+        if (!request.cancelling) {
+          const slots = proposedSlots(request);
+          const first = slots[0];
+          const verdict = await verdictFor(
+            tx,
+            {
+              orgId: ctx.orgId,
+              roomId,
+              groupId: event.groupId,
+              groupIds: event.groups.map((g) => g.groupId),
+              facultyId: event.facultyId,
+              startTime: first?.start ?? event.startTime,
+              endTime: first?.end ?? event.endTime,
+              timezone: event.timezone,
+              rrule: request.scope === RequestScope.OCCURRENCE ? null : event.rrule,
+              // The class moving out of its old slot cannot clash with itself.
+              excludeEventId: event.id,
+            },
+            { excludeRequestId: request.id },
+          );
+          if (settings.blockConflicts && verdict.hard.length > 0) {
+            throw conflictError(verdict.hard);
+          }
+        }
+
+        // Applied exactly as an ordinary edit is, so an approved change reaches
+        // the grid, the registers and everybody's Google Calendar by the same
+        // road as every other change to a timetable.
+        if (request.cancelling) {
+          await tx.eventException.upsert({
+            where: {
+              eventId_originalStart: {
+                eventId: event.id,
+                originalStart: request.originalStart ?? event.startTime,
+              },
+            },
+            update: { type: ExceptionType.CANCELLED, reason: request.reason },
+            create: {
+              eventId: event.id,
+              originalStart: request.originalStart ?? event.startTime,
+              type: ExceptionType.CANCELLED,
+              reason: request.reason,
+            },
+          });
+          if (request.scope === RequestScope.SERIES) {
+            await tx.event.update({
+              where: { id: event.id },
+              data: { status: EventStatus.CANCELLED },
+            });
+          }
+          await regenerateOccurrences(tx, event.id);
+        } else if (request.scope === RequestScope.OCCURRENCE) {
+          await tx.eventException.upsert({
+            where: {
+              eventId_originalStart: {
+                eventId: event.id,
+                originalStart: request.originalStart!,
+              },
+            },
+            update: {
+              type: ExceptionType.MODIFIED,
+              newStartTime: request.newStartTime,
+              newEndTime: request.newEndTime,
+              newRoomId: request.newRoomId,
+              newTitle: request.newTitle,
+            },
+            create: {
+              eventId: event.id,
+              originalStart: request.originalStart!,
+              type: ExceptionType.MODIFIED,
+              newStartTime: request.newStartTime,
+              newEndTime: request.newEndTime,
+              newRoomId: request.newRoomId,
+              newTitle: request.newTitle,
+            },
+          });
+          await regenerateOccurrences(tx, event.id);
+        } else if (request.scope === RequestScope.FOLLOWING) {
+          await splitSeriesAt(tx, event.id, request.originalStart!, {
+            title: request.newTitle ?? undefined,
+            roomId: request.newRoomId ?? undefined,
+            startTime: request.newStartTime ?? undefined,
+            endTime: request.newEndTime ?? undefined,
+          });
+        } else {
+          await tx.event.update({
+            where: { id: event.id },
+            data: {
+              title: request.newTitle ?? undefined,
+              roomId: request.newRoomId ?? undefined,
+              startTime: request.newStartTime ?? undefined,
+              endTime: request.newEndTime ?? undefined,
+            },
+          });
+          await regenerateOccurrences(tx, event.id);
+        }
+
+        await tx.eventChangeRequest.update({
+          where: { id: request.id },
+          data: {
+            status: RequestStatus.APPROVED,
+            decidedById: ctx.actor.id,
+            decidedAt: new Date(),
+            decisionNote: input.note ?? null,
+          },
+        });
+        return { approved: true };
+      });
+    }),
+
+  rejectChange: permissionProcedure(PermissionFlags.ApproveBookings)
+    .input(z.object({ id: z.string().cuid(), reason: z.string().max(300).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const request = await ctx.db.eventChangeRequest.findFirst({
+        where: { id: input.id, orgId: ctx.orgId },
+        select: { id: true, status: true },
+      });
+      if (!request) throw new TRPCError({ code: "NOT_FOUND" });
+      if (request.status !== RequestStatus.PENDING) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That request has already been decided.",
+        });
+      }
+      await ctx.db.eventChangeRequest.update({
+        where: { id: request.id },
+        data: {
+          status: RequestStatus.REJECTED,
+          decidedById: ctx.actor.id,
+          decidedAt: new Date(),
+          decisionNote: input.reason ?? null,
+        },
+      });
+      return { rejected: true };
+    }),
+
+  /** Thought better of it. Only the person who asked may take it back. */
+  withdrawChange: protectedProcedure
+    .input(z.object({ id: z.string().cuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const request = await ctx.db.eventChangeRequest.findFirst({
+        where: { id: input.id, orgId: ctx.orgId },
+        select: { id: true, status: true, requestedById: true },
+      });
+      if (!request) throw new TRPCError({ code: "NOT_FOUND" });
+      if (request.requestedById !== ctx.actor.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the person who asked can withdraw a request.",
+        });
+      }
+      if (request.status !== RequestStatus.PENDING) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That request has already been decided.",
+        });
+      }
+      await ctx.db.eventChangeRequest.update({
+        where: { id: request.id },
+        data: { status: RequestStatus.WITHDRAWN },
+      });
+      return { withdrawn: true };
+    }),
+
+  /** What somebody who has asked for something sees while they wait. */
+  myRequests: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db.eventChangeRequest.findMany({
+      where: { orgId: ctx.orgId, requestedById: ctx.actor.id },
+      include: {
+        newRoom: { select: { code: true } },
+        decidedBy: { select: { name: true } },
+        event: {
+          select: {
+            title: true,
+            startTime: true,
+            endTime: true,
+            room: { select: { code: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+  }),
 
   myBookings: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.event.findMany({
@@ -632,7 +1193,11 @@ export const eventsRouter = createTRPCRouter({
         orgId: ctx.orgId,
         createdById: ctx.actor.id,
         kind: EventKind.BOOKING,
-        status: { in: [EventStatus.CONFIRMED, EventStatus.PENDING] },
+        // Refused ones belong here too: being told no, and why, is the whole
+        // point of asking, and a request that simply vanishes reads as a bug.
+        status: {
+          in: [EventStatus.CONFIRMED, EventStatus.PENDING, EventStatus.REJECTED],
+        },
       },
       include: { room: { select: { code: true } } },
       orderBy: { startTime: "asc" },
@@ -665,7 +1230,16 @@ async function assertMayEdit(
     }
   }
 
-  if (event.createdById === ctx.actor.id) return;
+  // Whoever booked a room may change it — but on the strength of the
+  // permission that let them book it, not merely on having created the row. A
+  // bare creator check outranks every other rule in this function, which is how
+  // somebody whose booking rights were withdrawn keeps editing.
+  if (
+    event.createdById === ctx.actor.id &&
+    ctx.bits.hasAny(PermissionFlags.BookRoom)
+  ) {
+    return;
+  }
 
   throw new TRPCError({
     code: "FORBIDDEN",

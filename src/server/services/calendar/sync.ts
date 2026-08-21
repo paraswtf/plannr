@@ -597,6 +597,12 @@ async function desiredOccurrences(
       eventId,
       start: { lt: to },
       end: { gt: from },
+      // A booking nobody has granted yet is not on anyone's timetable, and must
+      // not appear in their calendar either: a request made on Monday would
+      // otherwise show up as a real lecture until it was refused on Friday.
+      // CANCELLED stays — a cancelled sitting is deliberately mirrored as a
+      // struck-through entry so people see the class is off.
+      status: { in: ["CONFIRMED", "CANCELLED"] },
       OR: [
         ...(scope.groupIds.length ? [{ groupId: { in: scope.groupIds } }] : []),
         ...(scope.facultyId ? [{ facultyId: scope.facultyId }] : []),

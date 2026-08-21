@@ -56,6 +56,15 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "sparkles",
     requires: ["ViewSchedulePlans"],
   },
+  // Where a coordinator clears the queue. It sits above the room screens
+  // because it is work waiting on them rather than a reference they consult,
+  // and somebody has to be waiting on the other end of every item in it.
+  {
+    href: "/approvals",
+    label: "Approvals",
+    icon: "checkCircle",
+    requires: ["ApproveBookings"],
+  },
   { href: "/rooms", label: "Rooms", icon: "door", requires: ["ViewRooms"] },
   { href: "/book", label: "Book a room", icon: "plus", requires: ["BookRoom"] },
   { href: "/people", label: "People", icon: "users", requires: ["ViewUsers"] },

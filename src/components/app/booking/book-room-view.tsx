@@ -24,6 +24,7 @@ import {
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { BookingDrawer, type BookingSpan } from "./booking-drawer";
+import { MyRequests } from "./my-requests";
 import { unfitRoomIds } from "./room-fit";
 import { useBookingDraft } from "./use-booking-draft";
 
@@ -315,6 +316,8 @@ export function BookRoomView({
             sweep the whole slot out in one go, and drag the block&apos;s edges
             or middle to shift it.
           </p>
+
+          <MyRequests />
         </div>
       </div>
 

@@ -59,6 +59,70 @@ enum ExceptionType {
   MODIFIED // occurrence overridden (iCal RECURRENCE-ID)
 }
 
+/// Which sittings a change is being asked for — the same axis an edit uses.
+enum RequestScope {
+  OCCURRENCE
+  FOLLOWING
+  SERIES
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN // the person who asked thought better of it
+}
+
+/// What somebody wants changed about a class or a booking that already exists.
+///
+/// A new booking does not need one of these: it can simply sit at
+/// `EventStatus.PENDING` until somebody approves it, because until then it is
+/// not on anybody's timetable. A change is different — the lecture is already
+/// running, sixty people already have it in their week — so the proposal has to
+/// live somewhere other than the event itself, and the event goes on being what
+/// it is until the change is granted.
+///
+/// Every field here is a *proposal*. Null means "leave that as it is", which is
+/// why they are all nullable and none of them is the event's own column.
+model EventChangeRequest {
+  id      String       @id @default(cuid())
+  orgId   String
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  eventId String
+  event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  requestedById String
+  requestedBy   User   @relation("ChangeRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  scope RequestScope @default(SERIES)
+  /// Which sitting, for a change that is not to the whole series. As the rule
+  /// would have produced it, matching EventException.originalStart.
+  originalStart DateTime?
+
+  newRoomId    String?
+  newRoom      Room?     @relation("RequestedRoom", fields: [newRoomId], references: [id], onDelete: Cascade)
+  newStartTime DateTime?
+  newEndTime   DateTime?
+  newTitle     String?
+  /// A request to call the class off rather than move it.
+  cancelling   Boolean   @default(false)
+  /// Why the person is asking. Shown to whoever decides.
+  reason       String?
+
+  status       RequestStatus @default(PENDING)
+  decidedById  String?
+  decidedBy    User?         @relation("ChangeDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt    DateTime?
+  decisionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, status, createdAt])
+  @@index([eventId, status])
+  @@index([requestedById, status])
+}
+
 enum EmailType {
   BOOKING_CONFIRMED
   BOOKING_CANCELLED
@@ -92,6 +156,7 @@ model Organization {
   batches         Batch[]
   groups          Group[]
   events          Event[]
+  changeRequests     EventChangeRequest[]
   occurrences     EventOccurrence[]
   studentProfiles StudentProfile[]
   facultyProfiles FacultyProfile[]
@@ -116,6 +181,12 @@ model OrgSettings {
 
   blockConflicts                 Boolean @default(true)
   requireApprovalStudentBookings Boolean @default(true)
+  /// Whether a change to a class or a booking somebody already holds has to be
+  /// approved. On, a teacher moving their own lecture files a request; off,
+  /// they move it. Bookings and changes are separate settings because they are
+  /// different risks: an unapproved booking takes a room, an unapproved change
+  /// moves sixty people who had already written the old time down.
+  requireApprovalChanges         Boolean @default(true)
   allowStudentSelfBooking        Boolean @default(true)
   emailNotifications             Boolean @default(true)
   maxStudentBookingMinutes       Int     @default(120)
@@ -152,6 +223,9 @@ model User {
   studentProfile  StudentProfile?
   facultyProfile  FacultyProfile?
   createdEvents   Event[]                @relation("EventCreator")
+  decidedEvents   Event[]                @relation("EventDecider")
+  changeRequests  EventChangeRequest[]   @relation("ChangeRequester")
+  decidedChanges  EventChangeRequest[]   @relation("ChangeDecider")
   importBatches   ImportBatch[]
   outboxEntries   EmailOutbox[]
   schedulePlans   SchedulePlan[]         @relation("PlanCreator")
@@ -309,6 +383,7 @@ model Room {
   notes    String?
 
   events           Event[]
+  changeRequests   EventChangeRequest[] @relation("RequestedRoom")
   occurrences      EventOccurrence[]
   planRequirements SchedulePlanRequirement[]
   planSessions     SchedulePlanSession[]
@@ -564,6 +639,14 @@ model Event {
   createdById String?
   createdBy   User?   @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
+  /// Who approved or refused this booking, and what they said about it. Kept
+  /// apart from `notes`, which belongs to whoever asked: a refusal that
+  /// overwrites the request destroys the only record of what was wanted.
+  decidedById  String?
+  decidedBy    User?     @relation("EventDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt    DateTime?
+  decisionNote String?
+
   /// First occurrence as UTC instants — this is DTSTART plus a duration.
   startTime DateTime
   endTime   DateTime
@@ -580,6 +663,7 @@ model Event {
 
   exceptions  EventException[]
   occurrences EventOccurrence[]
+  requests    EventChangeRequest[]
   /// Every group attending. `groupId` above is the first of these and stays
   /// the one the hot read paths denormalise; a combined lecture lists the
   /// rest here rather than needing a synthetic "all sections" group.
