@@ -1,6 +1,6 @@
 import "server-only";
 
-import { type Session } from "next-auth";
+import type { Session } from "next-auth";
 
 import { db } from "~/server/db";
 import { Prisma } from "../../../generated/prisma";

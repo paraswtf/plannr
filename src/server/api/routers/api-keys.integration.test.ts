@@ -174,8 +174,14 @@ describe("minting a key", () => {
     expect(verifySecret(parsed!.secret, stored.hash)).toBe(true);
     expect(stored.last4).toBe(parsed!.secret.slice(-4));
 
-    // Nothing anywhere on the row is the token itself.
-    expect(JSON.stringify(stored)).not.toContain(parsed!.secret);
+    // Nothing anywhere on the row is the token itself. Serialised with a
+    // replacer because `scopes` is a BigInt and the bare stringify throws on
+    // one — which would fail this test for a reason that has nothing to do
+    // with what it is guarding.
+    const row = JSON.stringify(stored, (_key, value: unknown) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+    expect(row).not.toContain(parsed!.secret);
   });
 
   it("returns the secret exactly once, and never again", async () => {

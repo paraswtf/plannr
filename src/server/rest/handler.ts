@@ -1,6 +1,6 @@
 import "server-only";
 
-import { type Session } from "next-auth";
+import type { Session } from "next-auth";
 
 import { bitsToScopes } from "~/lib/api-scopes";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
