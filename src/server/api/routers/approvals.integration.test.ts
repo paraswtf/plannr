@@ -257,10 +257,16 @@ describe("a student's booking waits for a decision", () => {
     await studentBooks(10);
 
     const queue = await callerFor(coordinator).events.approvalQueue();
-    expect(queue).toHaveLength(1);
-    expect(queue[0]!.kind).toBe("booking");
-    expect(queue[0]!.severity).toBe("clear");
-    expect(queue[0]!.requestedBy?.email).toBe("approvals-student@test.local");
+    // The queue is merged from two tables and cannot be paged at the database,
+    // so it answers `wholeList`: every undecided request, in the envelope.
+    expect(queue.rows).toHaveLength(1);
+    expect(queue.total).toBe(1);
+    expect(queue.pageCount).toBe(1);
+    expect(queue.rows[0]!.kind).toBe("booking");
+    expect(queue.rows[0]!.severity).toBe("clear");
+    expect(queue.rows[0]!.requestedBy?.email).toBe(
+      "approvals-student@test.local",
+    );
   });
 
   it("becomes a real booking when a coordinator approves it", async () => {
@@ -325,8 +331,8 @@ describe("two requests for the same room", () => {
     await studentBooks(14); // a second person wants the same hour
 
     const queue = await callerFor(coordinator).events.approvalQueue();
-    expect(queue).toHaveLength(2);
-    for (const item of queue) {
+    expect(queue.rows).toHaveLength(2);
+    for (const item of queue.rows) {
       expect(item.severity).toBe("contested");
       expect(item.verdict.contested).toHaveLength(1);
     }
@@ -653,12 +659,12 @@ describe("the queue", () => {
     });
 
     const queue = await callerFor(coordinator).events.approvalQueue();
-    expect(queue.map((item) => item.kind).sort()).toEqual([
+    expect(queue.rows.map((item) => item.kind).sort()).toEqual([
       "booking",
       "change",
     ]);
 
-    const change = queue.find((item) => item.kind === "change")!;
+    const change = queue.rows.find((item) => item.kind === "change")!;
     expect(change.was?.roomCode).toBe("AP-2");
     expect(change.reason).toBe("Clashes with a department meeting");
   });

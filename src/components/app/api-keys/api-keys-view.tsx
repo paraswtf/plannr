@@ -10,7 +10,12 @@ import { DEFAULT_TIMEZONE, formatFullDate } from "~/lib/dates";
 import { api } from "~/trpc/react";
 import { Button, relativeTime, tokenHandle } from "./controls";
 import { CreateKeyDialog } from "./create-key-dialog";
-import { KeyDialog, STATUS_BADGE, type ApiKey } from "./key-dialog";
+import {
+  KeyDialog,
+  STATUS_BADGE,
+  type ApiKey,
+  type ApiKeyPage,
+} from "./key-dialog";
 import { SecretDialog } from "./secret-dialog";
 import type { ScopeCatalog } from "./scope-picker";
 
@@ -27,6 +32,26 @@ import type { ScopeCatalog } from "./scope-picker";
 
 /** Scope chips beyond this crowd the row out; the dialog lists all of them. */
 const SCOPES_PER_ROW = 4;
+
+/**
+ * The keys the server component already fetched, wrapped in the envelope they
+ * arrived in — which is what React Query needs to seed its cache with now that
+ * `apiKeys.list` answers with a page rather than an array.
+ *
+ * Written out here rather than imported from `~/server/api/pagination`, whose
+ * `wholeList` is precisely this: that module sits behind the server boundary,
+ * and hauling it across to fill in five fields would put zod in the browser for
+ * nothing. The page is the whole estate either way — the procedure's default is
+ * set past any plausible number of keys, and this screen never asks for a
+ * second page.
+ */
+const seed = (rows: ApiKey[]): ApiKeyPage => ({
+  rows,
+  total: rows.length,
+  page: 1,
+  pageSize: rows.length,
+  pageCount: 1,
+});
 
 export function ApiKeysView({
   initialKeys,
@@ -51,11 +76,11 @@ export function ApiKeysView({
   } | null>(null);
 
   const list = api.apiKeys.list.useQuery(undefined, {
-    initialData: initialKeys,
+    initialData: seed(initialKeys),
   });
   // Memoised only because `ordered` below depends on it: a fresh `[]` every
   // render would re-sort on every keystroke anywhere in the tree.
-  const keys = useMemo(() => list.data ?? [], [list.data]);
+  const keys = useMemo(() => list.data?.rows ?? [], [list.data]);
 
   const labels = useMemo(() => {
     const map = new Map<string, string>();

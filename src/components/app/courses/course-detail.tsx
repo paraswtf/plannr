@@ -12,6 +12,7 @@ import { Card } from "~/components/ui/card";
 import {
   EntityPicker,
   initialsOf,
+  pickerPage,
   useDebounced,
 } from "~/components/ui/entity-picker";
 import { Stat } from "~/components/ui/stat";
@@ -217,12 +218,7 @@ function FacultyEditor({ course }: { course: Course }) {
         onChange={(facultyIds) =>
           setFaculty.mutate({ courseId: course.id, facultyIds })
         }
-        page={
-          faculty.data && {
-            ...faculty.data,
-            rows: faculty.data.rows.map(facultyCard),
-          }
-        }
+        page={pickerPage(faculty.data, (rows) => rows.map(facultyCard))}
         loading={faculty.isLoading}
         query={query}
         onQueryChange={setQuery}
@@ -275,12 +271,7 @@ function GroupsEditor({ course }: { course: Course }) {
         onChange={(groupIds) =>
           setGroups.mutate({ courseId: course.id, groupIds })
         }
-        page={
-          groups.data && {
-            ...groups.data,
-            rows: groups.data.rows.map(groupCard),
-          }
-        }
+        page={pickerPage(groups.data, (rows) => rows.map(groupCard))}
         loading={groups.isLoading}
         query={query}
         onQueryChange={setQuery}

@@ -50,7 +50,7 @@ export function RoomsView({
     { includeInactive: true },
     { enabled: canManage && tab === "archived" },
   );
-  const archived = (archivedQuery.data ?? []).filter((r) => !r.isActive);
+  const archived = (archivedQuery.data?.rows ?? []).filter((r) => !r.isActive);
 
   const restore = api.rooms.restore.useMutation({
     onSuccess: async () => {

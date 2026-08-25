@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { PermissionFlags } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -23,6 +24,10 @@ const roomInput = z.object({
 });
 
 export const roomsRouter = createTRPCRouter({
+  /**
+   * The room directory. Read whole by the rooms screen's archived tab — the
+   * grid screens take their rooms from `timetable.grid` instead.
+   */
   list: protectedProcedure
     .input(
       z
@@ -33,44 +38,58 @@ export const roomsRouter = createTRPCRouter({
           minCapacity: z.number().int().min(0).optional(),
           features: z.array(z.nativeEnum(RoomFeature)).optional(),
           includeInactive: z.boolean().default(false),
+          /**
+           * Sized past any campus rather than sized as a page. A college
+           * counts its rooms in the hundreds, so 500 hands the whole estate to
+           * a caller that has never heard of paging — which the rooms screen
+           * is: its archived tab asks for every room, active ones included, and
+           * sorts the inactive out in the browser. A default that truncated
+           * that would empty the tab and look like an empty tab.
+           */
+          ...pageInput({ defaultSize: 500, maxSize: 2000 }),
         })
         .default({}),
     )
     .query(async ({ ctx, input }) => {
-      return ctx.db.room.findMany({
-        where: {
-          orgId: ctx.orgId,
-          ...(input.includeInactive ? {} : { isActive: true }),
-          ...(input.buildingId ? { buildingId: input.buildingId } : {}),
-          ...(input.type ? { type: input.type } : {}),
-          ...(input.minCapacity
-            ? { capacity: { gte: input.minCapacity } }
-            : {}),
-          ...(input.features?.length
-            ? { features: { hasEvery: input.features } }
-            : {}),
-          ...(input.query
-            ? {
-                OR: [
-                  {
-                    code: {
-                      contains: input.query,
-                      mode: "insensitive" as const,
-                    },
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.includeInactive ? {} : { isActive: true }),
+        ...(input.buildingId ? { buildingId: input.buildingId } : {}),
+        ...(input.type ? { type: input.type } : {}),
+        ...(input.minCapacity ? { capacity: { gte: input.minCapacity } } : {}),
+        ...(input.features?.length
+          ? { features: { hasEvery: input.features } }
+          : {}),
+        ...(input.query
+          ? {
+              OR: [
+                {
+                  code: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
                   },
-                  {
-                    notes: {
-                      contains: input.query,
-                      mode: "insensitive" as const,
-                    },
+                },
+                {
+                  notes: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
                   },
-                ],
-              }
-            : {}),
-        },
-        include: { building: { select: { id: true, name: true } } },
-        orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
-      });
+                },
+              ],
+            }
+          : {}),
+      };
+
+      const [rows, total] = await Promise.all([
+        ctx.db.room.findMany({
+          where,
+          include: { building: { select: { id: true, name: true } } },
+          orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.room.count({ where }),
+      ]);
+      return toPage(rows, total, input);
     }),
 
   byId: protectedProcedure
@@ -82,7 +101,14 @@ export const roomsRouter = createTRPCRouter({
       });
     }),
 
-  /** Rooms with nothing booked in the given window — the Book screen's filter. */
+  /**
+   * Rooms with nothing booked in the given window — the free-room search.
+   *
+   * A room list with one more filter on it, so it pages like `list` and with
+   * the same numbers. The window narrows the answer; it does not make it a
+   * different kind of answer, and an integrator should not have to discover
+   * that "the free rooms" come back under different rules from "the rooms".
+   */
   availability: protectedProcedure
     .input(
       z.object({
@@ -92,32 +118,38 @@ export const roomsRouter = createTRPCRouter({
         type: z.nativeEnum(RoomType).optional(),
         minCapacity: z.number().int().min(0).optional(),
         features: z.array(z.nativeEnum(RoomFeature)).optional(),
+        ...pageInput({ defaultSize: 500, maxSize: 2000 }),
       }),
     )
     .query(async ({ ctx, input }) => {
-      return ctx.db.room.findMany({
-        where: {
-          orgId: ctx.orgId,
-          isActive: true,
-          ...(input.buildingId ? { buildingId: input.buildingId } : {}),
-          ...(input.type ? { type: input.type } : {}),
-          ...(input.minCapacity
-            ? { capacity: { gte: input.minCapacity } }
-            : {}),
-          ...(input.features?.length
-            ? { features: { hasEvery: input.features } }
-            : {}),
-          occurrences: {
-            none: {
-              status: { in: [...OCCUPYING_STATUSES] },
-              start: { lt: input.to },
-              end: { gt: input.from },
-            },
+      const where = {
+        orgId: ctx.orgId,
+        isActive: true,
+        ...(input.buildingId ? { buildingId: input.buildingId } : {}),
+        ...(input.type ? { type: input.type } : {}),
+        ...(input.minCapacity ? { capacity: { gte: input.minCapacity } } : {}),
+        ...(input.features?.length
+          ? { features: { hasEvery: input.features } }
+          : {}),
+        occurrences: {
+          none: {
+            status: { in: [...OCCUPYING_STATUSES] },
+            start: { lt: input.to },
+            end: { gt: input.from },
           },
         },
-        include: { building: { select: { id: true, name: true } } },
-        orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
-      });
+      };
+
+      const [rows, total] = await Promise.all([
+        ctx.db.room.findMany({
+          where,
+          include: { building: { select: { id: true, name: true } } },
+          orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.room.count({ where }),
+      ]);
+      return toPage(rows, total, input);
     }),
 
   /** Powers the "use next free slot" button on the conflict banner. */
@@ -287,13 +319,29 @@ export const roomsRouter = createTRPCRouter({
 });
 
 export const buildingsRouter = createTRPCRouter({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.building.findMany({
-      where: { orgId: ctx.orgId },
-      orderBy: { name: "asc" },
-      include: { _count: { select: { rooms: true } } },
-    });
-  }),
+  /**
+   * Every building, each with a count of the rooms grouped under it.
+   *
+   * Paged for one shape across the API rather than because this list is ever
+   * long: a campus has buildings in the tens, and the room dialog renders the
+   * whole of it as a dropdown, so the default is an order of magnitude past
+   * anything a college will reach and nothing is lost by starting at page one.
+   */
+  list: protectedProcedure
+    .input(z.object(pageInput({ defaultSize: 200, maxSize: 1000 })).default({}))
+    .query(async ({ ctx, input }) => {
+      const where = { orgId: ctx.orgId };
+      const [rows, total] = await Promise.all([
+        ctx.db.building.findMany({
+          where,
+          orderBy: { name: "asc" },
+          include: { _count: { select: { rooms: true } } },
+          ...pageArgs(input),
+        }),
+        ctx.db.building.count({ where }),
+      ]);
+      return toPage(rows, total, input);
+    }),
 
   create: permissionProcedure(PermissionFlags.ManageRooms)
     .input(z.object({ name: z.string().min(1).max(120) }))

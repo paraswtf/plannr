@@ -54,7 +54,7 @@ export function ShareDialog({
     onError: (e) => setError(e.message),
   });
 
-  const rows = candidates.data ?? [];
+  const rows = candidates.data?.rows ?? [];
   const ready = selected.length > 0 && !share.isPending;
 
   return (

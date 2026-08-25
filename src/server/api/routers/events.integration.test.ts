@@ -1251,11 +1251,12 @@ describe("combined lectures and their registers", () => {
     });
 
     const lectures = await caller.groups.lectures({ groupId: second.id });
-    expect(lectures).toHaveLength(1);
-    expect(lectures[0]!.title).toBe("Shared lecture");
+    expect(lectures.total).toBe(1);
+    expect(lectures.rows).toHaveLength(1);
+    expect(lectures.rows[0]!.title).toBe("Shared lecture");
     // It says who else is in the room.
-    expect(lectures[0]!.sharedWith).toContain("Test Cohort");
-    expect(lectures[0]!.attendance).toBeNull();
+    expect(lectures.rows[0]!.sharedWith).toContain("Test Cohort");
+    expect(lectures.rows[0]!.attendance).toBeNull();
   });
 });
 
@@ -1297,7 +1298,9 @@ describe("what an API key leaves behind", () => {
     });
 
     const queue = await callerFor(admin).events.pendingApprovals();
-    const waiting = queue.find((e) => e.title === "Booked by an integration");
+    const waiting = queue.rows.find(
+      (e) => e.title === "Booked by an integration",
+    );
     expect(waiting?.createdBy?.name).toBe("Booking Bot");
   });
 });

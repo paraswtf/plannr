@@ -539,70 +539,173 @@ smooth rate.
 
 ## Pagination and filtering
 
-This is the part of the API where honesty is more useful than a convention, so:
-**there is no single pagination scheme, and most list endpoints do not paginate
-at all.** They return the whole result set. That is a deliberate consequence of
-the design — these are the app's own procedures, shaped by the screens that call
-them, and a screen showing every room in a building has no page control to
-serve.
+Every list this API returns comes back in the same envelope, and every list can
+be paged:
 
-Endpoints fall into three families.
+```json
+{
+  "rows": [{ "id": "cm3q7rooma001qz8f1a2b3c4d", "code": "L-204" }],
+  "total": 412,
+  "page": 1,
+  "pageSize": 500,
+  "pageCount": 1
+}
+```
 
-### Paged: `page` and `pageSize`
+There is one convention, not three. No list endpoint hands back a bare array, no
+list has a `take` or a `limit` of its own, and no response length is decided by
+how large the institution happens to be. One piece of client code reads every
+list in the API.
 
-One-based `page`, with a `pageSize` you may raise, and a response shaped
-`{ rows, total, page, pageSize, pageCount }` — the `groups`-family endpoints add
-`hasMore`.
+| Field       | What it is                                                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `rows`      | This page of results, in that endpoint's own row shape.                                                                          |
+| `total`     | Everything matching the filter — **not** the length of `rows`.                                                                   |
+| `page`      | One-based, echoing the page you asked for.                                                                                       |
+| `pageSize`  | Rows in a full page: what you asked for, or the endpoint's own default where you asked for nothing.                              |
+| `pageCount` | How many pages `total` divides into. Never below 1, so an empty list is page 1 of 1 rather than a page 1 of 0 no pager can draw. |
 
-| Endpoint          | `pageSize`        | Filters                                                                   |
-| ----------------- | ----------------- | ------------------------------------------------------------------------- |
-| `GET /groups`     | 1–100, default 20 | `query`, `programmeId`, `semesterId`, `batchId`, `kind`, `includeIds`     |
-| `GET /faculty`    | 1–100, default 20 | `query`, `includeIds`                                                     |
-| `GET /programmes` | 1–100, default 20 | `query`, `includeIds`                                                     |
-| `GET /terms`      | 1–100, default 20 | `query`, `includeIds`                                                     |
-| `GET /users`      | 5–200, default 25 | `query`, `roleId`, `status` (`all`/`active`/`inactive`/`never-signed-in`) |
-| `GET /plans`      | 1–100, default 20 | `query`, `scope` (`all`/`mine`/`shared`/`review`)                         |
+A few endpoints carry a field of their own beside the envelope — `GET /courses`
+returns `semester`, the term it read the catalogue for — so these five are what a
+list response always has rather than all it can have.
 
-`includeIds` pins specific rows into the page even when the search excludes
-them — it is how a picker keeps a chosen option visible, not a way to fetch by id.
+### `page` and `pageSize`
 
-### Capped: a ceiling, but no way to reach page two
+Two query parameters, on every list endpoint, and both optional.
 
-These return at most N rows and offer no offset. If you need what falls off the
-end, narrow the filters rather than looking for a cursor.
+- **`page`** is one-based. `?page=1` and no `page` at all are the same request.
+- **`pageSize`** sizes the page. Every endpoint has its own default and its own
+  maximum; both are in the table below, and both are in
+  `GET /openapi.json`, read off the procedure's own schema rather than typed out
+  by hand.
 
-| Endpoint                          | Cap                                                                                                                                                                     |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /approvals`                  | `take`, 1–100, default 50 — applied to bookings and to change requests **separately**, so a combined list can come back up to twice as long as the number you asked for |
-| `GET /groups/{id}/lectures`       | `limit`, 1–200, default 60 — most recent sittings, unless you window it with `from`/`to`                                                                                |
-| `GET /timetable/people`           | 30, fixed                                                                                                                                                               |
-| `GET /timetable/people/directory` | 30, fixed                                                                                                                                                               |
-| `GET /change-requests/mine`       | 50 most recent, fixed                                                                                                                                                   |
+Asking for more than the maximum is refused with a `400` naming `pageSize`,
+rather than quietly served a smaller page. A cap you cannot see is how a caller
+comes to believe it has everything.
 
-### Unpaged: filtered, and complete
+There is no cursor, and that is a decision rather than something still to come.
+Offsets let you ask for page 7, render "of 12" and jump to the end, which is what
+the app's own screens do; what a cursor buys — a stable walk over a list being
+edited underneath you — is not a problem at these sizes. See
+[Walking every page](#walking-every-page) for the one case where it bites.
 
-Everything else returns every matching row. Several take filters worth knowing
-about; the rest take nothing at all.
+### The default page is meant to be the whole answer
 
-| Endpoint                                                                                     | Filters                                                                                                                             |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /rooms`                                                                                 | `query`, `buildingId`, `type`, `minCapacity`, `features` (matches rooms having **every** feature named, not any), `includeInactive` |
-| `GET /rooms/available`                                                                       | `from`, `to` (both required), plus all of the above except `includeInactive`                                                        |
-| `GET /timetable/grid`                                                                        | `date` (required), `buildingId`, `includeCancelled`                                                                                 |
-| `GET /timetable/week`                                                                        | `from`, `to` (both required), and one of `roomId`, `groupId`, `facultyId`                                                           |
-| `GET /courses`                                                                               | `semesterId`, `programmeId`, `search`                                                                                               |
-| `GET /batches`                                                                               | `query`, `programmeId`                                                                                                              |
-| `GET /users/count`                                                                           | `query`, `roleId`, `status` — the count `GET /users` would return, without the rows                                                 |
-| `GET /groups/{groupId}/attendance`                                                           | `from`, `to`                                                                                                                        |
-| `GET /buildings`, `GET /semesters`, `GET /roles`, `GET /api-keys`, `GET /approvals/bookings` | none                                                                                                                                |
+The defaults are not one house number applied twenty times. Each endpoint states
+its own, and states it large enough to cover that list at a realistic
+institution — 500 rooms, 200 buildings, 1000 courses in a semester. So a caller
+who has never read this section, sends no query string and reads `rows` still
+gets everything, which is exactly what it got before any of this existed.
 
-**What to do about the unbounded ones.** `GET /timetable/week` is the one to
-watch: it is the endpoint an integration should be built on, and with no
-`roomId`, `groupId` or `facultyId` it returns the entire institution's
-occurrences for the window. Over a term-length window that is a great many rows.
-Window it by time — a week at a time is what it is named for — and name a lane
-whenever you can. The same advice applies to `GET /rooms` on a large estate:
-filter by `buildingId`.
+That sizing is the point rather than an accident of it. Turning an unbounded list
+into page 1 of a paginated one silently truncates every caller that was reading
+the whole thing, and a faculty picker that quietly loses everybody after the
+fiftieth name is worse than the unbounded response it replaced: it is wrong, it
+looks entirely right, and the person it hurts cannot tell. Treat a default as a
+ceiling on us, not a hint about how many rows to expect.
+
+Three endpoints are deliberately smaller, because they were paged long before
+this convention existed and their callers already send a page: `GET /users`
+defaults to 25, `GET /plans` to 20 and `GET /timetable/people` to 30 — a
+directory screen and two pickers. Compare `total` with `rows.length` if you need
+to know whether you are looking at all of it.
+
+### Walking every page
+
+Increment `page` until it reaches `pageCount`:
+
+```bash
+page=1
+while :; do
+  body=$(curl -s -G "$PLANNR/users" \
+    -H "Authorization: Bearer $KEY" \
+    --data-urlencode "pageSize=200" \
+    --data-urlencode "page=$page")
+  echo "$body" | jq -c '.rows[]'
+  [ "$page" -lt "$(echo "$body" | jq -r '.pageCount')" ] || break
+  page=$((page + 1))
+done
+```
+
+`page < pageCount` is the condition to loop on. Do not loop until `rows` comes
+back empty: on a list whose length divides exactly by `pageSize` that is one
+wasted request every time.
+
+Nothing is snapshotted between calls. A row inserted while you are on page 3
+shifts everything after it down one, so a walk of a list somebody is editing can
+miss a row or repeat one. That is immaterial to a nightly export and it matters
+to a reconciliation — where it matters, ask for a page big enough to take the
+list in a single request, which for most of these endpoints is the default.
+
+### Every list endpoint
+
+| Endpoint                          | `pageSize`           | Filters                                                                                                                             |
+| --------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /rooms`                      | 1–2000, default 500  | `query`, `buildingId`, `type`, `minCapacity`, `features` (matches rooms having **every** feature named, not any), `includeInactive` |
+| `GET /rooms/available`            | 1–2000, default 500  | `from`, `to` (both required), plus every filter `/rooms` takes apart from `includeInactive`                                         |
+| `GET /buildings`                  | 1–1000, default 200  | none                                                                                                                                |
+| `GET /timetable/people`           | 1–200, default 30    | `query` — name or PRN                                                                                                               |
+| `GET /timetable/people/directory` | 1–2000, default 500  | `query` — name, PRN or contact address                                                                                              |
+| `GET /events/mine`                | 1–2000, default 500  | none                                                                                                                                |
+| `GET /change-requests/mine`       | 1–500, default 100   | none                                                                                                                                |
+| `GET /approvals/bookings`         | 1–500, default 200   | none                                                                                                                                |
+| `GET /courses`                    | 1–2000, default 1000 | `semesterId`, `programmeId`, `search`                                                                                               |
+| `GET /semesters`                  | 1–500, default 200   | none                                                                                                                                |
+| `GET /groups`                     | 1–1000, default 500  | `query`, `programmeId`, `semesterId`, `batchId`, `kind`, `includeIds`                                                               |
+| `GET /groups/{id}/lectures`       | 1–1000, default 200  | `from`, `to` — earliest sitting first, so paging walks forward                                                                      |
+| `GET /faculty`                    | 1–1000, default 500  | `query`, `includeIds`                                                                                                               |
+| `GET /batches`                    | 1–500, default 200   | `query`, `programmeId`                                                                                                              |
+| `GET /programmes`                 | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
+| `GET /terms`                      | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
+| `GET /plans`                      | 1–100, default 20    | `query`, `scope` (`all`/`mine`/`shared`/`review`)                                                                                   |
+| `GET /plans/{id}/history`         | 1–500, default 200   | none                                                                                                                                |
+| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`inactive`/`never-signed-in`)                                                           |
+| `GET /roles`                      | 1–500, default 200   | none                                                                                                                                |
+| `GET /api-keys`                   | 1–500, default 200   | none                                                                                                                                |
+
+`includeIds` pins particular rows into the page even when the search excludes
+them — it is how a picker keeps a chosen option visible, and not a way to fetch
+by id. Pinned rows are appended, so `rows` can come back longer than `pageSize`,
+and `total` still counts what matched the filter rather than what you were handed.
+
+### The two lists that answer whole
+
+`GET /approvals` and `GET /plans/reviewer-candidates` answer in the same
+envelope and take neither parameter. Both always return everything, on page 1 of
+1, and both used to carry a cap that has been removed rather than converted.
+
+Neither is an oversight. The approvals queue is two tables — booking requests and
+change requests — read separately, merged and re-sorted by age, so page two of it
+is not an offset into either; and trimming that list is precisely how two
+requests for the same room at the same hour stop being visible together, which is
+the one thing the person deciding them needs. The reviewer list is narrowed by
+expanding permission bits after the rows are read, which no `WHERE` clause can
+express, so paging the query underneath would answer with short pages, empty
+pages and a `total` counting people you are never shown. Both lists are small by
+nature: what is undecided today, and the handful of people who can sign a
+timetable off.
+
+### What is not a list
+
+The envelope is for lists of records. Everything else answers as whatever it is,
+and takes no `page`:
+
+| Endpoint                                            | What it answers with                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GET /timetable/grid`                               | one day across every active room. `date` (required), `buildingId`, `includeCancelled`                   |
+| `GET /timetable/week`                               | every occurrence in a window. `from`, `to` (both required), and one of `roomId`, `groupId`, `facultyId` |
+| `GET /timetable/my-day`, `/my-week`, `/my-schedule` | the caller's own classes for a day or a window. Person only                                             |
+| `GET /groups/{groupId}/attendance`                  | a group's taken registers. `from`, `to`                                                                 |
+| `GET /users/count`                                  | a number — the count `GET /users` would report, without the rows. `query`, `roleId`, `status`           |
+| `GET /events/conflicts`                             | what a proposed slot would collide with                                                                 |
+| `GET /roles/permissions`, `GET /api-keys/scopes`    | fixed catalogues of the permission bits — flat for roles, grouped by category for keys                  |
+
+**The one to watch is `GET /timetable/week`.** It is the endpoint an integration
+should be built on, and with no `roomId`, `groupId` or `facultyId` it returns the
+entire institution's occurrences for the window — over a term-length window, a
+great many rows. It is bounded by time rather than by a page, which is the right
+bound for a timetable: window it a week at a time, which is what it is named for,
+and name a lane whenever you can.
 
 If you are mirroring the timetable, poll `GET /timetable/week` per week per lane
 rather than asking for a term in one request. There is no change feed and no
@@ -670,21 +773,27 @@ curl -s "$PLANNR/rooms?type=SEMINAR&minCapacity=6&features=WHITEBOARD" \
 ```
 
 ```json
-[
-  {
-    "id": "cm3q7rooma001qz8f1a2b3c4d",
-    "orgId": "cm3q0org00000qz8f9z8y7x6w",
-    "code": "L-204",
-    "buildingId": "cm3q0bldg0000qz8f5m4n3o2p",
-    "floor": 2,
-    "capacity": 8,
-    "type": "SEMINAR",
-    "features": ["WHITEBOARD", "TV"],
-    "isActive": true,
-    "notes": "Group study, bookable by students.",
-    "building": { "id": "cm3q0bldg0000qz8f5m4n3o2p", "name": "Library" }
-  }
-]
+{
+  "rows": [
+    {
+      "id": "cm3q7rooma001qz8f1a2b3c4d",
+      "orgId": "cm3q0org00000qz8f9z8y7x6w",
+      "code": "L-204",
+      "buildingId": "cm3q0bldg0000qz8f5m4n3o2p",
+      "floor": 2,
+      "capacity": 8,
+      "type": "SEMINAR",
+      "features": ["WHITEBOARD", "TV"],
+      "isActive": true,
+      "notes": "Group study, bookable by students.",
+      "building": { "id": "cm3q0bldg0000qz8f5m4n3o2p", "name": "Library" }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 500,
+  "pageCount": 1
+}
 ```
 
 `features` matches rooms that have **every** feature you name. Archived rooms are

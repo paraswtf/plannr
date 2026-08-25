@@ -8,7 +8,11 @@ import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Dialog } from "~/components/ui/dialog";
-import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
+import {
+  pickerPage,
+  SearchSelect,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { Stat } from "~/components/ui/stat";
@@ -49,6 +53,8 @@ export function PlansView({ permissions }: { permissions: string }) {
 
   const rows = plans.data?.rows ?? [];
   const awaitingMe = rows.filter((p) => p.awaitingMe).length;
+  /** The envelope reports where the page sits, and leaves this to the reader. */
+  const hasMore = page < (plans.data?.pageCount ?? 1);
 
   return (
     <>
@@ -168,12 +174,12 @@ export function PlansView({ permissions }: { permissions: string }) {
             </span>
             <button
               type="button"
-              disabled={!plans.data?.hasMore}
+              disabled={!hasMore}
               onClick={() => setPage((n) => n + 1)}
               className="flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
               style={{
                 boxShadow: "var(--ring)",
-                opacity: plans.data?.hasMore ? 1 : 0.4,
+                opacity: hasMore ? 1 : 0.4,
               }}
             >
               Next
@@ -361,34 +367,28 @@ function NewPlanDialog({ onClose }: { onClose: () => void }) {
                 : null
             }
             onChange={(id) => setTermId(id ?? "")}
-            page={
-              terms.data && {
-                ...terms.data,
-                rows: terms.data.rows.map((t) => ({
-                  id: t.id,
+            page={pickerPage(terms.data, (rows) =>
+              rows.map((t) => ({
+                id: t.id,
+                label: t.name,
+                card: {
                   label: t.name,
-                  card: {
-                    label: t.name,
-                    avatar: {
-                      kind: "icon" as const,
-                      name: "calendar" as const,
-                    },
-                    title: t.name,
-                    subtitle: `${new Intl.DateTimeFormat("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                    }).format(t.startDate)} – ${new Intl.DateTimeFormat(
-                      "en-GB",
-                      {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      },
-                    ).format(t.endDate)}`,
+                  avatar: {
+                    kind: "icon" as const,
+                    name: "calendar" as const,
                   },
-                })),
-              }
-            }
+                  title: t.name,
+                  subtitle: `${new Intl.DateTimeFormat("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                  }).format(t.startDate)} – ${new Intl.DateTimeFormat("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  }).format(t.endDate)}`,
+                },
+              })),
+            )}
             loading={terms.isLoading}
             query={termQuery}
             onQueryChange={setTermQuery}

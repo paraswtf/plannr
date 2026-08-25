@@ -35,7 +35,7 @@ export const academicsRoutes: RouteDef[] = [
     procedure: "courses.list",
     summary: "List a semester's courses",
     description:
-      "Defaults to the semester running today, or the most recent one when the college is between terms, and names the semester it answered for so a client never has to infer it. Narrow it with `semesterId`, `programmeId` or `search`.",
+      "Paged, and narrowable with `semesterId`, `programmeId` or `search`. It defaults to the semester running today, or the most recent one when the college is between terms, and names that semester alongside the page — `semester` sits beside `rows` — so a client never has to infer which term it was answered for. The default page holds a whole semester's catalogue, so a caller that ignores paging still gets the lot.",
     tag: "Courses",
     scopes: ["ViewGroups"],
   },
@@ -91,10 +91,9 @@ export const academicsRoutes: RouteDef[] = [
     procedure: "semesters.list",
     summary: "List semesters",
     description:
-      "Newest first, each with what it holds — courses, groups, lectures, batches — and a `current` flag for the one running today. There is at most one of those, and sometimes none.",
+      "Newest first, each with what it holds — courses, groups, lectures, batches — and a `current` flag for the one running today. There is at most one of those, and sometimes none. Paged, though a college would have to run for sixty years to fill the first page.",
     tag: "Semesters",
     scopes: ["ViewGroups"],
-    input: "none",
   },
   {
     method: "POST",

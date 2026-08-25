@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { PermissionFlags } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import { createTRPCRouter, permissionProcedure } from "~/server/api/trpc";
 
 /**
@@ -42,35 +43,58 @@ const dates = z
 
 export const semestersRouter = createTRPCRouter({
   /** Every semester the college has kept, newest first. */
-  list: permissionProcedure(PermissionFlags.ViewGroups).query(
-    async ({ ctx }) => {
-      const semesters = await ctx.db.semester.findMany({
-        where: { orgId: ctx.orgId },
-        select: {
-          id: true,
-          name: true,
-          startDate: true,
-          endDate: true,
-          _count: {
-            select: {
-              courses: true,
-              groups: true,
-              events: true,
-              batches: true,
+  list: permissionProcedure(PermissionFlags.ViewGroups)
+    .input(
+      z
+        .object({
+          /**
+           * A college opens two or three of these a year, so two hundred is
+           * every term of a lifetime and then some — which is what it has to
+           * be, since the setup panel renders this list whole and picks the
+           * newest semester out of it to carry the next one forward from. A
+           * page that stopped short would not look wrong; it would just be a
+           * shorter history than the college has.
+           */
+          ...pageInput({ defaultSize: 200, maxSize: 500 }),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = { orgId: ctx.orgId };
+      const [semesters, total] = await Promise.all([
+        ctx.db.semester.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            _count: {
+              select: {
+                courses: true,
+                groups: true,
+                events: true,
+                batches: true,
+              },
             },
           },
-        },
-        orderBy: { startDate: "desc" },
-      });
+          orderBy: { startDate: "desc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.semester.count({ where }),
+      ]);
 
       const today = new Date();
-      return semesters.map((semester) => ({
-        ...semester,
-        /** The one running now. There is at most one, and sometimes none. */
-        current: semester.startDate <= today && semester.endDate >= today,
-      }));
-    },
-  ),
+      return toPage(
+        semesters.map((semester) => ({
+          ...semester,
+          /** The one running now. There is at most one, and sometimes none. */
+          current: semester.startDate <= today && semester.endDate >= today,
+        })),
+        total,
+        input,
+      );
+    }),
 
   /**
    * Opens a semester.

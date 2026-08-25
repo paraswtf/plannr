@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { contactAddress, contactAddresses } from "~/lib/people";
 import { PermissionFlags } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -21,29 +22,25 @@ import { GroupKind } from "../../../../generated/prisma";
  */
 
 /**
- * Every list is paged. Selection widgets ask for a small page and narrow it by
- * searching rather than pulling the directory down and filtering in the
- * browser — a cohort of a few thousand students has to stay usable.
+ * What every list here shares — which is the search box, and not the page size.
+ *
+ * One page size used to cover all five: twenty rows, capped at a hundred,
+ * whether the list was the college's programmes or its entire student body.
+ * That number decides whether a picker still holds every option, so it belongs
+ * to the list rather than to the file; each states its own below, and
+ * `pageInput`'s doc comment says how to choose one.
  */
-const pageInput = {
-  query: z.string().trim().max(120).optional(),
-  page: z.number().int().min(1).default(1),
-  pageSize: z.number().int().min(1).max(100).default(20),
-};
+const query = z.string().trim().max(120).optional();
 
-const paged = <T>(
-  rows: T[],
-  total: number,
-  page: number,
-  pageSize: number,
-) => ({
-  rows,
-  total,
-  page,
-  pageSize,
-  pageCount: Math.max(1, Math.ceil(total / pageSize)),
-  hasMore: page * pageSize < total,
-});
+/**
+ * Keeps chosen options visible even when a search excludes them.
+ *
+ * Pinned rows are added to the page rather than counted into it, so a caller
+ * can get back more rows than the page size it asked for. `total` remains the
+ * count of the filter, which is why "is there another page?" is
+ * `page < pageCount` and never `rows.length`.
+ */
+const includeIds = z.array(z.string().cuid()).max(100).optional();
 
 const displayName = (f: {
   shortName: string | null;
@@ -55,13 +52,21 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z
         .object({
-          ...pageInput,
+          query,
           programmeId: z.string().cuid().optional(),
           semesterId: z.string().cuid().optional(),
           batchId: z.string().cuid().optional(),
           kind: z.nativeEnum(GroupKind).optional(),
-          /** Keeps chosen options visible even when a search excludes them. */
-          includeIds: z.array(z.string().cuid()).max(100).optional(),
+          includeIds,
+          /**
+           * Every screen that renders groups asks for a page by number, but the
+           * default still has to hold an institution whole: a caller that has
+           * never heard of paging is asking for the divisions, majors, minors
+           * and electives of every programme at once, which is hundreds rather
+           * than tens. The ceiling is where a deliberate "give me the lot"
+           * stops.
+           */
+          ...pageInput({ defaultSize: 500, maxSize: 1000 }),
         })
         .default({}),
     )
@@ -130,13 +135,12 @@ export const groupsRouter = createTRPCRouter({
         { name: "asc" as const },
       ];
 
-      const [page, total, pinned] = await Promise.all([
+      const [rows, total, pinned] = await Promise.all([
         ctx.db.group.findMany({
           where,
           include,
           orderBy,
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
         }),
         ctx.db.group.count({ where }),
         input.includeIds?.length
@@ -148,10 +152,10 @@ export const groupsRouter = createTRPCRouter({
           : Promise.resolve([]),
       ]);
 
-      const seen = new Set(page.map((g) => g.id));
-      const groups = [...page, ...pinned.filter((g) => !seen.has(g.id))];
+      const seen = new Set(rows.map((g) => g.id));
+      const groups = [...rows, ...pinned.filter((g) => !seen.has(g.id))];
 
-      return paged(
+      return toPage(
         groups.map((g) => ({
           id: g.id,
           name: g.name,
@@ -173,8 +177,7 @@ export const groupsRouter = createTRPCRouter({
           })),
         })),
         total,
-        input.page,
-        input.pageSize,
+        input,
       );
     }),
 
@@ -513,8 +516,17 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z
         .object({
-          ...pageInput,
-          includeIds: z.array(z.string().cuid()).max(100).optional(),
+          query,
+          includeIds,
+          /**
+           * This is the "who teaches this?" dropdown, and the person it fails
+           * is the one who cannot find their own supervisor in it and has no
+           * way to tell that the list is short rather than the college. So the
+           * default is the whole staff room — a few hundred teach at an
+           * institution this size — and the ceiling covers being wrong by a
+           * factor of two.
+           */
+          ...pageInput({ defaultSize: 500, maxSize: 1000 }),
         })
         .default({}),
     )
@@ -560,13 +572,12 @@ export const groupsRouter = createTRPCRouter({
       } as const;
       const orderBy = { shortName: "asc" as const };
 
-      const [page, total, pinned] = await Promise.all([
+      const [rows, total, pinned] = await Promise.all([
         ctx.db.facultyProfile.findMany({
           where,
           include,
           orderBy,
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
         }),
         ctx.db.facultyProfile.count({ where }),
         input.includeIds?.length
@@ -582,10 +593,10 @@ export const groupsRouter = createTRPCRouter({
           : Promise.resolve([]),
       ]);
 
-      const seen = new Set(page.map((f) => f.id));
-      const faculty = [...page, ...pinned.filter((f) => !seen.has(f.id))];
+      const seen = new Set(rows.map((f) => f.id));
+      const faculty = [...rows, ...pinned.filter((f) => !seen.has(f.id))];
 
-      return paged(
+      return toPage(
         faculty.map((f) => ({
           id: f.id,
           name: displayName(f),
@@ -596,92 +607,107 @@ export const groupsRouter = createTRPCRouter({
           groupCount: f._count.assignments,
         })),
         total,
-        input.page,
-        input.pageSize,
+        input,
       );
     }),
 
   /**
-   * The intakes, newest first, with what each has been divided into. Small
-   * enough to send whole — an institution has tens of these, not thousands.
+   * The intakes, newest first, with what each has been divided into.
+   *
+   * This used to answer with every batch there was, on the grounds that an
+   * institution has tens of them rather than thousands. That is still true, and
+   * it is why the default page is far larger than anybody will ever fill — the
+   * screens render this list whole and none of them loses a row. But "few
+   * enough so far" was never a bound on the response, and now there is one.
    */
   batchList: permissionProcedure(PermissionFlags.ViewGroups)
     .input(
       z
         .object({
-          query: z.string().trim().max(120).optional(),
+          query,
           programmeId: z.string().cuid().optional(),
+          ...pageInput({ defaultSize: 200, maxSize: 500 }),
         })
         .default({}),
     )
     .query(async ({ ctx, input }) => {
-      const batches = await ctx.db.batch.findMany({
-        where: {
-          orgId: ctx.orgId,
-          ...(input.programmeId ? { programmeId: input.programmeId } : {}),
-          ...(input.query
-            ? {
-                OR: [
-                  {
-                    name: {
+      const where = {
+        orgId: ctx.orgId,
+        ...(input.programmeId ? { programmeId: input.programmeId } : {}),
+        ...(input.query
+          ? {
+              OR: [
+                {
+                  name: {
+                    contains: input.query,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  programme: {
+                    code: {
                       contains: input.query,
                       mode: "insensitive" as const,
                     },
                   },
-                  {
-                    programme: {
-                      code: {
-                        contains: input.query,
-                        mode: "insensitive" as const,
-                      },
-                    },
-                  },
-                ],
-              }
-            : {}),
-        },
-        include: {
-          programme: { select: { id: true, code: true, name: true } },
-          groups: {
-            select: {
-              id: true,
-              name: true,
-              label: true,
-              kind: true,
-              _count: { select: { students: true, events: true } },
-            },
-            orderBy: [{ kind: "asc" }, { name: "asc" }],
-          },
-        },
-        orderBy: [{ startYear: "desc" }, { name: "asc" }],
-      });
+                },
+              ],
+            }
+          : {}),
+      };
 
-      return batches.map((batch) => ({
-        id: batch.id,
-        name: batch.name,
-        startYear: batch.startYear,
-        endYear: batch.endYear,
-        programmeId: batch.programme.id,
-        courseCode: batch.programme.code,
-        courseName: batch.programme.name,
-        groups: batch.groups.map((g) => ({
-          id: g.id,
-          name: g.name,
-          label: g.label ?? g.name,
-          kind: g.kind,
-          studentCount: g._count.students,
-          eventCount: g._count.events,
+      const [batches, total] = await Promise.all([
+        ctx.db.batch.findMany({
+          where,
+          include: {
+            programme: { select: { id: true, code: true, name: true } },
+            groups: {
+              select: {
+                id: true,
+                name: true,
+                label: true,
+                kind: true,
+                _count: { select: { students: true, events: true } },
+              },
+              orderBy: [{ kind: "asc" }, { name: "asc" }],
+            },
+          },
+          orderBy: [{ startYear: "desc" }, { name: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.batch.count({ where }),
+      ]);
+
+      return toPage(
+        batches.map((batch) => ({
+          id: batch.id,
+          name: batch.name,
+          startYear: batch.startYear,
+          endYear: batch.endYear,
+          programmeId: batch.programme.id,
+          courseCode: batch.programme.code,
+          courseName: batch.programme.name,
+          groups: batch.groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            label: g.label ?? g.name,
+            kind: g.kind,
+            studentCount: g._count.students,
+            eventCount: g._count.events,
+          })),
+          // Divisions partition the intake, so their sum is the intake's size;
+          // majors, minors and electives draw from the same people again.
+          studentCount: batch.groups
+            .filter((g) => g.kind === GroupKind.DIVISION)
+            .reduce((n, g) => n + g._count.students, 0),
         })),
-        // Divisions partition the intake, so their sum is the intake's size;
-        // majors, minors and electives draw from the same people again.
-        studentCount: batch.groups
-          .filter((g) => g.kind === GroupKind.DIVISION)
-          .reduce((total, g) => total + g._count.students, 0),
-      }));
+        total,
+        input,
+      );
     }),
 
   /**
-   * A group's scheduled lectures, newest window first.
+   * A group's scheduled lectures, earliest sitting first.
    *
    * Reads occurrences rather than events, so a weekly class appears as the
    * dates it actually sits — which is what a register is taken against. Picks up
@@ -693,79 +719,96 @@ export const groupsRouter = createTRPCRouter({
         groupId: z.string().cuid(),
         from: z.date().optional(),
         to: z.date().optional(),
-        limit: z.number().int().min(1).max(200).default(60),
+        /**
+         * Replaces a `limit` that stopped at sixty and said nothing about what
+         * it had left out. One group sits fifteen to twenty lectures a week, so
+         * a couple of hundred is a term of them — the span a register is ever
+         * read over, and more than `from`/`to` is normally narrowed to. Ask for
+         * a longer history a page at a time.
+         */
+        ...pageInput({ defaultSize: 200, maxSize: 1000 }),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const occurrences = await ctx.db.eventOccurrence.findMany({
-        where: {
-          orgId: ctx.orgId,
-          status: { in: [...OCCUPYING_STATUSES] },
-          ...(input.from ? { start: { gte: input.from } } : {}),
-          ...(input.to ? { end: { lte: input.to } } : {}),
-          OR: [
-            { groupId: input.groupId },
-            { event: { groups: { some: { groupId: input.groupId } } } },
-          ],
-        },
-        select: {
-          id: true,
-          start: true,
-          end: true,
-          kind: true,
-          eventId: true,
-          room: { select: { code: true } },
-          event: {
-            select: {
-              title: true,
-              rrule: true,
-              groups: {
-                select: { group: { select: { id: true, name: true } } },
+      const where = {
+        orgId: ctx.orgId,
+        status: { in: [...OCCUPYING_STATUSES] },
+        ...(input.from ? { start: { gte: input.from } } : {}),
+        ...(input.to ? { end: { lte: input.to } } : {}),
+        OR: [
+          { groupId: input.groupId },
+          { event: { groups: { some: { groupId: input.groupId } } } },
+        ],
+      };
+
+      const [occurrences, total] = await Promise.all([
+        ctx.db.eventOccurrence.findMany({
+          where,
+          select: {
+            id: true,
+            start: true,
+            end: true,
+            kind: true,
+            eventId: true,
+            room: { select: { code: true } },
+            event: {
+              select: {
+                title: true,
+                rrule: true,
+                groups: {
+                  select: { group: { select: { id: true, name: true } } },
+                },
+              },
+            },
+            faculty: {
+              select: { shortName: true, user: { select: { name: true } } },
+            },
+            attendance: {
+              where: { groupId: input.groupId },
+              select: {
+                markedAt: true,
+                records: { select: { status: true } },
               },
             },
           },
-          faculty: {
-            select: { shortName: true, user: { select: { name: true } } },
-          },
-          attendance: {
-            where: { groupId: input.groupId },
-            select: {
-              markedAt: true,
-              records: { select: { status: true } },
-            },
-          },
-        },
-        orderBy: { start: "asc" },
-        take: input.limit,
-      });
+          orderBy: { start: "asc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.eventOccurrence.count({ where }),
+      ]);
 
-      return occurrences.map((o) => {
-        const register = o.attendance[0];
-        return {
-          occurrenceId: o.id,
-          eventId: o.eventId,
-          title: o.event.title,
-          kind: o.kind,
-          start: o.start,
-          end: o.end,
-          roomCode: o.room.code,
-          facultyName: o.faculty?.shortName ?? o.faculty?.user.name ?? null,
-          isRecurring: o.event.rrule !== null,
-          /** Other groups in the room for the same lecture. */
-          sharedWith: o.event.groups
-            .map((g) => g.group)
-            .filter((g) => g.id !== input.groupId)
-            .map((g) => g.name),
-          attendance: register
-            ? {
-                markedAt: register.markedAt,
-                total: register.records.length,
-                present: register.records.filter((r) => r.status === "PRESENT")
-                  .length,
-              }
-            : null,
-        };
-      });
+      return toPage(
+        occurrences.map((o) => {
+          const register = o.attendance[0];
+          return {
+            occurrenceId: o.id,
+            eventId: o.eventId,
+            title: o.event.title,
+            kind: o.kind,
+            start: o.start,
+            end: o.end,
+            roomCode: o.room.code,
+            facultyName: o.faculty?.shortName ?? o.faculty?.user.name ?? null,
+            isRecurring: o.event.rrule !== null,
+            /** Other groups in the room for the same lecture. */
+            sharedWith: o.event.groups
+              .map((g) => g.group)
+              .filter((g) => g.id !== input.groupId)
+              .map((g) => g.name),
+            attendance: register
+              ? {
+                  markedAt: register.markedAt,
+                  total: register.records.length,
+                  present: register.records.filter(
+                    (r) => r.status === "PRESENT",
+                  ).length,
+                }
+              : null,
+          };
+        }),
+        total,
+        input,
+      );
     }),
 
   createBatch: permissionProcedure(PermissionFlags.ManageGroups)
@@ -850,8 +893,16 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z
         .object({
-          ...pageInput,
-          includeIds: z.array(z.string().cuid()).max(100).optional(),
+          query,
+          includeIds,
+          /**
+           * A programme is required to create a group, so a default that
+           * stopped short would make every degree past it unpickable — which is
+           * exactly how this dropdown lost its contents once already, back when
+           * it was a native select fed twenty rows. An institution runs tens of
+           * degrees; this is past any of them.
+           */
+          ...pageInput({ defaultSize: 200, maxSize: 500 }),
         })
         .default({}),
     )
@@ -878,13 +929,12 @@ export const groupsRouter = createTRPCRouter({
         _count: { select: { groups: true, batches: true } },
       } as const;
 
-      const [page, total, pinned] = await Promise.all([
+      const [programmes, total, pinned] = await Promise.all([
         ctx.db.programme.findMany({
           where,
           select,
           orderBy: { code: "asc" },
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
         }),
         ctx.db.programme.count({ where }),
         input.includeIds?.length
@@ -896,10 +946,10 @@ export const groupsRouter = createTRPCRouter({
           : Promise.resolve([]),
       ]);
 
-      const seen = new Set(page.map((c) => c.id));
-      const rows = [...page, ...pinned.filter((c) => !seen.has(c.id))];
+      const seen = new Set(programmes.map((c) => c.id));
+      const rows = [...programmes, ...pinned.filter((c) => !seen.has(c.id))];
 
-      return paged(
+      return toPage(
         rows.map((c) => ({
           id: c.id,
           code: c.code,
@@ -908,8 +958,7 @@ export const groupsRouter = createTRPCRouter({
           batchCount: c._count.batches,
         })),
         total,
-        input.page,
-        input.pageSize,
+        input,
       );
     }),
 
@@ -1040,8 +1089,14 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z
         .object({
-          ...pageInput,
-          includeIds: z.array(z.string().cuid()).max(100).optional(),
+          query,
+          includeIds,
+          /**
+           * Terms arrive two a year, so this is decades of them and the picker
+           * cannot run out. Nothing is gained by a smaller page: the rows are
+           * four fields and a date.
+           */
+          ...pageInput({ defaultSize: 200, maxSize: 500 }),
         })
         .default({}),
     )
@@ -1059,13 +1114,12 @@ export const groupsRouter = createTRPCRouter({
         endDate: true,
       } as const;
 
-      const [page, total, pinned] = await Promise.all([
+      const [terms, total, pinned] = await Promise.all([
         ctx.db.semester.findMany({
           where,
           select,
           orderBy: { startDate: "desc" },
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
         }),
         ctx.db.semester.count({ where }),
         input.includeIds?.length
@@ -1077,13 +1131,13 @@ export const groupsRouter = createTRPCRouter({
           : Promise.resolve([]),
       ]);
 
-      const seen = new Set(page.map((t) => t.id));
-      const rows = [...page, ...pinned.filter((t) => !seen.has(t.id))];
+      const seen = new Set(terms.map((t) => t.id));
+      const rows = [...terms, ...pinned.filter((t) => !seen.has(t.id))];
       // Decided here rather than in the browser: the dates are @db.Date, which
       // a client would read in its own timezone and get wrong at the edges.
       const today = new Date();
 
-      return paged(
+      return toPage(
         rows.map((t) => ({
           id: t.id,
           name: t.name,
@@ -1092,8 +1146,7 @@ export const groupsRouter = createTRPCRouter({
           isCurrent: t.startDate <= today && today <= t.endDate,
         })),
         total,
-        input.page,
-        input.pageSize,
+        input,
       );
     }),
 

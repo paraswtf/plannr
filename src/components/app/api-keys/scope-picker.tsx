@@ -6,6 +6,7 @@ import { Icon } from "~/components/ui/icon";
 import {
   bitsToScopes,
   impliedScopes,
+  isScopeName,
   scopesToBits,
   type ScopeName,
 } from "~/lib/api-scopes";
@@ -26,8 +27,12 @@ import type { RouterOutputs } from "~/trpc/react";
  *     sentence attached is the same refusal, arriving before the save rather
  *     than after it. Hiding it instead would leave an admin wondering why the
  *     scope their colleague granted is not in the list.
- *   - `Administrator` is not in the catalogue at all, so there is nothing to
- *     draw. That is `GRANTABLE_SCOPES`' doing, not this component's.
+ *   - `Administrator` is refused rather than drawn. `scopeCatalog()` already
+ *     leaves it out, so the filter below never fires in this app — but the
+ *     catalogue arrives as a prop typed on `ScopeName`, which is every
+ *     permission there is, and "no checkbox anywhere offers Administrator" is
+ *     too important a property to hold only because of what the caller
+ *     happened to pass. `GRANTABLE_SCOPES` decides, here as everywhere else.
  */
 
 export type ScopeCatalog = RouterOutputs["apiKeys"]["scopeCatalog"];
@@ -105,6 +110,19 @@ export function ScopePicker({
     return map;
   }, [catalog]);
 
+  // A category left with nothing in it is dropped rather than drawn empty: a
+  // heading with no boxes under it reads as a section that failed to load.
+  const grantable = useMemo(
+    () =>
+      catalog
+        .map((group) => ({
+          ...group,
+          scopes: group.scopes.filter((scope) => isScopeName(scope.name)),
+        }))
+        .filter((group) => group.scopes.length > 0),
+    [catalog],
+  );
+
   const toggle = (name: ScopeName) => {
     if (granted.has(name)) {
       onChange(value.filter((s) => s !== name));
@@ -129,7 +147,7 @@ export function ScopePicker({
         </span>
       </div>
 
-      {catalog.map((group) => (
+      {grantable.map((group) => (
         <div key={group.category}>
           <div className="text-faint mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
             {group.category}

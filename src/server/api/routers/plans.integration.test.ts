@@ -351,8 +351,8 @@ describe("schedule plans", () => {
     // It holds the very bit the picker filters on, so only `isServiceAccount`
     // can be what keeps it out.
     const candidates = await callerFor(planner).plans.reviewerCandidates({});
-    expect(candidates.map((c) => c.id)).toContain(reviewer.id);
-    expect(candidates.map((c) => c.id)).not.toContain(principal.id);
+    expect(candidates.rows.map((c) => c.id)).toContain(reviewer.id);
+    expect(candidates.rows.map((c) => c.id)).not.toContain(principal.id);
 
     const { api, planId } = await seedGeneratedPlan("Key reviewer");
     await expect(
@@ -539,7 +539,10 @@ describe("schedule plans", () => {
     );
 
     const history = await api.plans.history({ id: copy.id });
-    expect(history.map((h) => h.version)).toEqual([1, 2]);
+    expect(history.rows.map((h) => h.version)).toEqual([1, 2]);
+    // The chain arrives whole for a caller that asked for no page at all.
+    expect(history.total).toBe(2);
+    expect(history.pageCount).toBe(1);
 
     // Revising the same draft again would fork the chain; it is refused with
     // an explanation rather than a unique-constraint error.

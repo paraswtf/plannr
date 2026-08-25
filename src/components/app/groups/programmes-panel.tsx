@@ -33,6 +33,7 @@ export function ProgrammesPanel({
     { placeholderData: (previous) => previous },
   );
   const rows = courses.data?.rows ?? [];
+  const lastPage = courses.data?.pageCount ?? 1;
 
   return (
     <>
@@ -105,7 +106,7 @@ export function ProgrammesPanel({
         </div>
       )}
 
-      {(courses.data?.pageCount ?? 1) > 1 && (
+      {lastPage > 1 && (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
@@ -117,16 +118,16 @@ export function ProgrammesPanel({
             Previous
           </button>
           <span className="text-faint font-mono text-[12px]">
-            page {page} of {courses.data?.pageCount}
+            page {page} of {lastPage}
           </span>
           <button
             type="button"
-            disabled={!courses.data?.hasMore}
+            disabled={page >= lastPage}
             onClick={() => setPage((n) => n + 1)}
             className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
             style={{
               boxShadow: "var(--ring)",
-              opacity: courses.data?.hasMore ? 1 : 0.4,
+              opacity: page < lastPage ? 1 : 0.4,
             }}
           >
             Next

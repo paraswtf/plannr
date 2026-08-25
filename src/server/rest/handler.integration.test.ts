@@ -14,10 +14,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *
  * What is worth asserting here is only what needs all three pieces at once:
  * that a minted secret authenticates, that the scopes on the row are the ones
- * the procedures enforce, that a revoked key stops working immediately, and
- * that the values crossing the wire survive the trip in both directions. The
- * last of those is not theoretical — the body-coercion path was broken for the
- * whole of this feature's first draft, compiled cleanly, and would have
+ * the procedures enforce, that a revoked key stops working immediately, that
+ * the values crossing the wire survive the trip in both directions, and that a
+ * list too long for one response can actually be walked to its end. The
+ * penultimate of those is not theoretical — the body-coercion path was broken
+ * for the whole of this feature's first draft, compiled cleanly, and would have
  * rejected every ISO date the documentation tells callers to send.
  *
  * `server-only` is mocked because it exists to fail this import outside a
@@ -43,6 +44,7 @@ const createCaller = createCallerFactory(appRouter);
 
 let orgId: string;
 let admin: ReturnType<typeof callerFor>;
+let buildingId: string;
 let roomId: string;
 /** Scoped to look, not touch. */
 let readerToken: string;
@@ -94,6 +96,21 @@ function call(
     }),
   );
 }
+
+/** One page of a list, as a caller would read it off the wire. */
+interface PageBody {
+  rows: Array<{ id: string; code: string }>;
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+const pageOf = async (path: string): Promise<PageBody> => {
+  const response = await call("GET", path, { token: readerToken });
+  expect(response.status).toBe(200);
+  return (await response.json()) as PageBody;
+};
 
 const errorOf = async (response: Response) => {
   const body = (await response.json()) as {
@@ -154,6 +171,7 @@ beforeEach(async () => {
   const building = await db.building.create({
     data: { orgId, name: "Symbiosis Block" },
   });
+  buildingId = building.id;
   const room = await db.room.create({
     data: {
       orgId,
@@ -182,11 +200,12 @@ describe("a key that works", () => {
     const response = await call("GET", "/rooms", { token: readerToken });
 
     expect(response.status).toBe(200);
-    const rooms = (await response.json()) as Array<{
-      id: string;
-      code: string;
-    }>;
-    expect(rooms.map((r) => r.code)).toContain("A-101");
+    const page = (await response.json()) as {
+      rows: Array<{ id: string; code: string }>;
+      total: number;
+    };
+    expect(page.rows.map((r) => r.code)).toContain("A-101");
+    expect(page.total).toBe(page.rows.length);
   });
 
   /**
@@ -235,8 +254,8 @@ describe("values crossing the wire", () => {
     );
 
     expect(response.status).toBe(200);
-    const rooms = (await response.json()) as Array<{ code: string }>;
-    expect(rooms.map((r) => r.code)).toContain("A-101");
+    const page = (await response.json()) as { rows: Array<{ code: string }> };
+    expect(page.rows.map((r) => r.code)).toContain("A-101");
   });
 
   /**
@@ -298,6 +317,81 @@ describe("values crossing the wire", () => {
     expect(text).not.toContain('"json"');
     // The booked room is busy in that window, so it is not on offer.
     expect(text).not.toContain("A-101");
+  });
+});
+
+describe("paging a list", () => {
+  /**
+   * The convention every list in this API follows, exercised the way an
+   * integrator meets it: two round trips over HTTP, and the second one asked
+   * for on the strength of what the first one said.
+   *
+   * Nothing in the REST layer implements any of this — `rooms.list` pages at
+   * the database and `coerce.ts` turns `?pageSize=3` into a number against the
+   * procedure's own schema — which is exactly why it is worth a test that goes
+   * end to end. The declaration is silent about paging, so the only place the
+   * two halves are ever seen to meet is here.
+   */
+  it("hands back one page, and the rest on the next, with nothing twice", async () => {
+    // A-101 comes from the fixture; four more make five rooms in one building,
+    // which at three to a page is two pages with a short second one — the case
+    // that catches an off-by-one in either direction.
+    await db.room.createMany({
+      data: ["A-102", "A-103", "A-104", "A-105"].map((code) => ({
+        orgId,
+        buildingId,
+        code,
+        floor: 1,
+        capacity: 60,
+        type: "LECTURE" as const,
+      })),
+    });
+
+    const first = await pageOf("/rooms?page=1&pageSize=3");
+    const second = await pageOf("/rooms?page=2&pageSize=3");
+
+    // `total` counts the whole list, `pageSize` echoes what was asked for as a
+    // number rather than the "3" that crossed the wire, and `pageCount` is what
+    // a client loops on. All three are the envelope's promises.
+    expect(first).toMatchObject({
+      total: 5,
+      page: 1,
+      pageSize: 3,
+      pageCount: 2,
+    });
+    expect(second).toMatchObject({
+      total: 5,
+      page: 2,
+      pageSize: 3,
+      pageCount: 2,
+    });
+
+    expect(first.rows).toHaveLength(3);
+    // The last page is short, and must be handed back short rather than padded
+    // or wrapped around to the beginning.
+    expect(second.rows).toHaveLength(2);
+
+    const codes = [...first.rows, ...second.rows].map((room) => room.code);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes.sort()).toEqual(["A-101", "A-102", "A-103", "A-104", "A-105"]);
+  });
+
+  /**
+   * The ceiling, at the only place it does any work.
+   *
+   * `pageInput` gives every list a maximum so that the size of a response is
+   * decided by the endpoint and not by whoever is calling it, and a caller who
+   * ignores it is refused rather than quietly handed a clamped page — which
+   * they would otherwise read as the complete list.
+   */
+  it("refuses a page size past the endpoint's maximum", async () => {
+    const response = await call("GET", "/rooms?pageSize=5000", {
+      token: readerToken,
+    });
+
+    expect(response.status).toBe(400);
+    const error = await errorOf(response);
+    expect(error.code).toBe("BAD_REQUEST");
   });
 });
 

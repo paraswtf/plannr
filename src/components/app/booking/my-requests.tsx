@@ -50,7 +50,7 @@ export function MyRequests() {
   });
 
   const rows = [
-    ...(bookings.data ?? []).map((booking) => ({
+    ...(bookings.data?.rows ?? []).map((booking) => ({
       key: `b-${booking.id}`,
       title: booking.title,
       detail: `Room ${booking.room.code} · ${when(booking.startTime, booking.endTime)}`,
@@ -59,20 +59,21 @@ export function MyRequests() {
       at: booking.createdAt,
       requestId: null as string | null,
     })),
-    ...(changes.data ?? []).map((request) => ({
+    ...(changes.data?.rows ?? []).map((request) => ({
       key: `c-${request.id}`,
       title: request.cancelling
         ? `Call off ${request.event.title}`
         : `Change to ${request.event.title}`,
-      detail: [
-        request.newRoom ? `move to ${request.newRoom.code}` : null,
-        request.newStartTime
-          ? `move to ${when(request.newStartTime, request.newEndTime ?? request.newStartTime)}`
-          : null,
-        request.newTitle ? `rename to "${request.newTitle}"` : null,
-      ]
-        .filter(Boolean)
-        .join(", ") || `Room ${request.event.room.code}`,
+      detail:
+        [
+          request.newRoom ? `move to ${request.newRoom.code}` : null,
+          request.newStartTime
+            ? `move to ${when(request.newStartTime, request.newEndTime ?? request.newStartTime)}`
+            : null,
+          request.newTitle ? `rename to "${request.newTitle}"` : null,
+        ]
+          .filter(Boolean)
+          .join(", ") || `Room ${request.event.room.code}`,
       status: request.status,
       note: request.decisionNote,
       at: request.createdAt,
@@ -88,14 +89,19 @@ export function MyRequests() {
         {rows.slice(0, 8).map((row) => {
           const state = STATE[row.status] ?? STATE.PENDING!;
           return (
-            <li key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <li
+              key={row.key}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1"
+            >
               <Badge tone={state.tone} dot>
                 {state.label}
               </Badge>
               <span className="text-[14px] font-semibold">{row.title}</span>
               <span className="text-muted text-[13px]">{row.detail}</span>
               {row.note && (
-                <span className="text-muted w-full text-[12.5px] italic">“{row.note}”</span>
+                <span className="text-muted w-full text-[12.5px] italic">
+                  “{row.note}”
+                </span>
               )}
               {row.requestId && (
                 <button

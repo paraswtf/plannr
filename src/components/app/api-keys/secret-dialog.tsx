@@ -163,6 +163,11 @@ export function SecretDialog({
 
         {nudged && !acknowledged && (
           <p
+            // Announced rather than merely drawn: the refusal is the only
+            // feedback a dismissed Escape or a dead-looking X gives, and
+            // somebody reading the box by ear would otherwise be told nothing
+            // at all about why it will not close.
+            role="alert"
             className="m-0 text-[12.5px] font-semibold"
             style={{ color: "var(--red)" }}
           >

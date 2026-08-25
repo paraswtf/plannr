@@ -32,6 +32,10 @@ import {
  * first thing an integrator reads and it has a job to do: explain that a key is
  * a principal rather than an impersonation, and that scopes are permissions
  * spelled the same way, before somebody designs around a guess.
+ *
+ * There is one other hand-maintained fact, `WHOLE_LIST_PROCEDURES`, and its
+ * comment explains why it could not be derived like the rest. It is guarded by
+ * a test rather than by good intentions, which is the price of keeping it.
  */
 
 /** Options shared by every conversion, so the output stays uniform. */
@@ -509,6 +513,68 @@ function assignOperationIds(
 
 // --- responses -------------------------------------------------------------
 
+/**
+ * The procedures that answer in the pagination envelope without accepting the
+ * parameters — the one thing about this document that is maintained by hand.
+ *
+ * Everything else is read off the procedures themselves. `pageInput` is the
+ * only thing in the codebase that puts `page` and `pageSize` on an input, and
+ * a procedure that takes them answers through `toPage`, so the schema a
+ * procedure already validates against is enough to know the shape it returns.
+ * A router converted next week documents itself, and nobody has to remember a
+ * list.
+ *
+ * These two answer through `wholeList` instead. Their lists cannot be paged at
+ * the database — read `pagination.ts` for why, it is not laziness in either
+ * case — so they report the whole thing in the shape everything else reports
+ * and take no parameters at all. That leaves nothing to introspect: a tRPC
+ * procedure carries the schema of what goes in and says nothing whatever about
+ * what comes out, so the only honest options were naming them here or
+ * documenting two list endpoints as if they returned something else.
+ *
+ * `openapi.test.ts` counts the `wholeList` call sites in the routers and fails
+ * when a third appears, which is what stops this going quietly stale.
+ */
+export const WHOLE_LIST_PROCEDURES = new Set([
+  "events.approvalQueue",
+  "plans.reviewerCandidates",
+]);
+
+/** A `page`/`pageSize` field as `pageInput` builds it: a defaulted number. */
+const isPageField = (field: unknown): boolean =>
+  typeNameOf(field) === "ZodDefault" &&
+  typeNameOf(unwrap(field)) === "ZodNumber";
+
+/** Whether this procedure's success body is the pagination envelope. */
+function returnsPage(procedure: string): boolean {
+  if (WHOLE_LIST_PROCEDURES.has(procedure)) return true;
+  const shape = shapeOf(unwrap(inputSchemaOf(procedure)));
+  if (!shape) return false;
+  return isPageField(shape.page) && isPageField(shape.pageSize);
+}
+
+function successSchema(route: RouteDef): JsonSchema {
+  if (!returnsPage(route.procedure)) {
+    // Deliberately unconstrained. The payload is whatever the tRPC procedure
+    // returns, and pinning `type: "object"` here would be a documented lie for
+    // every endpoint that returns something else.
+    return {
+      description:
+        "The procedure's return value, serialised as JSON. Dates are ISO 8601 strings in UTC.",
+    };
+  }
+
+  return {
+    $ref: "#/components/schemas/Page",
+    // A sibling of `$ref`, which JSON Schema 2020-12 allows and OpenAPI 3.0 did
+    // not — this document declares 3.1.0, where the two are the same thing. The
+    // alternative was moving the sentence about dates into `Page` itself, where
+    // it would sit above four counters and an array and describe none of them.
+    description:
+      "One page of rows in the standard envelope. Dates inside `rows` are ISO 8601 strings in UTC.",
+  };
+}
+
 const ERROR_RESPONSES: Array<[string, string]> = [
   [
     "400",
@@ -539,17 +605,7 @@ function responsesFor(route: RouteDef): JsonSchema {
       ? { description: "Done. No body." }
       : {
           description: "Success.",
-          content: {
-            "application/json": {
-              // Deliberately unconstrained. The payload is whatever the tRPC
-              // procedure returns, and pinning `type: "object"` here would be a
-              // documented lie for every endpoint that returns a list.
-              schema: {
-                description:
-                  "The procedure's return value, serialised as JSON. Dates are ISO 8601 strings in UTC.",
-              },
-            },
-          },
+          content: { "application/json": { schema: successSchema(route) } },
         };
 
   for (const [code, description] of ERROR_RESPONSES) {
@@ -692,6 +748,17 @@ Each operation lists the statuses it commonly returns, but the envelope is
 universal: a \`409\` from a double-booked room, or a \`422\`, looks exactly the
 same and can be handled by the same code.
 
+Every list answers in one envelope too, and never as a bare array:
+
+    { "rows": [ … ], "total": 412, "page": 1, "pageSize": 500, "pageCount": 1 }
+
+\`page\` and \`pageSize\` are query parameters on each of those operations,
+documented there with the default and the maximum that particular endpoint
+allows. The default is sized to cover the whole of that list at a realistic
+institution, so one call is usually the entire answer; when it is not,
+\`page < pageCount\` says so, and you ask again with the next \`page\` until they
+are equal. See the \`Page\` schema for the fields.
+
 Timestamps are ISO 8601 in UTC. Identifiers are opaque strings — do not parse
 them, and do not assume a length.
 `.trim();
@@ -724,6 +791,40 @@ const ERROR_SCHEMA: JsonSchema = {
     },
   },
   required: ["error"],
+};
+
+/** Mirrors `Page<T>` in `~/server/api/pagination`, which is what goes out. */
+const PAGE_SCHEMA: JsonSchema = {
+  type: "object",
+  description:
+    "One page of a list, and enough context to ask for the next one.\n\nEvery list endpoint in this API answers in this shape. There is no second convention to learn, and no list that comes back as a bare array, so one piece of client code reads all of them.\n\nThe two parameters are `page`, which is 1-based, and `pageSize`. Both are documented on each operation with that endpoint's own default and maximum, because the default is chosen per endpoint to cover the whole of that list at a realistic institution — a caller that sends neither usually receives everything in a single call. `page < pageCount` is how you tell when it did not, and walking the rest means repeating the request with `page` incremented until they are equal.\n\nA couple of lists cannot be paged at the database and answer in this shape regardless, always with everything on page 1 of 1; their operations document no `page` parameter and say so in their own description.\n\nThe five fields below are always present. A few endpoints carry a field of their own alongside them — `GET /courses` names the semester it read — so this is what a list response always contains rather than all it can contain.",
+  properties: {
+    rows: {
+      type: "array",
+      items: {},
+      description: "This page of results, in the endpoint's own row shape.",
+    },
+    total: {
+      type: "integer",
+      description:
+        "Every row matching the filter, which is not the length of `rows`.",
+    },
+    page: {
+      type: "integer",
+      description: "1-based, echoing the page that was asked for.",
+    },
+    pageSize: {
+      type: "integer",
+      description:
+        "Rows in a full page — what was asked for, or the endpoint's own default where nothing was.",
+    },
+    pageCount: {
+      type: "integer",
+      description:
+        "How many pages `total` divides into. Never below 1, so a list with nothing in it is page 1 of 1 rather than the page 1 of 0 that every pager renders as a contradiction.",
+    },
+  },
+  required: ["rows", "total", "page", "pageSize", "pageCount"],
 };
 
 /**
@@ -796,7 +897,7 @@ export function buildOpenApiDocument(origin: string): Record<string, unknown> {
             "An API key minted by an administrator. Sent on every request as `Authorization: Bearer <key>`.",
         },
       },
-      schemas: { Error: ERROR_SCHEMA },
+      schemas: { Error: ERROR_SCHEMA, Page: PAGE_SCHEMA },
     },
     paths,
   };

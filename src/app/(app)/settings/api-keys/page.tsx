@@ -44,7 +44,7 @@ export default async function ApiKeysPage() {
 
   return (
     <ApiKeysView
-      initialKeys={keys}
+      initialKeys={keys.rows}
       catalog={catalog}
       permissions={session.user.permissions}
     />

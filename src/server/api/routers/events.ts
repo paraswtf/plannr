@@ -4,6 +4,12 @@ import { z } from "zod";
 import { PermissionFlags } from "~/lib/permissions";
 import { describeRRule, validateRRule } from "~/lib/recurrence";
 import {
+  pageArgs,
+  pageInput,
+  toPage,
+  wholeList,
+} from "~/server/api/pagination";
+import {
   createTRPCRouter,
   permissionProcedure,
   protectedProcedure,
@@ -381,7 +387,8 @@ export const eventsRouter = createTRPCRouter({
       // limits still apply, or a two-hour cap is escaped by booking for one
       // hour and then editing it to eight.
       const ownUndecidedBooking =
-        event.status === EventStatus.PENDING && event.createdById === ctx.actor.id;
+        event.status === EventStatus.PENDING &&
+        event.createdById === ctx.actor.id;
       const mayWriteDirectly =
         ctx.bits.hasAny(PermissionFlags.ManageAllEvents) ||
         !settings.requireApprovalChanges ||
@@ -408,7 +415,10 @@ export const eventsRouter = createTRPCRouter({
             orgId: ctx.orgId,
             eventId: event.id,
             requestedById: ctx.actor.id,
-            scope: RequestScope[input.scope.toUpperCase() as keyof typeof RequestScope],
+            scope:
+              RequestScope[
+                input.scope.toUpperCase() as keyof typeof RequestScope
+              ],
             originalStart: input.originalStart ?? null,
             newRoomId: input.patch.roomId ?? null,
             newStartTime: input.patch.startTime ?? null,
@@ -479,7 +489,11 @@ export const eventsRouter = createTRPCRouter({
             },
           });
           await regenerateOccurrences(tx, event.id);
-          return { eventId: event.id, scope: input.scope, applied: true as const };
+          return {
+            eventId: event.id,
+            scope: input.scope,
+            applied: true as const,
+          };
         }
 
         if (input.scope === "following") {
@@ -515,7 +529,11 @@ export const eventsRouter = createTRPCRouter({
           },
         });
         await regenerateOccurrences(tx, event.id);
-        return { eventId: event.id, scope: input.scope, applied: true as const };
+        return {
+          eventId: event.id,
+          scope: input.scope,
+          applied: true as const,
+        };
       });
     }),
 
@@ -611,22 +629,41 @@ export const eventsRouter = createTRPCRouter({
       });
     }),
 
-  pendingApprovals: permissionProcedure(PermissionFlags.ApproveBookings).query(
-    async ({ ctx }) => {
-      return ctx.db.event.findMany({
-        where: {
-          orgId: ctx.orgId,
-          status: EventStatus.PENDING,
-          kind: EventKind.BOOKING,
-        },
-        include: {
-          room: { select: { code: true, capacity: true } },
-          createdBy: { select: { name: true, email: true } },
-        },
-        orderBy: { startTime: "asc" },
-      });
-    },
-  ),
+  pendingApprovals: permissionProcedure(PermissionFlags.ApproveBookings)
+    .input(
+      z
+        .object({
+          /**
+           * A work list is only ever as long as the decisions nobody has made
+           * yet, and a term of that at a real college is tens of requests. Two
+           * hundred covers a queue that has been left alone all year, so a
+           * client that renders it whole — which is the only way anybody reads
+           * a queue — does not lose the request at the bottom of it.
+           */
+          ...pageInput({ defaultSize: 200, maxSize: 500 }),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = {
+        orgId: ctx.orgId,
+        status: EventStatus.PENDING,
+        kind: EventKind.BOOKING,
+      };
+      const [rows, total] = await Promise.all([
+        ctx.db.event.findMany({
+          where,
+          include: {
+            room: { select: { code: true, capacity: true } },
+            createdBy: { select: { name: true, email: true } },
+          },
+          orderBy: { startTime: "asc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.event.count({ where }),
+      ]);
+      return toPage(rows, total, input);
+    }),
 
   /**
    * Everything waiting for a decision, in one list.
@@ -639,11 +676,8 @@ export const eventsRouter = createTRPCRouter({
    * question the approver is actually answering, and they should not have to
    * open five tabs to answer it.
    */
-  approvalQueue: permissionProcedure(PermissionFlags.ApproveBookings)
-    .input(z.object({ take: z.number().min(1).max(100).default(50) }).optional())
-    .query(async ({ ctx, input }) => {
-      const take = input?.take ?? 50;
-
+  approvalQueue: permissionProcedure(PermissionFlags.ApproveBookings).query(
+    async ({ ctx }) => {
       const [bookings, changes] = await Promise.all([
         ctx.db.event.findMany({
           where: {
@@ -662,7 +696,6 @@ export const eventsRouter = createTRPCRouter({
             },
           },
           orderBy: { createdAt: "asc" },
-          take,
         }),
         ctx.db.eventChangeRequest.findMany({
           where: { orgId: ctx.orgId, status: RequestStatus.PENDING },
@@ -679,7 +712,6 @@ export const eventsRouter = createTRPCRouter({
             },
           },
           orderBy: { createdAt: "asc" },
-          take,
         }),
       ]);
 
@@ -730,11 +762,14 @@ export const eventsRouter = createTRPCRouter({
             requestedBy: request.requestedBy,
             reason: request.reason,
             room: request.newRoom ?? request.event.room,
-            cohort: request.event.group?.label ?? request.event.group?.name ?? null,
+            cohort:
+              request.event.group?.label ?? request.event.group?.name ?? null,
             startTime: first?.start ?? request.event.startTime,
             endTime: first?.end ?? request.event.endTime,
             rrule: request.event.rrule,
-            recurrenceText: request.event.rrule ? describeRRule(request.event.rrule) : null,
+            recurrenceText: request.event.rrule
+              ? describeRRule(request.event.rrule)
+              : null,
             scope: request.scope,
             cancelling: request.cancelling,
             // What it looks like today, so the approver sees a change rather
@@ -760,7 +795,10 @@ export const eventsRouter = createTRPCRouter({
                     endTime: first?.end ?? request.event.endTime,
                     timezone: request.event.timezone,
                     // One sitting moving occupies one slot, whatever the rule.
-                    rrule: request.scope === RequestScope.OCCURRENCE ? null : request.event.rrule,
+                    rrule:
+                      request.scope === RequestScope.OCCURRENCE
+                        ? null
+                        : request.event.rrule,
                     excludeEventId: request.eventId,
                   },
                   { excludeRequestId: request.id },
@@ -769,13 +807,30 @@ export const eventsRouter = createTRPCRouter({
         }),
       );
 
-      return [...bookingItems, ...changeItems]
-        .map((item) => ({ ...item, severity: verdictSeverity(item.verdict) }))
-        .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
-    }),
+      // `wholeList`, and one of the few places it is the honest answer rather
+      // than the lazy one: the queue is two different tables read separately
+      // and re-sorted by age, so page two of it is not `skip` on either query.
+      // Over-fetching both and slicing the merge would be the same unbounded
+      // read handing back a shorter answer, which buys nothing at all.
+      //
+      // The `take` cap that used to sit on each query goes with it, and is not
+      // missed. It never bounded the work — every item costs a verdict either
+      // way — and it quietly broke the one thing this list is for: two
+      // requests for the same hour have to be visible together, and the
+      // fifty-first request is one the approver decides as though nothing else
+      // had ever wanted the room.
+      return wholeList(
+        [...bookingItems, ...changeItems]
+          .map((item) => ({ ...item, severity: verdictSeverity(item.verdict) }))
+          .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime()),
+      );
+    },
+  ),
 
   approve: permissionProcedure(PermissionFlags.ApproveBookings)
-    .input(z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }))
+    .input(
+      z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }),
+    )
     .mutation(async ({ ctx, input }) => {
       const settings = await ctx.db.orgSettings.findUniqueOrThrow({
         where: { orgId: ctx.orgId },
@@ -961,7 +1016,10 @@ export const eventsRouter = createTRPCRouter({
           orgId: ctx.orgId,
           eventId: event.id,
           requestedById: ctx.actor.id,
-          scope: RequestScope[input.scope.toUpperCase() as keyof typeof RequestScope],
+          scope:
+            RequestScope[
+              input.scope.toUpperCase() as keyof typeof RequestScope
+            ],
           originalStart: input.originalStart ?? null,
           newRoomId: input.newRoomId ?? null,
           newStartTime: input.newStartTime ?? null,
@@ -975,7 +1033,9 @@ export const eventsRouter = createTRPCRouter({
 
   /** Grants a change, and makes it — through the same path an edit takes. */
   approveChange: permissionProcedure(PermissionFlags.ApproveBookings)
-    .input(z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }))
+    .input(
+      z.object({ id: z.string().cuid(), note: z.string().max(300).optional() }),
+    )
     .mutation(async ({ ctx, input }) => {
       const settings = await ctx.db.orgSettings.findUniqueOrThrow({
         where: { orgId: ctx.orgId },
@@ -984,7 +1044,9 @@ export const eventsRouter = createTRPCRouter({
       return ctx.db.$transaction(async (tx) => {
         const request = await tx.eventChangeRequest.findFirst({
           where: { id: input.id, orgId: ctx.orgId },
-          include: { event: { include: { groups: { select: { groupId: true } } } } },
+          include: {
+            event: { include: { groups: { select: { groupId: true } } } },
+          },
         });
         if (!request) throw new TRPCError({ code: "NOT_FOUND" });
         if (request.status !== RequestStatus.PENDING) {
@@ -1016,7 +1078,8 @@ export const eventsRouter = createTRPCRouter({
               startTime: first?.start ?? event.startTime,
               endTime: first?.end ?? event.endTime,
               timezone: event.timezone,
-              rrule: request.scope === RequestScope.OCCURRENCE ? null : event.rrule,
+              rrule:
+                request.scope === RequestScope.OCCURRENCE ? null : event.rrule,
               // The class moving out of its old slot cannot clash with itself.
               excludeEventId: event.id,
             },
@@ -1113,7 +1176,12 @@ export const eventsRouter = createTRPCRouter({
     }),
 
   rejectChange: permissionProcedure(PermissionFlags.ApproveBookings)
-    .input(z.object({ id: z.string().cuid(), reason: z.string().max(300).optional() }))
+    .input(
+      z.object({
+        id: z.string().cuid(),
+        reason: z.string().max(300).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const request = await ctx.db.eventChangeRequest.findFirst({
         where: { id: input.id, orgId: ctx.orgId },
@@ -1167,42 +1235,91 @@ export const eventsRouter = createTRPCRouter({
     }),
 
   /** What somebody who has asked for something sees while they wait. */
-  myRequests: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.eventChangeRequest.findMany({
-      where: { orgId: ctx.orgId, requestedById: ctx.actor.id },
-      include: {
-        newRoom: { select: { code: true } },
-        decidedBy: { select: { name: true } },
-        event: {
-          select: {
-            title: true,
-            startTime: true,
-            endTime: true,
-            room: { select: { code: true } },
+  myRequests: protectedProcedure
+    .input(
+      z
+        .object({
+          /**
+           * A hundred, doubling the hard `take: 50` it replaces. This is one
+           * person's own proposals over the whole time they have been here —
+           * tens of them, even for a coordinator who reschedules constantly —
+           * and the panel that draws it merges this list with `myBookings`
+           * before sorting the merge by age. So a short answer would not
+           * shorten what is on screen, it would drop the newest few out of the
+           * middle of it, which is the kind of wrong that looks right.
+           */
+          ...pageInput({ defaultSize: 100, maxSize: 500 }),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = { orgId: ctx.orgId, requestedById: ctx.actor.id };
+      const [rows, total] = await Promise.all([
+        ctx.db.eventChangeRequest.findMany({
+          where,
+          include: {
+            newRoom: { select: { code: true } },
+            decidedBy: { select: { name: true } },
+            event: {
+              select: {
+                title: true,
+                startTime: true,
+                endTime: true,
+                room: { select: { code: true } },
+              },
+            },
           },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-  }),
+          orderBy: { createdAt: "desc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.eventChangeRequest.count({ where }),
+      ]);
+      return toPage(rows, total, input);
+    }),
 
-  myBookings: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.event.findMany({
-      where: {
+  myBookings: protectedProcedure
+    .input(
+      z
+        .object({
+          /**
+           * Nothing bounded this at all before, and the panel that reads it
+           * renders it whole: it merges these with `myRequests`, sorts the
+           * merge by age and shows the most recent handful. Rows are ordered
+           * by when the room was wanted rather than when it was asked for, so
+           * anything missing from a short answer goes missing from the *top*
+           * of what is drawn. Five hundred is more bookings than one person
+           * makes in a degree.
+           */
+          ...pageInput({ defaultSize: 500, maxSize: 2000 }),
+        })
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = {
         orgId: ctx.orgId,
         createdById: ctx.actor.id,
         kind: EventKind.BOOKING,
         // Refused ones belong here too: being told no, and why, is the whole
         // point of asking, and a request that simply vanishes reads as a bug.
         status: {
-          in: [EventStatus.CONFIRMED, EventStatus.PENDING, EventStatus.REJECTED],
+          in: [
+            EventStatus.CONFIRMED,
+            EventStatus.PENDING,
+            EventStatus.REJECTED,
+          ],
         },
-      },
-      include: { room: { select: { code: true } } },
-      orderBy: { startTime: "asc" },
-    });
-  }),
+      };
+      const [rows, total] = await Promise.all([
+        ctx.db.event.findMany({
+          where,
+          include: { room: { select: { code: true } } },
+          orderBy: { startTime: "asc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.event.count({ where }),
+      ]);
+      return toPage(rows, total, input);
+    }),
 });
 
 /**

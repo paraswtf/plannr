@@ -94,7 +94,7 @@ export const timetableRoutes: RouteDef[] = [
     procedure: "timetable.searchPeople",
     summary: "Search the people whose day can be looked at",
     description:
-      'Anybody who attends or teaches, matched on name or PRN, thirty at a time — the list behind the schedule screen\'s "view as" picker. It answers with four fields and no more: no address, no roles, no permission bits, no account state. An address is neither returned nor searchable, so this cannot be used to test whether a given address has an account, and service principals are excluded outright, having no day of their own. No particular scope, which mirrors the app: choosing whose day to look at belongs to a screen every signed-in person can reach. Being able to name somebody here is not being able to read their day — `/timetable/my-schedule` decides that separately.',
+      'Anybody who attends or teaches, matched on name or PRN — the list behind the schedule screen\'s "view as" picker. Thirty at a time by default, which is what a picker wants and what this answered before it was paged; `total` says how many matched altogether, so a caller can tell the difference between thirty people and the first thirty of two thousand. It answers with four fields and no more: no address, no roles, no permission bits, no account state. An address is neither returned nor searchable, so this cannot be used to test whether a given address has an account, and service principals are excluded outright, having no day of their own. No particular scope, which mirrors the app: choosing whose day to look at belongs to a screen every signed-in person can reach. Being able to name somebody here is not being able to read their day — `/timetable/my-schedule` decides that separately.',
     tag: "Timetable",
     scopes: [],
   },
@@ -104,7 +104,7 @@ export const timetableRoutes: RouteDef[] = [
     procedure: "timetable.peopleWithSchedules",
     summary: "Search the same people, with their contact addresses",
     description:
-      "The coordinator's version of `/timetable/people`: the same population — anyone with a timetable of their own — plus each person's contact address, which is searchable here as well as returned. Being allowed to see every event is not on its own enough to browse named individuals, so this asks for the people permission too; a lecturer holds the first and not the second.",
+      "The coordinator's version of `/timetable/people`: the same population — anyone with a timetable of their own — plus each person's contact address, which is searchable here as well as returned. It is a directory rather than a typeahead, so its default page is far larger than the picker's thirty: a whole department or cohort arrives at once. A college's entire roll runs to thousands and genuinely does need paging, which is what `total` and `pageCount` are for. Being allowed to see every event is not on its own enough to browse named individuals, so this asks for the people permission too; a lecturer holds the first and not the second.",
     tag: "Timetable",
     scopes: ["ViewAllEvents", "ViewUsers"],
   },

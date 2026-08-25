@@ -45,7 +45,7 @@ export const apiKeyRoutes: RouteDef[] = [
     procedure: "apiKeys.list",
     summary: "List the organisation's API keys",
     description:
-      "Newest first, with each key's scopes, status and usage. Never includes the secret — that exists only in the response that minted it.",
+      "Newest first, with each key's scopes, status and usage. Paged, though the default page is set past any plausible estate — a caller that never sends `page` gets every key, revoked ones included. Never includes the secret — that exists only in the response that minted it.",
     tag: "API keys",
     scopes: ["ManageRoles"],
     actor: "session",

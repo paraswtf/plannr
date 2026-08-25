@@ -216,10 +216,9 @@ export const peopleRoutes: RouteDef[] = [
     procedure: "roles.list",
     summary: "List the organisation's roles",
     description:
-      "Built-in roles first, then custom ones by name. Each carries its permissions three ways: `permissions` as granted, `effectivePermissions` including everything implied, and `impliedPermissions` for the bits held only by implication — which is what an editor renders ticked but locked. `userCount` counts people, so no key is ever counted as a colleague.",
+      "Built-in roles first, then custom ones by name. Paged, though the default page is set past any plausible list — a caller that never sends `page` gets every role. Each carries its permissions three ways: `permissions` as granted, `effectivePermissions` including everything implied, and `impliedPermissions` for the bits held only by implication — which is what an editor renders ticked but locked. `userCount` counts people, so no key is ever counted as a colleague.",
     tag: "Roles",
     scopes: ["ViewUsers"],
-    input: "none",
   },
   {
     method: "POST",

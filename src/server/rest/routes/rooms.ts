@@ -33,7 +33,7 @@ export const roomRoutes: RouteDef[] = [
     procedure: "rooms.list",
     summary: "List rooms",
     description:
-      "Filter by building, type, minimum capacity and features — `features` matches rooms that have every one you name, not any of them. Archived rooms are left out unless `includeInactive` is true.",
+      "One page of rooms in the standard envelope: `rows`, plus `total`, `page`, `pageSize` and `pageCount`. The default page holds more rooms than the college has, so a caller that never sends `page` gets all of them. Filter by building, type, minimum capacity and features — `features` matches rooms that have every one you name, not any of them. Archived rooms are left out unless `includeInactive` is true.",
     tag: "Rooms",
     scopes: [],
   },
@@ -43,7 +43,7 @@ export const roomRoutes: RouteDef[] = [
     procedure: "rooms.availability",
     summary: "List the rooms free for a window",
     description:
-      "`from` and `to` are required, and the filters from `/rooms` all apply. A room is free when nothing that occupies it overlaps the window — a cancelled sitting does not hold a room, so it does not count against one. Archived rooms are never offered.",
+      "`from` and `to` are required, and the filters and paging from `/rooms` all apply. A room is free when nothing that occupies it overlaps the window — a cancelled sitting does not hold a room, so it does not count against one. Archived rooms are never offered.",
     tag: "Rooms",
     scopes: [],
   },
@@ -146,10 +146,9 @@ export const roomRoutes: RouteDef[] = [
     procedure: "buildings.list",
     summary: "List buildings",
     description:
-      "Every building the college has, alphabetically, each with a count of the rooms grouped under it.",
+      "One page of buildings in the standard envelope, alphabetically, each with a count of the rooms grouped under it. No college has enough buildings to fill the default page, so this is every one of them unless you ask for a smaller `pageSize`.",
     tag: "Buildings",
     scopes: [],
-    input: "none",
   },
   {
     method: "POST",

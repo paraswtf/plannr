@@ -140,6 +140,10 @@ export function KeyFields({
           placeholder="e.g. Foyer room display"
           maxLength={80}
           disabled={disabled}
+          // `Field` draws its label as prose, not as a `<label>`, so a control
+          // that does not name itself has no name at all — the expiry and the
+          // throttle below already say theirs for the same reason.
+          ariaLabel="Name"
         />
       </Field>
 
@@ -154,6 +158,7 @@ export function KeyFields({
           maxLength={500}
           rows={2}
           disabled={disabled}
+          aria-label="What it is for"
           className={`${INPUT_CLASS} resize-y`}
           style={{ boxShadow: "var(--ring)", opacity: disabled ? 0.6 : 1 }}
         />

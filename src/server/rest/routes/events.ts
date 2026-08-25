@@ -77,11 +77,10 @@ export const eventRoutes: RouteDef[] = [
     procedure: "events.myBookings",
     summary: "List the room bookings you made",
     description:
-      "Every booking the calling person requested — granted, waiting and refused alike, because being told no and why is the point of having asked. People only. An app should read `GET /approvals` for what is still undecided and `GET /timetable/week` with an explicit `roomId`, `groupId` or `facultyId` for what was granted; there is no bookings-by-creator endpoint, and a key that created a booking already holds its id from the response that made it.",
+      "Every booking the calling person requested — granted, waiting and refused alike, because being told no and why is the point of having asked. One page of them in the standard envelope, ordered by when the room is wanted rather than when it was asked for; the default page is larger than anybody books in a degree, so a caller that never sends `page` gets the lot. People only. An app should read `GET /approvals` for what is still undecided and `GET /timetable/week` with an explicit `roomId`, `groupId` or `facultyId` for what was granted; there is no bookings-by-creator endpoint, and a key that created a booking already holds its id from the response that made it.",
     tag: "Events",
     scopes: [],
     actor: "session",
-    input: "none",
   },
   {
     method: "POST",
@@ -132,7 +131,7 @@ export const eventRoutes: RouteDef[] = [
     procedure: "events.approvalQueue",
     summary: "List everything waiting for a decision",
     description:
-      'Booking requests and change requests in one list, oldest first, each tagged `kind: "booking" | "change"`. They are stored differently but compete for the same rooms, so they are read together — two requests for the same hour have to be visible at once or they get decided as though they were independent.\n\nEvery item carries a server-computed `verdict`: what it would clash with, what it would merely bump into, and `contested` — the other undecided requests that want the same slot. A change also carries `was`, the state of the event today, so the item reads as a change rather than a proposal with no context. `take` caps each of the two sources separately, so a combined list can come back up to twice as long as the number you asked for.',
+      'Booking requests and change requests in one list, oldest first, each tagged `kind: "booking" | "change"`. They are stored differently but compete for the same rooms, so they are read together — two requests for the same hour have to be visible at once or they get decided as though they were independent.\n\nEvery item carries a server-computed `verdict`: what it would clash with, what it would merely bump into, and `contested` — the other undecided requests that want the same slot. A change also carries `was`, the state of the event today, so the item reads as a change rather than a proposal with no context.\n\nThis is the one list in the API that is never paged. It answers in the standard envelope for consistency, but always with every undecided request on page one: the queue is two tables merged and re-sorted by age, so a second page would not be a `skip` on either of them — and cutting the list is precisely how two requests for the same hour stop being visible together. The old `take` parameter is gone and is ignored if you send it.',
     tag: "Approvals",
     scopes: ["ApproveBookings"],
   },
@@ -142,10 +141,9 @@ export const eventRoutes: RouteDef[] = [
     procedure: "events.pendingApprovals",
     summary: "List booking requests waiting for a decision",
     description:
-      "The plain list: pending room requests with their room and requester, soonest first. `GET /approvals` answers the same question with change requests included and a conflict verdict worked out for each, and is what an approval screen should be built on; this one is for a client that only wants the bookings and can decide for itself.",
+      "The plain list: pending room requests with their room and requester, soonest first, in the standard envelope. A queue is only ever as long as the decisions nobody has made yet, so the default page holds a year of neglect and a caller that ignores paging still sees all of it. `GET /approvals` answers the same question with change requests included and a conflict verdict worked out for each, and is what an approval screen should be built on; this one is for a client that only wants the bookings and can decide for itself.",
     tag: "Approvals",
     scopes: ["ApproveBookings"],
-    input: "none",
   },
   {
     method: "POST",
@@ -185,11 +183,10 @@ export const eventRoutes: RouteDef[] = [
     procedure: "events.myRequests",
     summary: "List the change requests you filed",
     description:
-      'The fifty most recent proposals the calling person made, decided or not, with the event each one is about and who decided it. People only — "mine" is a person-shaped question. An approver should read `GET /approvals`, which lists every pending request with its requester named explicitly; an app that filed a request holds its id from the `201` that created it and can act on that directly.',
+      'The proposals the calling person made, decided or not, newest first, with the event each one is about and who decided it. One page in the standard envelope — the default holds a hundred, where this used to stop dead at fifty. People only — "mine" is a person-shaped question. An approver should read `GET /approvals`, which lists every pending request with its requester named explicitly; an app that filed a request holds its id from the `201` that created it and can act on that directly.',
     tag: "Approvals",
     scopes: [],
     actor: "session",
-    input: "none",
   },
   {
     method: "POST",

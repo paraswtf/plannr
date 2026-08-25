@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Dialog } from "~/components/ui/dialog";
-import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
+import {
+  EntityPicker,
+  pickerPage,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { groupCard, roleCard } from "./entity-cards";
 import { Icon } from "~/components/ui/icon";
 import { NO_ADDRESS, personName } from "~/lib/people";
@@ -28,7 +32,7 @@ export function UserDetailDialog({
   const [roleQuery, setRoleQuery] = useState("");
   const roles = api.roles.list.useQuery();
   const debouncedRole = useDebounced(roleQuery);
-  const roleRows = (roles.data ?? []).filter((r) =>
+  const roleRows = (roles.data?.rows ?? []).filter((r) =>
     debouncedRole
       ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
       : true,
@@ -299,12 +303,9 @@ export function UserDetailDialog({
                       "Group",
                   }))}
                   onChange={setGroupIds}
-                  page={
-                    allGroups.data && {
-                      ...allGroups.data,
-                      rows: allGroups.data.rows.map(groupCard),
-                    }
-                  }
+                  page={pickerPage(allGroups.data, (rows) =>
+                    rows.map(groupCard),
+                  )}
                   loading={allGroups.isLoading}
                   query={groupQuery}
                   onQueryChange={setGroupQuery}
@@ -335,7 +336,7 @@ export function UserDetailDialog({
               gets both sets of permissions.
             </p>
             <EntityPicker
-              selected={(roles.data ?? [])
+              selected={(roles.data?.rows ?? [])
                 .filter((r) => roleIds.includes(r.id))
                 .map(roleCard)}
               onChange={setRoleIds}

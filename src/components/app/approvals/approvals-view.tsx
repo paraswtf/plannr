@@ -10,7 +10,7 @@ import { Segmented } from "~/components/ui/segmented";
 import { api, type RouterOutputs } from "~/trpc/react";
 
 type Queue = RouterOutputs["events"]["approvalQueue"];
-type Item = Queue[number];
+type Item = Queue["rows"][number];
 
 const TZ = "Asia/Kolkata";
 
@@ -31,7 +31,11 @@ const when = (start: Date, end: Date) =>
   })}`;
 
 const clock = (at: Date) =>
-  at.toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+  at.toLocaleString("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 /**
  * What the pip on each row means.
@@ -70,25 +74,50 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
     setFailed(null);
     setOpenId(null);
     setNote("");
-    await Promise.all([utils.events.invalidate(), utils.timetable.invalidate()]);
+    await Promise.all([
+      utils.events.invalidate(),
+      utils.timetable.invalidate(),
+    ]);
   };
-  const failing = { onError: (error: { message: string }) => setFailed(error.message) };
+  const failing = {
+    onError: (error: { message: string }) => setFailed(error.message),
+  };
 
-  const approve = api.events.approve.useMutation({ onSuccess: settled, ...failing });
-  const reject = api.events.reject.useMutation({ onSuccess: settled, ...failing });
-  const approveChange = api.events.approveChange.useMutation({ onSuccess: settled, ...failing });
-  const rejectChange = api.events.rejectChange.useMutation({ onSuccess: settled, ...failing });
+  const approve = api.events.approve.useMutation({
+    onSuccess: settled,
+    ...failing,
+  });
+  const reject = api.events.reject.useMutation({
+    onSuccess: settled,
+    ...failing,
+  });
+  const approveChange = api.events.approveChange.useMutation({
+    onSuccess: settled,
+    ...failing,
+  });
+  const rejectChange = api.events.rejectChange.useMutation({
+    onSuccess: settled,
+    ...failing,
+  });
 
   const deciding =
-    approve.isPending || reject.isPending || approveChange.isPending || rejectChange.isPending;
+    approve.isPending ||
+    reject.isPending ||
+    approveChange.isPending ||
+    rejectChange.isPending;
 
   const items = useMemo(
-    () => (queue.data ?? []).filter((item) => filter === "all" || item.kind === filter),
+    () =>
+      (queue.data?.rows ?? []).filter(
+        (item) => filter === "all" || item.kind === filter,
+      ),
     [queue.data, filter],
   );
 
   const counts = useMemo(() => {
-    const all = queue.data ?? [];
+    // `rows` is the whole queue, not a page of it — see `wholeList` in
+    // `approvalQueue`. The tab counts would be lying otherwise.
+    const all = queue.data?.rows ?? [];
     return {
       all: all.length,
       booking: all.filter((i) => i.kind === "booking").length,
@@ -157,7 +186,9 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                     <Badge tone={verdict.tone} dot>
                       {verdict.label}
                     </Badge>
-                    <span className="text-[15px] font-semibold">{item.title}</span>
+                    <span className="text-[15px] font-semibold">
+                      {item.title}
+                    </span>
                   </div>
                   <div className="text-muted flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
                     <span>{when(item.startTime, item.endTime)}</span>
@@ -165,7 +196,10 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                     {item.recurrenceText && <span>{item.recurrenceText}</span>}
                     {item.cohort && <span>{item.cohort}</span>}
                     <span>
-                      asked by {item.requestedBy?.name ?? item.requestedBy?.email ?? "somebody"}
+                      asked by{" "}
+                      {item.requestedBy?.name ??
+                        item.requestedBy?.email ??
+                        "somebody"}
                     </span>
                   </div>
                 </button>
@@ -176,15 +210,19 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                     {item.was && (
                       <div className="mb-4 flex flex-wrap items-center gap-3 text-[13px]">
                         <span className="text-muted line-through">
-                          {item.was.roomCode} · {clock(item.was.startTime)}–{clock(item.was.endTime)}
+                          {item.was.roomCode} · {clock(item.was.startTime)}–
+                          {clock(item.was.endTime)}
                         </span>
                         <Icon name="arrowRight" size={14} />
                         <span className="font-semibold">
-                          {item.room.code} · {clock(item.startTime)}–{clock(item.endTime)}
+                          {item.room.code} · {clock(item.startTime)}–
+                          {clock(item.endTime)}
                         </span>
-                        {item.kind === "change" && "cancelling" in item && item.cancelling && (
-                          <Badge tone="red">Asking to call it off</Badge>
-                        )}
+                        {item.kind === "change" &&
+                          "cancelling" in item &&
+                          item.cancelling && (
+                            <Badge tone="red">Asking to call it off</Badge>
+                          )}
                       </div>
                     )}
 
@@ -196,7 +234,10 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                     )}
 
                     {item.verdict.hard.length > 0 && (
-                      <Detail tone="red" title="Approving this would double-book">
+                      <Detail
+                        tone="red"
+                        title="Approving this would double-book"
+                      >
                         {item.verdict.hard.map((conflict, index) => (
                           <li key={index}>{conflict.message}</li>
                         ))}
@@ -204,11 +245,17 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                     )}
 
                     {item.verdict.contested.length > 0 && (
-                      <Detail tone="orange" title="Somebody else wants this slot too">
+                      <Detail
+                        tone="orange"
+                        title="Somebody else wants this slot too"
+                      >
                         {item.verdict.contested.map((contest) => (
                           <li key={`${contest.kind}-${contest.id}`}>
-                            {contest.title} — {contest.requestedBy ?? "somebody"}, {contest.roomCode}{" "}
-                            {clock(contest.start)}–{clock(contest.end)}. Granting this one refuses that.
+                            {contest.title} —{" "}
+                            {contest.requestedBy ?? "somebody"},{" "}
+                            {contest.roomCode} {clock(contest.start)}–
+                            {clock(contest.end)}. Granting this one refuses
+                            that.
                           </li>
                         ))}
                       </Detail>
@@ -230,7 +277,11 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                       className="bg-surface-2 mt-1 mb-3 w-full rounded-[10px] px-3 py-2 text-[13px] outline-none"
                     />
 
-                    {failed && <p className="mb-3 text-[13px] text-[var(--red)]">{failed}</p>}
+                    {failed && (
+                      <p className="mb-3 text-[13px] text-[var(--red)]">
+                        {failed}
+                      </p>
+                    )}
 
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -239,7 +290,9 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
                         onClick={() => decide(item, true)}
                         className="plr-grad cursor-pointer rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
                       >
-                        {item.severity === "blocked" ? "Approve anyway" : "Approve"}
+                        {item.severity === "blocked"
+                          ? "Approve anyway"
+                          : "Approve"}
                       </button>
                       <button
                         type="button"
@@ -277,7 +330,9 @@ function Detail({
           {title}
         </Badge>
       </div>
-      <ul className="text-muted list-disc pl-5 text-[13px] leading-relaxed">{children}</ul>
+      <ul className="text-muted list-disc pl-5 text-[13px] leading-relaxed">
+        {children}
+      </ul>
     </div>
   );
 }

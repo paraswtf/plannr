@@ -216,15 +216,64 @@ describe("the catalogue", () => {
     await coordinator.courses.setGroups({ courseId, groupIds: [groupId] });
     await coordinator.courses.setFaculty({ courseId, facultyIds: [facultyId] });
 
-    const { semester, courses } = await coordinator.courses.list({});
-    expect(semester?.name).toBe("Autumn 2026");
-    expect(courses).toHaveLength(1);
-    expect(courses[0]).toMatchObject({
+    const page = await coordinator.courses.list({});
+    expect(page.semester?.name).toBe("Autumn 2026");
+    expect(page.rows).toHaveLength(1);
+    expect(page.total).toBe(1);
+    expect(page.rows[0]).toMatchObject({
       code: "703",
       title: "Deep Learning",
       programme: { code: "BCA" },
       _count: { faculty: 1, groups: 1 },
     });
+  });
+
+  it("pages the catalogue, and still hands over the lot by default", async () => {
+    const semester = await db.semester.findFirstOrThrow({ where: { orgId } });
+    const programme = await db.programme.findFirstOrThrow({ where: { orgId } });
+    for (const title of ["Algorithms", "Compilers"]) {
+      await db.course.create({
+        data: {
+          orgId,
+          semesterId: semester.id,
+          programmeId: programme.id,
+          title,
+        },
+      });
+    }
+
+    const first = await coordinator.courses.list({ pageSize: 2 });
+    expect(first.rows.map((c) => c.title)).toEqual(["Algorithms", "Compilers"]);
+    expect(first).toMatchObject({
+      total: 3,
+      page: 1,
+      pageSize: 2,
+      pageCount: 2,
+    });
+
+    const second = await coordinator.courses.list({ page: 2, pageSize: 2 });
+    expect(second.rows.map((c) => c.title)).toEqual(["Deep Learning"]);
+
+    // The point of the default: the catalogue screen filters in the browser, so
+    // a caller that never mentions paging has to keep receiving the semester
+    // whole.
+    const whole = await coordinator.courses.list({});
+    expect(whole.rows).toHaveLength(3);
+    expect(whole.pageCount).toBe(1);
+  });
+
+  it("answers a semester that teaches nothing with an empty page", async () => {
+    const { semester } = await coordinator.semesters.create({
+      name: "Spring 2027",
+      startDate: new Date("2027-01-05"),
+      endDate: new Date("2027-05-30"),
+    });
+
+    const page = await coordinator.courses.list({ semesterId: semester.id });
+    expect(page.rows).toEqual([]);
+    // Page 1 of 1 holding nothing, rather than page 1 of 0.
+    expect(page).toMatchObject({ total: 0, page: 1, pageCount: 1 });
+    expect(page.semester?.name).toBe("Spring 2027");
   });
 
   it("counts everyone sitting for a course through its groups, not by enrolment", async () => {
@@ -364,6 +413,25 @@ describe("opening the next semester", () => {
         where: { semesterId: result.semester.id },
       }),
     ).toBe(0);
+  });
+
+  it("lists what the college has kept as a page, newest first", async () => {
+    await coordinator.semesters.create({
+      name: "Spring 2027",
+      startDate: new Date("2027-01-05"),
+      endDate: new Date("2027-05-30"),
+    });
+
+    const page = await coordinator.semesters.list();
+    expect(page.rows.map((s) => s.name)).toEqual([
+      "Spring 2027",
+      "Autumn 2026",
+    ]);
+    expect(page).toMatchObject({ total: 2, page: 1, pageCount: 1 });
+
+    const first = await coordinator.semesters.list({ pageSize: 1 });
+    expect(first.rows.map((s) => s.name)).toEqual(["Spring 2027"]);
+    expect(first).toMatchObject({ total: 2, pageCount: 2 });
   });
 
   it("refuses a second semester of the same name", async () => {
@@ -621,7 +689,7 @@ describe("an API key's machine identity", () => {
       where: { orgId_key: { orgId, key: "student" } },
     });
     const countOf = async () =>
-      (await coordinator.roles.list()).find((r) => r.key === "student")!
+      (await coordinator.roles.list()).rows.find((r) => r.key === "student")!
         .userCount;
 
     const before = await countOf();

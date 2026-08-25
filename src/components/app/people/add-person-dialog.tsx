@@ -30,13 +30,13 @@ export function AddPersonDialog({
   // than during render, which would be a state update in the render phase.
   useEffect(() => {
     if (defaulted || !roles.data) return;
-    const student = roles.data.find((r) => r.key === "student");
+    const student = roles.data.rows.find((r) => r.key === "student");
     if (student) setRoleIds([student.id]);
     setDefaulted(true);
   }, [roles.data, defaulted]);
 
   const debouncedRole = useDebounced(roleQuery);
-  const roleRows = (roles.data ?? []).filter((r) =>
+  const roleRows = (roles.data?.rows ?? []).filter((r) =>
     debouncedRole
       ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
       : true,
@@ -50,7 +50,7 @@ export function AddPersonDialog({
     onError: (e) => setError(e.message),
   });
 
-  const isFaculty = (roles.data ?? [])
+  const isFaculty = (roles.data?.rows ?? [])
     .filter((r) => roleIds.includes(r.id))
     .some((r) => r.key === "faculty" || r.key === "coordinator");
   const ready = name.trim() && email.trim() && roleIds.length > 0;
@@ -158,7 +158,7 @@ export function AddPersonDialog({
         <div className="flex flex-col gap-1.5">
           <span className="text-ink text-[13px] font-semibold">Roles</span>
           <EntityPicker
-            selected={(roles.data ?? [])
+            selected={(roles.data?.rows ?? [])
               .filter((r) => roleIds.includes(r.id))
               .map(roleCard)}
             onChange={setRoleIds}

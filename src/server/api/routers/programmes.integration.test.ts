@@ -141,6 +141,7 @@ describe("programmes", () => {
     expect(created.code).toBe("MCA");
 
     const listed = await api.groups.programmeList({ query: "MCA" });
+    expect(listed.total).toBe(1);
     expect(listed.rows).toHaveLength(1);
     expect(listed.rows[0]).toMatchObject({
       code: "MCA",

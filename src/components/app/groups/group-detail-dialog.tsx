@@ -5,7 +5,11 @@ import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
-import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
+import {
+  EntityPicker,
+  pickerPage,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
 import Link from "next/link";
 import { DEFAULT_TIMEZONE, formatDayLabel, formatHourLabel } from "~/lib/dates";
@@ -290,12 +294,7 @@ export function GroupDetailDialog({
                 onChange={(facultyIds) =>
                   setFaculty.mutate({ groupId, facultyIds })
                 }
-                page={
-                  faculty.data && {
-                    ...faculty.data,
-                    rows: faculty.data.rows.map(facultyCard),
-                  }
-                }
+                page={pickerPage(faculty.data, (rows) => rows.map(facultyCard))}
                 loading={faculty.isLoading}
                 query={facultyQuery}
                 onQueryChange={setFacultyQuery}
@@ -368,8 +367,11 @@ function GroupLectures({
   groupId: string;
   canMarkAttendance: boolean;
 }) {
-  const lectures = api.groups.lectures.useQuery({ groupId, limit: 60 });
-  const rows = lectures.data ?? [];
+  // A page rather than the group's whole timetable, as it has always been:
+  // sixty sittings is a term's worth of the recent ones and the panel scrolls
+  // through them without a pager.
+  const lectures = api.groups.lectures.useQuery({ groupId, pageSize: 60 });
+  const rows = lectures.data?.rows ?? [];
 
   if (lectures.isLoading) {
     return <p className="text-muted m-0 text-[13.5px]">Loading…</p>;

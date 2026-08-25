@@ -10,6 +10,7 @@ import {
 import { Dialog } from "~/components/ui/dialog";
 import {
   EntityPicker,
+  pickerPage,
   SearchSelect,
   useDebounced,
   initialsOf,
@@ -223,25 +224,22 @@ export function RequirementDialog({
                 : null
             }
             onChange={(id) => setGroupId(id ?? "")}
-            page={
-              groups.data && {
-                ...groups.data,
-                rows: groups.data.rows.map((g) => ({
-                  id: g.id,
+            page={pickerPage(groups.data, (rows) =>
+              rows.map((g) => ({
+                id: g.id,
+                label: g.label,
+                card: {
                   label: g.label,
-                  card: {
-                    label: g.label,
-                    avatar: {
-                      kind: "initials" as const,
-                      text: initialsOf(g.name),
-                    },
-                    title: g.label,
-                    subtitle: `${g.courseCode} · ${g.courseName}`,
-                    meta: [`${g.studentCount} students`],
+                  avatar: {
+                    kind: "initials" as const,
+                    text: initialsOf(g.name),
                   },
-                })),
-              }
-            }
+                  title: g.label,
+                  subtitle: `${g.courseCode} · ${g.courseName}`,
+                  meta: [`${g.studentCount} students`],
+                },
+              })),
+            )}
             loading={groups.isLoading}
             query={groupQuery}
             onQueryChange={setGroupQuery}
@@ -294,27 +292,24 @@ export function RequirementDialog({
               .filter((f) => facultyIds.includes(f.id))
               .map((f) => ({ id: f.id, label: f.name }))}
             onChange={setFacultyIds}
-            page={
-              faculty.data && {
-                ...faculty.data,
-                rows: faculty.data.rows.map((f) => ({
-                  id: f.id,
+            page={pickerPage(faculty.data, (rows) =>
+              rows.map((f) => ({
+                id: f.id,
+                label: f.name,
+                card: {
                   label: f.name,
-                  card: {
-                    label: f.name,
-                    avatar: {
-                      kind: "initials" as const,
-                      text: initialsOf(f.name),
-                    },
-                    title: f.name,
-                    subtitle: f.department ?? f.email,
-                    badges: f.isActive
-                      ? []
-                      : [{ text: "inactive", tone: "red" as const }],
+                  avatar: {
+                    kind: "initials" as const,
+                    text: initialsOf(f.name),
                   },
-                })),
-              }
-            }
+                  title: f.name,
+                  subtitle: f.department ?? f.email,
+                  badges: f.isActive
+                    ? []
+                    : [{ text: "inactive", tone: "red" as const }],
+                },
+              })),
+            )}
             loading={faculty.isLoading}
             query={facultyQuery}
             onQueryChange={setFacultyQuery}

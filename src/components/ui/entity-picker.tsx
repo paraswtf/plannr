@@ -25,6 +25,35 @@ export interface PickerPage {
   hasMore: boolean;
 }
 
+/**
+ * A page from a `groups.*`-style list procedure, as the two controls want it.
+ *
+ * They only ever ask whether there is another page, while the API answers with
+ * `page` and `pageCount` — which is the honest form, because a list that pins
+ * the chosen rows into its page can hand back more rows than it was asked for
+ * and counting them proves nothing. Derived once here rather than at each of
+ * the dozen call sites, all of which used to spread a `hasMore` the server
+ * computed for them.
+ *
+ * The mapper takes the whole array rather than a row: a couple of pickers drop
+ * rows before drawing them — the group already in the room does not want
+ * offering as a second occupant of it — and doing that outside the helper would
+ * mean unpacking the envelope again.
+ */
+export function pickerPage<T>(
+  page:
+    { rows: T[]; total: number; page: number; pageCount: number } | undefined,
+  toOptions: (rows: T[]) => PickerOption[],
+): PickerPage | undefined {
+  return (
+    page && {
+      rows: toOptions(page.rows),
+      total: page.total,
+      hasMore: page.page < page.pageCount,
+    }
+  );
+}
+
 /** Turns a row into the shape both controls render. */
 const toCard = (o: PickerOption): EntityCard =>
   o.card ?? { label: o.label, title: o.label, subtitle: o.hint };

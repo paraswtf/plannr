@@ -9,6 +9,7 @@ import {
   wouldLockSelfOut,
 } from "~/lib/permissions";
 import type { PermissionBitField } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -104,16 +105,32 @@ export const rolesRouter = createTRPCRouter({
     })),
   ),
 
-  list: permissionProcedure(PermissionFlags.ViewUsers).query(
-    async ({ ctx }) => {
-      const roles = await ctx.db.role.findMany({
-        where: { orgId: ctx.orgId },
-        include: roleCounts,
-        orderBy: [{ isSystem: "desc" }, { name: "asc" }],
-      });
-      return roles.map(serialise);
-    },
-  ),
+  /**
+   * Every role in the institution, built-ins first.
+   *
+   * The default page is set past any plausible list rather than at a
+   * comfortable screenful, because three of the four things that read this
+   * render it whole and have no pager to reach a second page with: the role
+   * filter on the people screen, the picker in "add person", and the one in
+   * the user drawer. Four built-ins plus whatever an institution has invented
+   * is a list of tens, so 200 is not a page — it is the whole thing with room
+   * to spare, which is the only size that leaves those pickers honest.
+   */
+  list: permissionProcedure(PermissionFlags.ViewUsers)
+    .input(z.object(pageInput({ defaultSize: 200, maxSize: 500 })).default({}))
+    .query(async ({ ctx, input }) => {
+      const where = { orgId: ctx.orgId };
+      const [roles, total] = await Promise.all([
+        ctx.db.role.findMany({
+          where,
+          include: roleCounts,
+          orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.role.count({ where }),
+      ]);
+      return toPage(roles.map(serialise), total, input);
+    }),
 
   byId: permissionProcedure(PermissionFlags.ViewUsers)
     .input(z.object({ id: roleId }))

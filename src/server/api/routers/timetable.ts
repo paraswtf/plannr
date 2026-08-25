@@ -11,6 +11,7 @@ import {
   type PerspectiveDetail,
 } from "~/lib/schedule-views";
 import { PermissionFlags } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -412,65 +413,92 @@ export const timetableRouter = createTRPCRouter({
    */
   searchPeople: protectedProcedure
     .input(
-      z.object({ query: z.string().trim().max(120).optional() }).default({}),
+      z
+        .object({
+          query: z.string().trim().max(120).optional(),
+          /**
+           * Thirty, which is what this answered before the envelope existed
+           * and is the right number for what it is. A typeahead is not a list
+           * anybody reads to the end — it is narrowed by typing, and a picker
+           * that offered every one of two thousand names would be no easier to
+           * find a colleague in than a picker offering thirty. Nothing renders
+           * this whole, so nothing is truncated by starting here, and `total`
+           * now says out loud how many matched, which is a thing the picker
+           * could not find out at all before.
+           *
+           * Two hundred for anyone who genuinely wants to walk the list; the
+           * directory below is the endpoint built for that.
+           */
+          ...pageInput({ defaultSize: 30, maxSize: 200 }),
+        })
+        .default({}),
     )
     .query(async ({ ctx, input }) => {
-      const people = await ctx.db.user.findMany({
-        where: {
-          orgId: ctx.orgId,
-          // An API key's machine identity is a `User` row and has no business
-          // in a picker of colleagues. Belt and braces: it also holds neither
-          // profile, so the clause below would exclude it anyway — but this one
-          // says why, and survives somebody relaxing that clause.
-          isServiceAccount: false,
-          AND: [
-            {
-              OR: [
-                { studentProfile: { isNot: null } },
-                { facultyProfile: { isNot: null } },
-              ],
-            },
-            ...(input.query
-              ? [
-                  {
-                    OR: [
-                      {
-                        name: {
-                          contains: input.query,
-                          mode: "insensitive" as const,
-                        },
+      const where = {
+        orgId: ctx.orgId,
+        // An API key's machine identity is a `User` row and has no business
+        // in a picker of colleagues. Belt and braces: it also holds neither
+        // profile, so the clause below would exclude it anyway — but this one
+        // says why, and survives somebody relaxing that clause.
+        isServiceAccount: false,
+        AND: [
+          {
+            OR: [
+              { studentProfile: { isNot: null } },
+              { facultyProfile: { isNot: null } },
+            ],
+          },
+          ...(input.query
+            ? [
+                {
+                  OR: [
+                    {
+                      name: {
+                        contains: input.query,
+                        mode: "insensitive" as const,
                       },
-                      { studentProfile: { prn: { contains: input.query } } },
-                    ],
-                  },
-                ]
-              : []),
-          ],
-        },
-        // `email` is read so `personName` has its fallback for somebody who
-        // never set a name. It is not returned.
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          studentProfile: { select: { prn: true } },
-          facultyProfile: { select: { department: true } },
-        },
-        orderBy: [{ name: "asc" }, { email: "asc" }],
-        take: 30,
-      });
+                    },
+                    { studentProfile: { prn: { contains: input.query } } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      };
 
-      return people.map((person) => ({
-        id: person.id,
-        name: personName(person),
-        kind: person.facultyProfile
-          ? ("faculty" as const)
-          : ("student" as const),
-        detail:
-          person.facultyProfile?.department ??
-          person.studentProfile?.prn ??
-          null,
-      }));
+      const [people, total] = await Promise.all([
+        ctx.db.user.findMany({
+          where,
+          // `email` is read so `personName` has its fallback for somebody who
+          // never set a name. It is not returned.
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            studentProfile: { select: { prn: true } },
+            facultyProfile: { select: { department: true } },
+          },
+          orderBy: [{ name: "asc" }, { email: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.user.count({ where }),
+      ]);
+
+      return toPage(
+        people.map((person) => ({
+          id: person.id,
+          name: personName(person),
+          kind: person.facultyProfile
+            ? ("faculty" as const)
+            : ("student" as const),
+          detail:
+            person.facultyProfile?.department ??
+            person.studentProfile?.prn ??
+            null,
+        })),
+        total,
+        input,
+      );
     }),
 
   peopleWithSchedules: permissionProcedure(
@@ -478,7 +506,25 @@ export const timetableRouter = createTRPCRouter({
     PermissionFlags.ViewUsers,
   )
     .input(
-      z.object({ query: z.string().trim().max(120).optional() }).default({}),
+      z
+        .object({
+          query: z.string().trim().max(120).optional(),
+          /**
+           * Far larger than the typeahead's thirty, because this is not a
+           * typeahead. It is the coordinator's directory of everybody with a
+           * day of their own, and with no `query` it is meant to be read: a
+           * whole department at once, or a whole cohort. Five hundred holds
+           * either with room to spare.
+           *
+           * The full population of a college runs to thousands and does not
+           * fit in one answer at any sensible size, which is what `total` and
+           * `pageCount` are now for — and it is a caller who asked for the
+           * whole institution who finds out, rather than one who asked for a
+           * department and quietly got most of it.
+           */
+          ...pageInput({ defaultSize: 500, maxSize: 2000 }),
+        })
+        .default({}),
     )
     .query(async ({ ctx, input }) => {
       const search = input.query
@@ -491,46 +537,55 @@ export const timetableRouter = createTRPCRouter({
           }
         : {};
 
-      const people = await ctx.db.user.findMany({
-        where: {
-          orgId: ctx.orgId,
-          // A machine has no day. See `searchPeople` above.
-          isServiceAccount: false,
-          // Two separate conditions, both required: it must be somebody with a
-          // day of their own, and it must match what was typed.
-          AND: [
-            {
-              OR: [
-                { studentProfile: { isNot: null } },
-                { facultyProfile: { isNot: null } },
-              ],
-            },
-            ...(search.OR ? [search] : []),
-          ],
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          studentProfile: { select: { prn: true } },
-          facultyProfile: { select: { department: true } },
-        },
-        orderBy: [{ name: "asc" }, { email: "asc" }],
-        take: 30,
-      });
+      const where = {
+        orgId: ctx.orgId,
+        // A machine has no day. See `searchPeople` above.
+        isServiceAccount: false,
+        // Two separate conditions, both required: it must be somebody with a
+        // day of their own, and it must match what was typed.
+        AND: [
+          {
+            OR: [
+              { studentProfile: { isNot: null } },
+              { facultyProfile: { isNot: null } },
+            ],
+          },
+          ...(search.OR ? [search] : []),
+        ],
+      };
 
-      return people.map((person) => ({
-        id: person.id,
-        name: personName(person),
-        email: contactAddress(person.email),
-        kind: person.facultyProfile
-          ? ("faculty" as const)
-          : ("student" as const),
-        detail:
-          person.facultyProfile?.department ??
-          person.studentProfile?.prn ??
-          null,
-      }));
+      const [people, total] = await Promise.all([
+        ctx.db.user.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            studentProfile: { select: { prn: true } },
+            facultyProfile: { select: { department: true } },
+          },
+          orderBy: [{ name: "asc" }, { email: "asc" }],
+          ...pageArgs(input),
+        }),
+        ctx.db.user.count({ where }),
+      ]);
+
+      return toPage(
+        people.map((person) => ({
+          id: person.id,
+          name: personName(person),
+          email: contactAddress(person.email),
+          kind: person.facultyProfile
+            ? ("faculty" as const)
+            : ("student" as const),
+          detail:
+            person.facultyProfile?.department ??
+            person.studentProfile?.prn ??
+            null,
+        })),
+        total,
+        input,
+      );
     }),
 
   /**

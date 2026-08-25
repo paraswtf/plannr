@@ -81,10 +81,18 @@ and the procedures' own zod schemas, so it cannot go stale; feed it to a client
 generator. `GET /api/v1/health` needs no credential, and `GET /api/v1/me` says
 what a key is and what it may do.
 
+Every list answers in one envelope, `{ rows, total, page, pageSize, pageCount }`,
+and takes `page` and `pageSize`. That envelope belongs to the procedures rather
+than to the REST layer (`src/server/api/pagination.ts`), which is why both
+doorways get it, and each endpoint's default page is sized to hold that whole
+list at a realistic institution: a screen or a script that has never heard of
+paging must keep receiving everything rather than a short answer that looks
+complete.
+
 [docs/api.md](docs/api.md) is the reference an integrator reads: the scope table
-and how implication widens it, the error envelope, the rate limits, the
-endpoints that refuse a key and what to call instead, and every path grouped by
-subject.
+and how implication widens it, the error envelope, the rate limits, how lists
+page, the endpoints that refuse a key and what to call instead, and every path
+grouped by subject.
 
 ## How scheduling works
 

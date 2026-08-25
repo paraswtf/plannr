@@ -53,12 +53,12 @@ export function PeopleView({ permissions }: { permissions: string }) {
   const debouncedRole = useDebounced(roleQuery);
   // Roles are user-creatable, so this list grows; it is filtered client-side
   // because the whole set is small and already loaded for the cards.
-  const roleRows = (roles.data ?? []).filter((r) =>
+  const roleRows = (roles.data?.rows ?? []).filter((r) =>
     debouncedRole
       ? r.name.toLowerCase().includes(debouncedRole.toLowerCase())
       : true,
   );
-  const selectedRole = (roles.data ?? []).find((r) => r.id === roleId);
+  const selectedRole = (roles.data?.rows ?? []).find((r) => r.id === roleId);
 
   // Debounced so the list query does not fire on every keystroke.
   useEffect(() => {

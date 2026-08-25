@@ -5,7 +5,11 @@ import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Dialog } from "~/components/ui/dialog";
-import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
+import {
+  pickerPage,
+  SearchSelect,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { api } from "~/trpc/react";
 import { programmeCard } from "./entity-cards";
@@ -36,7 +40,7 @@ export function BatchesPanel({
     { query: query || undefined },
     { placeholderData: (previous) => previous },
   );
-  const rows = batches.data ?? [];
+  const rows = batches.data?.rows ?? [];
 
   return (
     <>
@@ -276,12 +280,7 @@ function BatchDialog({
           <SearchSelect
             value={selectedProgramme ? programmeCard(selectedProgramme) : null}
             onChange={(id) => setCourseId(id ?? "")}
-            page={
-              courses.data && {
-                ...courses.data,
-                rows: courses.data.rows.map(programmeCard),
-              }
-            }
+            page={pickerPage(courses.data, (rows) => rows.map(programmeCard))}
             loading={courses.isLoading}
             query={programmeQuery}
             onQueryChange={setProgrammeQuery}

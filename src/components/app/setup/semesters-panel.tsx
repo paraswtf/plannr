@@ -19,7 +19,8 @@ import { api, type RouterOutputs } from "~/trpc/react";
  * current one, and each previous term would be overwritten as it went.
  */
 
-type Semester = RouterOutputs["semesters"]["list"][number];
+type Semesters = RouterOutputs["semesters"]["list"];
+type Semester = Semesters["rows"][number];
 
 /** Local midnight today, which is what the date picker deals in. */
 function today(): Date {
@@ -27,13 +28,13 @@ function today(): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-export function SemestersPanel({ initial }: { initial: Semester[] }) {
+export function SemestersPanel({ initial }: { initial: Semesters }) {
   const utils = api.useUtils();
   const list = api.semesters.list.useQuery(undefined, { initialData: initial });
   const [editing, setEditing] = useState<Semester | null>(null);
   const [opening, setOpening] = useState(false);
 
-  const semesters = list.data ?? [];
+  const semesters = list.data?.rows ?? [];
   const refresh = () => {
     void utils.semesters.list.invalidate();
     void utils.courses.structure.invalidate();

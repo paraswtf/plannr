@@ -447,7 +447,7 @@ describe("the people who can be looked at", () => {
     const people = await callerFor(coordinator).timetable.peopleWithSchedules(
       {},
     );
-    const emails = people.map((p) => p.email);
+    const emails = people.rows.map((p) => p.email);
     expect(emails).toContain("sched-lecturer@plannr-demo.invalid");
     expect(emails).toContain("sched-learner@plannr-demo.invalid");
     // The coordinator has neither profile, so has no schedule to look at.
@@ -458,8 +458,10 @@ describe("the people who can be looked at", () => {
     const people = await callerFor(coordinator).timetable.peopleWithSchedules(
       {},
     );
-    expect(people.find((p) => p.name === "The Lecturer")?.kind).toBe("faculty");
-    expect(people.find((p) => p.name === "The Learner")).toMatchObject({
+    expect(people.rows.find((p) => p.name === "The Lecturer")?.kind).toBe(
+      "faculty",
+    );
+    expect(people.rows.find((p) => p.name === "The Learner")).toMatchObject({
       kind: "student",
       detail: "99930199001",
     });
@@ -468,19 +470,19 @@ describe("the people who can be looked at", () => {
   it("searches by name, address and PRN", async () => {
     const caller = callerFor(coordinator);
     expect(
-      (await caller.timetable.peopleWithSchedules({ query: "Lectur" })).map(
-        (p) => p.name,
-      ),
+      (
+        await caller.timetable.peopleWithSchedules({ query: "Lectur" })
+      ).rows.map((p) => p.name),
     ).toEqual(["The Lecturer"]);
     expect(
       (
         await caller.timetable.peopleWithSchedules({ query: "99930199001" })
-      ).map((p) => p.name),
+      ).rows.map((p) => p.name),
     ).toEqual(["The Learner"]);
     expect(
       (
         await caller.timetable.peopleWithSchedules({ query: "sched-learner@" })
-      ).map((p) => p.name),
+      ).rows.map((p) => p.name),
     ).toEqual(["The Learner"]);
   });
 
@@ -518,17 +520,19 @@ describe("the people who can be looked at", () => {
 
     const caller = callerFor(coordinator);
     expect(
-      (await caller.timetable.peopleWithSchedules({})).map((p) => p.id),
+      (await caller.timetable.peopleWithSchedules({})).rows.map((p) => p.id),
     ).not.toContain(principal.id);
+    // `total` as well as `rows`: a count that still said one would mean the
+    // principal had merely fallen off the end of a page.
     expect(
       await caller.timetable.peopleWithSchedules({ query: "Timetable Sync" }),
-    ).toEqual([]);
+    ).toMatchObject({ rows: [], total: 0 });
 
     // The picker every signed-in person sees is filtered the same way.
     expect(
-      (await callerFor(learner).timetable.searchPeople({ query: "Sync" })).map(
-        (p) => p.id,
-      ),
+      (
+        await callerFor(learner).timetable.searchPeople({ query: "Sync" })
+      ).rows.map((p) => p.id),
     ).not.toContain(principal.id);
 
     // And its day cannot be summoned by id, so no screen can name it either.

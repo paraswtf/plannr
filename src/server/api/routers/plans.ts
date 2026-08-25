@@ -18,6 +18,12 @@ import {
   type PlanStatusName,
 } from "~/lib/schedule-plan";
 import {
+  pageArgs,
+  pageInput,
+  toPage,
+  wholeList,
+} from "~/server/api/pagination";
+import {
   createTRPCRouter,
   permissionProcedure,
   protectedProcedure,
@@ -232,8 +238,15 @@ export const plansRouter = createTRPCRouter({
         .object({
           scope: z.enum(["all", "mine", "shared", "review"]).default("all"),
           query: z.string().trim().max(120).optional(),
-          page: z.number().int().min(1).default(1),
-          pageSize: z.number().int().min(1).max(100).default(20),
+          /**
+           * The twenty this endpoint has always answered with, kept rather
+           * than widened — the same exception `users.list` is, and for the
+           * same reason. `plans-view.tsx` has paged since it was written and
+           * names the page it wants on every request, so nothing renders this
+           * list whole and nobody loses rows to the default. Read
+           * `pageInput`'s doc comment before copying the number anywhere else.
+           */
+          ...pageInput({ defaultSize: 20, maxSize: 100 }),
         })
         .default({}),
     )
@@ -280,8 +293,7 @@ export const plansRouter = createTRPCRouter({
         ctx.db.schedulePlan.findMany({
           where,
           orderBy: [{ updatedAt: "desc" }],
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
           select: {
             id: true,
             name: true,
@@ -311,8 +323,8 @@ export const plansRouter = createTRPCRouter({
         ctx.db.schedulePlan.count({ where }),
       ]);
 
-      return {
-        rows: rows.map((p) => ({
+      return toPage(
+        rows.map((p) => ({
           id: p.id,
           name: p.name,
           status: p.status,
@@ -338,11 +350,8 @@ export const plansRouter = createTRPCRouter({
           ),
         })),
         total,
-        page: input.page,
-        pageSize: input.pageSize,
-        pageCount: Math.max(1, Math.ceil(total / input.pageSize)),
-        hasMore: input.page * input.pageSize < total,
-      };
+        input,
+      );
     }),
 
   /** Everything one plan's workspace needs, in a single round trip. */
@@ -560,7 +569,19 @@ export const plansRouter = createTRPCRouter({
 
   /** Every draft in this plan's revision chain, oldest first. */
   history: protectedProcedure
-    .input(z.object({ id: planId }))
+    .input(
+      z.object({
+        id: planId,
+        /**
+         * A chain is a handful of drafts — write one, revise it, revise it
+         * again, apply it — and `review-panel.tsx` draws the whole of it as a
+         * timeline with no pager anywhere near it. Two hundred is well past
+         * any plan a person has genuinely reworked, so the timeline keeps
+         * arriving complete for a caller that has never heard of paging.
+         */
+        ...pageInput({ defaultSize: 200, maxSize: 500 }),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const plan = await loadPlan(ctx, input.id);
       const root = await ctx.db.schedulePlan.findUniqueOrThrow({
@@ -569,41 +590,51 @@ export const plansRouter = createTRPCRouter({
       });
       const chainId = root.rootId ?? plan.id;
 
-      const rows = await ctx.db.schedulePlan.findMany({
-        where: {
-          orgId: ctx.orgId,
-          OR: [{ id: chainId }, { rootId: chainId }],
-          // The same visibility rule as everywhere else.
-          AND: [
-            {
-              OR: [
-                { createdById: ctx.actor.id },
-                { status: { not: PlanStatus.DRAFT } },
-              ],
-            },
-          ],
-        },
-        orderBy: { version: "asc" },
-        select: {
-          id: true,
-          version: true,
-          status: true,
-          createdAt: true,
-          appliedAt: true,
-          _count: { select: { comments: true, reviewers: true } },
-        },
-      });
+      const where = {
+        orgId: ctx.orgId,
+        OR: [{ id: chainId }, { rootId: chainId }],
+        // The same visibility rule as everywhere else.
+        AND: [
+          {
+            OR: [
+              { createdById: ctx.actor.id },
+              { status: { not: PlanStatus.DRAFT } },
+            ],
+          },
+        ],
+      };
 
-      return rows.map((r) => ({
-        id: r.id,
-        version: r.version,
-        status: r.status,
-        createdAt: r.createdAt,
-        appliedAt: r.appliedAt,
-        commentCount: r._count.comments,
-        reviewerCount: r._count.reviewers,
-        isCurrent: r.id === plan.id,
-      }));
+      const [rows, total] = await Promise.all([
+        ctx.db.schedulePlan.findMany({
+          where,
+          orderBy: { version: "asc" },
+          ...pageArgs(input),
+          select: {
+            id: true,
+            version: true,
+            status: true,
+            createdAt: true,
+            appliedAt: true,
+            _count: { select: { comments: true, reviewers: true } },
+          },
+        }),
+        ctx.db.schedulePlan.count({ where }),
+      ]);
+
+      return toPage(
+        rows.map((r) => ({
+          id: r.id,
+          version: r.version,
+          status: r.status,
+          createdAt: r.createdAt,
+          appliedAt: r.appliedAt,
+          commentCount: r._count.comments,
+          reviewerCount: r._count.reviewers,
+          isCurrent: r.id === plan.id,
+        })),
+        total,
+        input,
+      );
     }),
 
   /** Rooms, terms and settings a plan workspace needs. */
@@ -680,24 +711,38 @@ export const plansRouter = createTRPCRouter({
         },
       });
 
-      return users
-        .map((u) => {
-          const bits = u.roles.reduce(
-            (acc, r) => acc | r.role.permissions,
-            u.permissions,
-          );
-          return {
-            id: u.id,
-            name: personName(u),
-            email: contactAddress(u.email),
-            roleNames: u.roles.map((r) => r.role.name),
-            canApprove: new PermissionBitField(expandPermissions(bits)).has(
-              PermissionFlags.ApproveSchedulePlans,
-            ),
-          };
-        })
-        .filter((u) => u.canApprove && u.id !== ctx.actor.id)
-        .slice(0, 50);
+      // Reported whole, and the one list in this router with no `page` to ask
+      // for a second one. Whether somebody can approve a plan is decided by
+      // OR-ing their own permission bits with every role they hold and then
+      // expanding the implications — arithmetic, not a `where` clause anything
+      // can be given — so the filter can only run after the rows arrive.
+      // `skip`/`take` on the query underneath would page the *directory* and
+      // filter afterwards, which answers with short pages, empty pages, and a
+      // `total` counting people the caller is never shown. Whole is also small:
+      // what survives is the handful of people who can sign a timetable off.
+      //
+      // The fifty-row cap that used to sit here goes with it. It trimmed the
+      // list a picker searches, which is the failure that looks exactly like
+      // success — you simply never find the colleague who was row fifty-one.
+      return wholeList(
+        users
+          .map((u) => {
+            const bits = u.roles.reduce(
+              (acc, r) => acc | r.role.permissions,
+              u.permissions,
+            );
+            return {
+              id: u.id,
+              name: personName(u),
+              email: contactAddress(u.email),
+              roleNames: u.roles.map((r) => r.role.name),
+              canApprove: new PermissionBitField(expandPermissions(bits)).has(
+                PermissionFlags.ApproveSchedulePlans,
+              ),
+            };
+          })
+          .filter((u) => u.canApprove && u.id !== ctx.actor.id),
+      );
     }),
 
   // ─── Drafting ─────────────────────────────────────────────────────────────

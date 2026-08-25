@@ -139,7 +139,10 @@ export function ScheduleView({
   const viewingAs = data?.viewingAs ?? null;
   const canEdit =
     (detail?.modify ?? false) &&
-    bits.hasAny(PermissionFlags.ManageAllEvents, PermissionFlags.ManageOwnEvents);
+    bits.hasAny(
+      PermissionFlags.ManageAllEvents,
+      PermissionFlags.ManageOwnEvents,
+    );
 
   const openable = canEdit || canMarkAttendance;
 
@@ -240,7 +243,7 @@ export function ScheduleView({
                       setPersonQuery("");
                     }}
                     page={{
-                      rows: (people ?? []).map((person) => ({
+                      rows: (people?.rows ?? []).map((person) => ({
                         id: person.id,
                         label: person.name,
                         hint: [
@@ -250,8 +253,12 @@ export function ScheduleView({
                           .filter(Boolean)
                           .join(" · "),
                       })),
-                      total: people?.length ?? 0,
-                      hasMore: (people?.length ?? 0) >= 30,
+                      // Everybody the search matched, which is not the same as
+                      // the number of names on the list — a full page used to
+                      // be the only clue that there were more, and it could
+                      // not say how many more.
+                      total: people?.total ?? 0,
+                      hasMore: (people?.page ?? 1) < (people?.pageCount ?? 1),
                     }}
                     query={personQuery}
                     onQueryChange={setPersonQuery}

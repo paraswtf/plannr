@@ -190,7 +190,7 @@ describe("minting a key", () => {
     const listed = await admin.apiKeys.list();
     const fetched = await admin.apiKeys.byId({ id: created.id });
 
-    expect(listed[0]).not.toHaveProperty("token");
+    expect(listed.rows[0]).not.toHaveProperty("token");
     expect(fetched).not.toHaveProperty("token");
     // The public handle survives, because that is what it is for.
     expect(fetched.prefix).toBe(created.prefix);
@@ -555,7 +555,7 @@ describe("listing keys", () => {
     const fetched = await admin.apiKeys.byId({ id: created.id });
     const rolled = await admin.apiKeys.roll({ id: created.id });
 
-    for (const row of [...listed, fetched, rolled]) {
+    for (const row of [...listed.rows, fetched, rolled]) {
       expect(row).not.toHaveProperty("hash");
       const serialised = JSON.stringify(row);
       for (const hash of hashes) expect(serialised).not.toContain(hash);
@@ -567,7 +567,32 @@ describe("listing keys", () => {
     await admin.apiKeys.create({ name: "Second", scopes: ["ViewRooms"] });
 
     const listed = await admin.apiKeys.list();
-    expect(listed.map((key) => key.name)).toEqual(["Second", "First"]);
+    expect(listed.rows.map((key) => key.name)).toEqual(["Second", "First"]);
+    expect(listed.total).toBe(2);
+  });
+
+  /**
+   * Not because the console pages — it asks for one page and the default holds
+   * every key — but because the REST surface hands `?page=` straight to this
+   * input, and a `total` that reported the page rather than the estate would
+   * have an integrator stop after the first request.
+   */
+  it("counts the whole estate, not the page it hands back", async () => {
+    await mint("First");
+    await admin.apiKeys.create({ name: "Second", scopes: ["ViewRooms"] });
+
+    const first = await admin.apiKeys.list({ page: 1, pageSize: 1 });
+    expect(first.rows.map((key) => key.name)).toEqual(["Second"]);
+    expect(first).toMatchObject({
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      pageCount: 2,
+    });
+
+    const second = await admin.apiKeys.list({ page: 2, pageSize: 1 });
+    expect(second.rows.map((key) => key.name)).toEqual(["First"]);
+    expect(second.pageCount).toBe(2);
   });
 
   it("is closed to somebody who cannot administer roles", async () => {

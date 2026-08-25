@@ -266,7 +266,7 @@ export function RoomDialog({
           <BulkTable
             rows={rows}
             setRows={setRows}
-            buildings={(buildings.data ?? []).map((b) => ({
+            buildings={(buildings.data?.rows ?? []).map((b) => ({
               id: b.id,
               name: b.name,
             }))}
@@ -295,7 +295,7 @@ export function RoomDialog({
                       className="min-w-0 flex-1"
                       value={buildingId}
                       placeholder="Pick a building"
-                      options={(buildings.data ?? []).map((b) => ({
+                      options={(buildings.data?.rows ?? []).map((b) => ({
                         value: b.id,
                         label: b.name,
                         hint: `${b._count.rooms} room${b._count.rooms === 1 ? "" : "s"}`,

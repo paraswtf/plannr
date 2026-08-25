@@ -1,3 +1,7 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 /**
@@ -32,7 +36,7 @@ vi.mock("~/server/auth", () => ({
 
 vi.mock("next-auth", () => ({ default: () => ({}) }));
 
-import { buildOpenApiDocument } from "./openapi";
+import { buildOpenApiDocument, WHOLE_LIST_PROCEDURES } from "./openapi";
 import { ROUTES } from "./registry";
 import { compileRoute, inputSourceOf } from "./types";
 
@@ -40,12 +44,16 @@ const ORIGIN = "https://plannr.example.ac.in";
 
 interface Operation {
   operationId?: unknown;
+  "x-plannr-procedure"?: string;
   security?: unknown;
   parameters?: Array<{ name: string; in: string; required?: boolean }>;
   requestBody?: {
     content?: Record<string, { schema?: Record<string, unknown> }>;
   };
-  responses?: Record<string, unknown>;
+  responses?: Record<
+    string,
+    { content?: Record<string, { schema?: Record<string, unknown> }> }
+  >;
   tags?: string[];
   summary?: unknown;
   description?: unknown;
@@ -270,6 +278,82 @@ describe("buildOpenApiDocument", () => {
         expect(description).toContain("An API key cannot call this endpoint.");
       }
     }
+  });
+
+  it("answers every list with the one page envelope", () => {
+    expect(document.components.schemas.Page).toMatchObject({
+      type: "object",
+      required: ["rows", "total", "page", "pageSize", "pageCount"],
+    });
+
+    for (const { path, method, operation } of operations()) {
+      const query = (operation.parameters ?? []).filter(
+        (parameter) => parameter.in === "query",
+      );
+      const named = (name: string) =>
+        query.find((parameter) => parameter.name === name);
+
+      const paged =
+        (named("page") !== undefined && named("pageSize") !== undefined) ||
+        WHOLE_LIST_PROCEDURES.has(operation["x-plannr-procedure"] ?? "");
+      if (!paged) continue;
+
+      // A caller who has never heard of paging must keep working, so neither
+      // parameter may be demanded — and the ceiling has to be documented, or
+      // `pageSize` reads as a number you can raise without limit.
+      for (const parameter of [named("page"), named("pageSize")]) {
+        if (!parameter) continue;
+        expect(
+          parameter.required,
+          `${method.toUpperCase()} ${path} demands ${parameter.name}`,
+        ).toBe(false);
+      }
+      const size = named("pageSize") as
+        { schema?: { default?: number; maximum?: number } } | undefined;
+      if (size) {
+        expect(typeof size.schema?.default).toBe("number");
+        expect(typeof size.schema?.maximum).toBe("number");
+      }
+
+      const schema =
+        operation.responses?.["200"]?.content?.["application/json"]?.schema;
+      expect(
+        schema?.$ref,
+        `${method.toUpperCase()} ${path} returns a page and does not say so`,
+      ).toBe("#/components/schemas/Page");
+    }
+  });
+
+  /**
+   * Reads the routers as text, which is not something to reach for twice.
+   *
+   * `WHOLE_LIST_PROCEDURES` is the only hand-maintained fact in `openapi.ts`,
+   * and it exists because a procedure that answers through `wholeList` takes no
+   * `page` parameter for the document to notice. Nothing at runtime
+   * distinguishes it from an endpoint that returns a bare array, so a third one
+   * added tomorrow would be documented as returning something it does not —
+   * silently, which is the failure mode this whole document is built to avoid.
+   * Counting the call sites is crude and it fails loudly, which is the right
+   * way round.
+   */
+  it("names every list that answers whole rather than by the page", () => {
+    const routers = fileURLToPath(new URL("../api/routers/", import.meta.url));
+    const sources = readdirSync(routers).filter(
+      (name) => name.endsWith(".ts") && !name.includes(".test."),
+    );
+
+    const callSites = sources.reduce(
+      (count, name) =>
+        count +
+        (readFileSync(join(routers, name), "utf8").match(/return wholeList\(/g)
+          ?.length ?? 0),
+      0,
+    );
+
+    expect(
+      callSites,
+      "a procedure answers through `wholeList` that `WHOLE_LIST_PROCEDURES` in openapi.ts does not name — its 200 is being documented as a bare value",
+    ).toBe(WHOLE_LIST_PROCEDURES.size);
   });
 
   it("declares every tag its operations use", () => {

@@ -6,7 +6,11 @@ import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Dialog } from "~/components/ui/dialog";
-import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
+import {
+  pickerPage,
+  SearchSelect,
+  useDebounced,
+} from "~/components/ui/entity-picker";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
@@ -47,6 +51,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
     { query: debounced || undefined, programmeId, page, pageSize: 24 },
     { placeholderData: (prev) => prev },
   );
+  const lastPage = groups.data?.pageCount ?? 1;
   // The programme filter is itself a list, so it is paged and searchable too.
   const [programmeQuery, setProgrammeQuery] = useState("");
   const courses = api.groups.programmeList.useQuery({
@@ -105,12 +110,9 @@ export function GroupsView({ permissions }: { permissions: string }) {
                   selectedProgramme ? programmeCard(selectedProgramme) : null
                 }
                 onChange={(id) => setCourseId(id ?? undefined)}
-                page={
-                  courses.data && {
-                    ...courses.data,
-                    rows: courses.data.rows.map(programmeCard),
-                  }
-                }
+                page={pickerPage(courses.data, (rows) =>
+                  rows.map(programmeCard),
+                )}
                 loading={courses.isLoading}
                 query={programmeQuery}
                 onQueryChange={setProgrammeQuery}
@@ -230,7 +232,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
               </Card>
             )}
 
-            {(groups.data?.pageCount ?? 1) > 1 && (
+            {lastPage > 1 && (
               <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
@@ -245,16 +247,16 @@ export function GroupsView({ permissions }: { permissions: string }) {
                   Previous
                 </button>
                 <span className="text-faint font-mono text-[12px]">
-                  page {page} of {groups.data?.pageCount}
+                  page {page} of {lastPage}
                 </span>
                 <button
                   type="button"
-                  disabled={!groups.data?.hasMore}
+                  disabled={page >= lastPage}
                   onClick={() => setPage((n) => n + 1)}
                   className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
                   style={{
                     boxShadow: "var(--ring)",
-                    opacity: groups.data?.hasMore ? 1 : 0.4,
+                    opacity: page < lastPage ? 1 : 0.4,
                   }}
                 >
                   Next
@@ -398,12 +400,7 @@ function NewGroupDialog({
               // course is not merely unlisted now — it would be wrong.
               setBatchId("");
             }}
-            page={
-              courses.data && {
-                ...courses.data,
-                rows: courses.data.rows.map(programmeCard),
-              }
-            }
+            page={pickerPage(courses.data, (rows) => rows.map(programmeCard))}
             loading={courses.isLoading}
             query={programmeQuery}
             onQueryChange={setProgrammeQuery}
@@ -426,7 +423,7 @@ function NewGroupDialog({
                   label: "No batch",
                   hint: "e.g. a shared elective",
                 },
-                ...(batches.data ?? []).map((b) => ({
+                ...(batches.data?.rows ?? []).map((b) => ({
                   value: b.id,
                   label: b.name,
                   hint: `${b.startYear}–${b.endYear} · ${b.courseCode}`,
@@ -473,12 +470,7 @@ function NewGroupDialog({
           <SearchSelect
             value={selectedTerm ? semesterCard(selectedTerm) : null}
             onChange={(id) => setTermId(id ?? "")}
-            page={
-              terms.data && {
-                ...terms.data,
-                rows: terms.data.rows.map(semesterCard),
-              }
-            }
+            page={pickerPage(terms.data, (rows) => rows.map(semesterCard))}
             loading={terms.isLoading}
             query={termQuery}
             onQueryChange={setTermQuery}

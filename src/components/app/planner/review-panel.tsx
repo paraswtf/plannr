@@ -322,7 +322,7 @@ export function ReviewPanel({
             both again.
           </p>
           <div className="flex flex-col gap-1.5">
-            {(history.data ?? []).map((version) => (
+            {(history.data?.rows ?? []).map((version) => (
               <Link
                 key={version.id}
                 href={`/planner/${version.id}`}

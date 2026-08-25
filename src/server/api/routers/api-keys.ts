@@ -9,6 +9,7 @@ import {
   scopesToBits,
 } from "~/lib/api-scopes";
 import { PermissionFlags } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -180,16 +181,30 @@ export const apiKeysRouter = createTRPCRouter({
    */
   scopeCatalog: protectedProcedure.query(() => scopeCatalog()),
 
-  list: permissionProcedure(PermissionFlags.ManageRoles).query(
-    async ({ ctx }) => {
-      const keys = await ctx.db.apiKey.findMany({
-        where: { orgId: ctx.orgId },
-        select: keySelect,
-        orderBy: { createdAt: "desc" },
-      });
-      return keys.map(serialise);
-    },
-  ),
+  /**
+   * The whole estate, newest first, revoked ones included.
+   *
+   * Sized to be read whole rather than paged: the console draws every key in
+   * one card, and an institution holding two hundred credentials has a problem
+   * this screen would not be the place to discover. Revoked keys count towards
+   * that — they are never deleted, because the audit trail names their
+   * principals — so the default has to be comfortably past the live ones.
+   */
+  list: permissionProcedure(PermissionFlags.ManageRoles)
+    .input(z.object(pageInput({ defaultSize: 200, maxSize: 500 })).default({}))
+    .query(async ({ ctx, input }) => {
+      const where = { orgId: ctx.orgId };
+      const [keys, total] = await Promise.all([
+        ctx.db.apiKey.findMany({
+          where,
+          select: keySelect,
+          orderBy: { createdAt: "desc" },
+          ...pageArgs(input),
+        }),
+        ctx.db.apiKey.count({ where }),
+      ]);
+      return toPage(keys.map(serialise), total, input);
+    }),
 
   /**
    * Throws rather than returning null when there is no such key, unlike

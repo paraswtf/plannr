@@ -16,6 +16,7 @@ import {
   wouldLockSelfOut,
 } from "~/lib/permissions";
 import type { PermissionBitField } from "~/lib/permissions";
+import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
   permissionProcedure,
@@ -192,8 +193,19 @@ export const usersRouter = createTRPCRouter({
           status: z
             .enum(["all", "active", "inactive", "never-signed-in"])
             .default("all"),
-          page: z.number().int().min(1).default(1),
-          pageSize: z.number().int().min(5).max(200).default(25),
+          /**
+           * A small default, which for a list of people is the exception
+           * rather than the pattern — read `pageInput`'s doc comment before
+           * copying these numbers anywhere else. It is safe here because the
+           * directory screen has been paged from its first day and names the
+           * page it wants on every request, so nothing renders this list whole
+           * and nothing is truncated by starting at 25.
+           *
+           * The old floor of five rows a page goes with this: the convention's
+           * floor is one, and nothing was protected by refusing a page of
+           * three.
+           */
+          ...pageInput({ defaultSize: 25, maxSize: 200 }),
         })
         .default({}),
     )
@@ -204,18 +216,11 @@ export const usersRouter = createTRPCRouter({
           where,
           include: userInclude,
           orderBy: [{ name: "asc" }, { email: "asc" }],
-          skip: (input.page - 1) * input.pageSize,
-          take: input.pageSize,
+          ...pageArgs(input),
         }),
         ctx.db.user.count({ where }),
       ]);
-      return {
-        rows: rows.map(serialise),
-        total,
-        page: input.page,
-        pageSize: input.pageSize,
-        pageCount: Math.max(1, Math.ceil(total / input.pageSize)),
-      };
+      return toPage(rows.map(serialise), total, input);
     }),
 
   /**

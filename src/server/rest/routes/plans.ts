@@ -65,7 +65,7 @@ export const planRoutes: RouteDef[] = [
     procedure: "plans.list",
     summary: "List schedule plans",
     description:
-      "Your own drafts plus everything that has been shared, newest activity first. `scope` narrows it: `mine` is what you created, `shared` is everything past the draft stage, and `review` is the subset waiting on your own answer — which for a key is always empty, since keys are never named as reviewers.",
+      "One page of plans in the standard envelope: `rows`, plus `total`, `page`, `pageSize` and `pageCount`. Your own drafts plus everything that has been shared, newest activity first, twenty to a page unless you ask for more. `scope` narrows it: `mine` is what you created, `shared` is everything past the draft stage, and `review` is the subset waiting on your own answer — which for a key is always empty, since keys are never named as reviewers.",
     tag: "Schedule plans",
     scopes: ["ViewSchedulePlans"],
   },
@@ -86,7 +86,7 @@ export const planRoutes: RouteDef[] = [
     procedure: "plans.reviewerCandidates",
     summary: "List the people who can sign a plan off",
     description:
-      "Only people who actually hold `ApproveSchedulePlans` are returned, and never yourself. Service accounts are excluded whoever asks: a key can hold the approval bit, but it can never be asked to exercise judgement, and naming one as a reviewer would leave the plan waiting forever on somebody who will never open it.",
+      "Only people who actually hold `ApproveSchedulePlans` are returned, and never yourself. Service accounts are excluded whoever asks: a key can hold the approval bit, but it can never be asked to exercise judgement, and naming one as a reviewer would leave the plan waiting forever on somebody who will never open it. Answers in the standard envelope but is the one list here that does not page: eligibility is decided by expanding permission bits after the rows are read, which the database cannot filter on, so every candidate comes back at once and `pageCount` is always 1.",
     tag: "Schedule plans",
     scopes: ["ManageSchedulePlans"],
   },
@@ -138,7 +138,7 @@ export const planRoutes: RouteDef[] = [
     procedure: "plans.history",
     summary: "List the revisions in a plan's chain",
     description:
-      "Every draft descended from the same original, oldest first, with the one you asked about flagged as current. Revisions you cannot see — somebody else's private drafts in the same chain — are left out rather than redacted.",
+      "One page of revisions in the standard envelope, oldest first, with the one you asked about flagged as current. A chain never approaches the default page size, so this is every draft descended from the same original unless you ask for a smaller `pageSize`. Revisions you cannot see — somebody else's private drafts in the same chain — are left out rather than redacted.",
     tag: "Schedule plans",
     scopes: [],
   },

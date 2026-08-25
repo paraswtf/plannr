@@ -2,7 +2,11 @@
 
 import { facultyCard, groupCard } from "~/components/app/people/entity-cards";
 import { Icon } from "~/components/ui/icon";
-import { EntityPicker, SearchSelect } from "~/components/ui/entity-picker";
+import {
+  EntityPicker,
+  pickerPage,
+  SearchSelect,
+} from "~/components/ui/entity-picker";
 import type { BookingDraft } from "./use-booking-draft";
 
 /**
@@ -28,12 +32,7 @@ export function AttendeeFields({
         <SearchSelect
           value={group ? groupCard(group) : null}
           onChange={draft.setGroupId}
-          page={
-            groupsPage.data && {
-              ...groupsPage.data,
-              rows: groupsPage.data.rows.map(groupCard),
-            }
-          }
+          page={pickerPage(groupsPage.data, (rows) => rows.map(groupCard))}
           loading={groupsPage.isLoading}
           query={draft.groupQuery}
           onQueryChange={draft.setGroupQuery}
@@ -70,10 +69,7 @@ export function AttendeeFields({
                   total: groupFaculty.length,
                   hasMore: false,
                 }
-              : facultyPage.data && {
-                  ...facultyPage.data,
-                  rows: facultyPage.data.rows.map(facultyCard),
-                }
+              : pickerPage(facultyPage.data, (rows) => rows.map(facultyCard))
           }
           loading={facultyPage.isLoading}
           query={draft.facultyQuery}
@@ -98,15 +94,12 @@ export function AttendeeFields({
           <EntityPicker
             selected={draft.extraGroups.map(groupCard)}
             onChange={draft.setExtraGroupIds}
-            page={
-              draft.groupsPage.data && {
-                ...draft.groupsPage.data,
-                rows: draft.groupsPage.data.rows
-                  // The primary group is already in the room.
-                  .filter((g) => g.id !== draft.groupId)
-                  .map(groupCard),
-              }
-            }
+            page={pickerPage(draft.groupsPage.data, (rows) =>
+              rows
+                // The primary group is already in the room.
+                .filter((g) => g.id !== draft.groupId)
+                .map(groupCard),
+            )}
             loading={draft.groupsPage.isLoading}
             query={draft.groupQuery}
             onQueryChange={draft.setGroupQuery}

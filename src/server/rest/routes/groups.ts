@@ -105,7 +105,7 @@ export const groupRoutes: RouteDef[] = [
     procedure: "groups.lectures",
     summary: "List a group's scheduled lectures",
     description:
-      "Occurrences rather than events, so a weekly class appears as the dates it actually sits — which is what a register is taken against. Combined lectures the group has been joined into are included alongside its own. Window it with `from` and `to`; without them you get the most recent `limit` sittings.",
+      "Occurrences rather than events, so a weekly class appears as the dates it actually sits — which is what a register is taken against. Combined lectures the group has been joined into are included alongside its own. Earliest sitting first, so paging walks forward through the group's timetable; `from` and `to` narrow it to the term you mean, which is nearly always what you want instead.",
     tag: "Groups",
     scopes: ["ViewGroups"],
     params: { id: "groupId" },
@@ -194,7 +194,7 @@ export const groupRoutes: RouteDef[] = [
     procedure: "groups.batchList",
     summary: "List intakes and the groups under each",
     description:
-      "Newest intake first, sent whole rather than paged — an institution has tens of these, not thousands. Filter by `programmeId`, or search names and programme codes with `query`. Each batch's `studentCount` sums its divisions only: majors, minors and electives draw on the same people again, and adding them would count a student several times.",
+      "Newest intake first. Paged like everything else here, though an institution has tens of these rather than thousands, so a request that names no page gets the lot. Filter by `programmeId`, or search names and programme codes with `query`. Each batch's `studentCount` sums its divisions only: majors, minors and electives draw on the same people again, and adding them would count a student several times.",
     tag: "Batches",
     scopes: ["ViewGroups"],
   },

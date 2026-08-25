@@ -421,6 +421,91 @@ describe("a route can actually validate", () => {
   });
 });
 
+/**
+ * The two field names `pageInput` puts on every list procedure in the app.
+ *
+ * Spelled out here rather than imported, because the point is to catch a route
+ * declared against a procedure whose paging fields are those names — and a
+ * shared constant would happily follow a rename that broke every caller.
+ */
+const PAGE_FIELDS = ["page", "pageSize"];
+
+/**
+ * Paging is a convention now, not a handful of endpoints that happen to take a
+ * page number, and this layer can misdeclare one in two quiet ways.
+ *
+ * Neither shows up anywhere else. `coerce.ts` reads the procedure's own schema,
+ * so `?page=2&pageSize=20` starts working the moment the fields exist and no
+ * route has to be told about it — which is the convenience, and also the reason
+ * nothing here notices when a route is wired so that a caller cannot reach the
+ * two numbers at all. Every assertion above would still pass.
+ *
+ * See src/server/api/pagination.ts for the convention, and
+ * src/server/api/pagination.contract.test.ts for the procedures' half of it.
+ */
+describe("a paginated procedure is offered as a paginated endpoint", () => {
+  /** Which of the two the procedure behind a route actually takes. */
+  const pagingOf = (route: RouteDef) => {
+    const fields = inputFieldsOf(route.procedure);
+    return PAGE_FIELDS.filter((field) => fields.keys.has(field));
+  };
+
+  /**
+   * A page is a slice of a list somebody is reading, so a paginated anything
+   * is a read, and a read is a GET — the rule the whole file already applies,
+   * reaching a case it cannot see. A mutation with a page in it is the plainer
+   * mistake and the more alarming one: nothing about creating a room, or
+   * cancelling a lecture, has a second page, so a `page` on that input is
+   * either a copy-paste from the list procedure above it or a `take` cap
+   * wearing the convention's clothes. Both leave a caller reading `pageCount`
+   * off a write.
+   */
+  it("serves every paginated route over GET", () => {
+    for (const route of ROUTES) {
+      const paging = pagingOf(route);
+      if (paging.length === 0) continue;
+
+      expect(
+        route.method,
+        `${label(route)} serves "${route.procedure}", whose input takes [${paging.join(", ")}], over ${route.method}. ` +
+          `Paging is for reading a long list a piece at a time — there is no second page of a write. ` +
+          `Either this route has the wrong method, or the procedure has acquired a page field it has no use for.`,
+      ).toBe("GET");
+    }
+  });
+
+  /**
+   * `/users/page/2` instead of `/users?page=2`.
+   *
+   * It would half-work, which is what makes it worth a test. `handler.ts`
+   * merges path parameters in on top of the query string, so the segment would
+   * feed the input and the first page would come back looking perfect — while
+   * `GET /users` had become a route that does not exist, `?page=` had become a
+   * parameter the path silently overrides, and the default `pageInput` went to
+   * such trouble to provide could never apply, because a path parameter is the
+   * one kind of input a caller has no way to omit.
+   */
+  it("never takes a page or a page size from the path", () => {
+    for (const route of COMPILED) {
+      for (const name of route.paramNames) {
+        const target = route.params?.[name] ?? name;
+        const offending = PAGE_FIELDS.find(
+          (field) => field === name || field === target,
+        );
+
+        expect(
+          offending,
+          `${label(route)} carries {${name}}, which is the paging field "${offending}". ` +
+            `Paging belongs in the query string: \`?page=2&pageSize=20\` already works on any route whose ` +
+            `procedure takes the fields, because coerce.ts reads the procedure's own schema. In the path it ` +
+            `becomes mandatory — there is no way to leave a segment out — so the endpoint loses both its ` +
+            `unpaged form and the defaults that make an omitted page legal.`,
+        ).toBeUndefined();
+      }
+    }
+  });
+});
+
 describe("the shape of the surface", () => {
   it("never declares the same method and path twice", () => {
     const seen = new Map<string, string>();

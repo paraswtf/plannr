@@ -47,7 +47,7 @@ export function RoleManager({ canManage }: { canManage: boolean }) {
        * the track sizing to work out.
        */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
-        {(roles.data ?? []).map((role) => {
+        {(roles.data?.rows ?? []).map((role) => {
           const bits = new PermissionBitField(BigInt(role.permissions));
           const held = PERMISSION_CATALOG.filter((p) =>
             bits.has(PermissionFlags[p.name]),

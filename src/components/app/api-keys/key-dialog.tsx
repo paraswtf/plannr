@@ -13,7 +13,9 @@ import { Button, Notice, relativeTime, tokenHandle } from "./controls";
 import { draftIsValid, expiryDate, KeyFields, type KeyDraft } from "./key-form";
 import { grantedScopes, type ScopeCatalog } from "./scope-picker";
 
-export type ApiKey = RouterOutputs["apiKeys"]["list"][number];
+/** The whole envelope `apiKeys.list` answers with, page and all. */
+export type ApiKeyPage = RouterOutputs["apiKeys"]["list"];
+export type ApiKey = ApiKeyPage["rows"][number];
 
 /**
  * One key, everything about it, and every way to change it.

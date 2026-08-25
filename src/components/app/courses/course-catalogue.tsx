@@ -13,7 +13,7 @@ import { api, type RouterOutputs } from "~/trpc/react";
 import { countLabel } from "./course-vocab";
 
 type Catalogue = RouterOutputs["courses"]["list"];
-type Course = Catalogue["courses"][number];
+type Course = Catalogue["rows"][number];
 type Programme = NonNullable<Course["programme"]>;
 
 /**
@@ -25,10 +25,11 @@ const UNFILED = "unfiled";
 /**
  * Every subject taught this semester, filed under the programme that runs it.
  *
- * The whole semester comes down in one read — a couple of hundred rows — so the
- * search and the programme filter run here rather than a round trip per
- * keystroke. Filtering locally also matches a paper code and a programme code,
- * neither of which the server's title-only search reaches.
+ * The whole semester comes down in one read — a couple of hundred rows, well
+ * inside the page `courses.list` hands back when nobody asks for a particular
+ * one — so the search and the programme filter run here rather than a round
+ * trip per keystroke. Filtering locally also matches a paper code and a
+ * programme code, neither of which the server's title-only search reaches.
  */
 export function CourseCatalogue({
   initial,
@@ -44,7 +45,7 @@ export function CourseCatalogue({
   const [programmeId, setProgrammeId] = useState("");
   const [staffing, setStaffing] = useState<"all" | "unstaffed">("all");
 
-  const unstaffed = catalogue.courses.filter(
+  const unstaffed = catalogue.rows.filter(
     (course) => course._count.faculty === 0,
   ).length;
 
@@ -53,7 +54,7 @@ export function CourseCatalogue({
   const programmes = useMemo(() => {
     const counts = new Map<string, Programme & { courses: number }>();
     let unfiled = 0;
-    for (const course of catalogue.courses) {
+    for (const course of catalogue.rows) {
       if (!course.programme) {
         unfiled += 1;
         continue;
@@ -63,11 +64,11 @@ export function CourseCatalogue({
       else counts.set(course.programme.id, { ...course.programme, courses: 1 });
     }
     return { rows: [...counts.values()], unfiled };
-  }, [catalogue.courses]);
+  }, [catalogue.rows]);
 
   const needle = query.trim().toLowerCase();
   const sections = useMemo(() => {
-    const matched = catalogue.courses.filter((course) => {
+    const matched = catalogue.rows.filter((course) => {
       const key = course.programme?.id ?? UNFILED;
       if (programmeId && key !== programmeId) return false;
       if (staffing === "unstaffed" && course._count.faculty > 0) return false;
@@ -92,7 +93,7 @@ export function CourseCatalogue({
       else grouped.set(key, { programme: course.programme, courses: [course] });
     }
     return [...grouped.entries()];
-  }, [catalogue.courses, needle, programmeId, staffing]);
+  }, [catalogue.rows, needle, programmeId, staffing]);
 
   const shown = sections.reduce((n, [, s]) => n + s.courses.length, 0);
 
@@ -190,9 +191,9 @@ export function CourseCatalogue({
                   crush both of them, so on a phone it takes a line of its own
                   and keeps the right edge it has beside them. */}
               <span className="text-faint w-full text-right font-mono text-[12px] sm:ml-auto sm:w-auto">
-                {shown === catalogue.courses.length
+                {shown === catalogue.rows.length
                   ? countLabel(shown, "course")
-                  : `${shown} of ${catalogue.courses.length}`}
+                  : `${shown} of ${catalogue.rows.length}`}
               </span>
             </div>
 
