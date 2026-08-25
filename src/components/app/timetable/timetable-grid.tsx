@@ -45,6 +45,8 @@ export interface GridEvent {
   facultyName?: string | null;
   /** Every group attending — more than one for a combined lecture. */
   groupNames?: string[];
+  /** One of the viewer's own — a class they attend or teach. Drawn in gold. */
+  isMine?: boolean;
   /** Whether a register has already been taken for this sitting. */
   attendanceMarked?: boolean;
 }
@@ -624,12 +626,25 @@ export function TimetableGrid({
                       style={{
                         top: (from - startHour) * rowHeight + 2,
                         height: Math.max(22, (to - from) * rowHeight - 4),
-                        background: live
-                          ? "rgba(220,56,72,0.10)"
-                          : "var(--card-soft)",
+                        /*
+                         * Two separate questions, answered in two places, so a
+                         * block that is both still says both: the fill is whose
+                         * class it is — gold for the viewer's own — and the ring
+                         * is whether it is running right now. Letting either one
+                         * win outright would take the gold off the very block
+                         * somebody is looking for, or drop the now-marker from
+                         * the only class it matters most on.
+                         */
+                        background: event.isMine
+                          ? "var(--mine-fill)"
+                          : live
+                            ? "rgba(220,56,72,0.10)"
+                            : "var(--card-soft)",
                         boxShadow: live
                           ? "inset 0 0 0 1px var(--red)"
-                          : "inset 0 0 0 1px var(--card-ring)",
+                          : event.isMine
+                            ? "inset 0 0 0 1px var(--mine-ring)"
+                            : "inset 0 0 0 1px var(--card-ring)",
                         opacity: beingMoved ? 0.35 : 1,
                         cursor: onEventMove
                           ? drag?.kind === "move"

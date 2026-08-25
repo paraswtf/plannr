@@ -91,7 +91,11 @@ beforeEach(async () => {
     create: { slug: "sched-itest", name: "Schedule Org", timezone: TZ },
   });
   orgId = org.id;
-  await db.orgSettings.upsert({ where: { orgId }, update: {}, create: { orgId } });
+  await db.orgSettings.upsert({
+    where: { orgId },
+    update: {},
+    create: { orgId },
+  });
 
   await db.event.deleteMany({ where: { orgId } });
   await db.group.deleteMany({ where: { orgId } });
@@ -115,9 +119,21 @@ beforeEach(async () => {
     });
   }
 
-  coordinator = await makeActor("sched-coordinator@plannr-demo.invalid", "The Coordinator", ["coordinator"]);
-  lecturer = await makeActor("sched-lecturer@plannr-demo.invalid", "The Lecturer", ["faculty"]);
-  learner = await makeActor("sched-learner@plannr-demo.invalid", "The Learner", ["student"]);
+  coordinator = await makeActor(
+    "sched-coordinator@plannr-demo.invalid",
+    "The Coordinator",
+    ["coordinator"],
+  );
+  lecturer = await makeActor(
+    "sched-lecturer@plannr-demo.invalid",
+    "The Lecturer",
+    ["faculty"],
+  );
+  learner = await makeActor(
+    "sched-learner@plannr-demo.invalid",
+    "The Learner",
+    ["student"],
+  );
 
   const faculty = await db.facultyProfile.upsert({
     where: { userId: lecturer.id },
@@ -193,11 +209,115 @@ beforeEach(async () => {
   });
 });
 
+/**
+ * Which blocks on the campus grid are the viewer's own.
+ *
+ * The timetable shows every room in the building, and the gold a class is drawn
+ * in is the only thing that separates the viewer's day from everybody else's —
+ * so the flag behind it is worth pinning down, particularly at the two ends
+ * where nobody owns anything: a coordinator with no profile, and a room booking
+ * with no cohort and no lecturer. Both of those are all-nulls, and a rule
+ * written carelessly makes null match null and paints the whole day gold.
+ */
+describe("whose class is whose on the grid", () => {
+  it("marks a student's own class, and leaves the rest of the campus alone", async () => {
+    const other = await db.group.create({
+      data: {
+        orgId,
+        programmeId: (await db.programme.findFirstOrThrow({ where: { orgId } }))
+          .id,
+        name: "SCH-B",
+      },
+    });
+    const event = await db.event.create({
+      data: {
+        orgId,
+        roomId,
+        groupId: other.id,
+        title: "Somebody Else's Lecture",
+        kind: "CLASS",
+        status: "CONFIRMED",
+        startTime: DAY,
+        endTime: new Date(DAY.getTime() + 3_600_000),
+        timezone: TZ,
+      },
+    });
+    await db.eventOccurrence.create({
+      data: {
+        orgId,
+        eventId: event.id,
+        start: DAY,
+        end: new Date(DAY.getTime() + 3_600_000),
+        roomId,
+        groupId: other.id,
+        kind: "CLASS",
+        status: "CONFIRMED",
+      },
+    });
+
+    const grid = await callerFor(learner).timetable.grid({ date: DAY });
+    expect(
+      Object.fromEntries(grid.occurrences.map((o) => [o.title, o.isMine])),
+    ).toEqual({
+      "Scheduling, Applied": true,
+      "Somebody Else's Lecture": false,
+    });
+  });
+
+  it("marks the class a lecturer takes as theirs too", async () => {
+    const grid = await callerFor(lecturer).timetable.grid({ date: DAY });
+    expect(grid.occurrences.map((o) => o.isMine)).toEqual([true]);
+  });
+
+  it("gives a coordinator with neither profile nothing of their own", async () => {
+    const grid = await callerFor(coordinator).timetable.grid({ date: DAY });
+    expect(grid.occurrences).toHaveLength(1);
+    expect(grid.occurrences.every((o) => o.isMine)).toBe(false);
+  });
+
+  it("does not hand a room booking to whoever has no cohort either", async () => {
+    // No group and no lecturer on the booking, and the coordinator has neither
+    // — the case where "unset matches unset" would claim it for them.
+    const event = await db.event.create({
+      data: {
+        orgId,
+        roomId,
+        title: "Staff Meeting",
+        kind: "BOOKING",
+        status: "CONFIRMED",
+        startTime: new Date(DAY.getTime() + 2 * 3_600_000),
+        endTime: new Date(DAY.getTime() + 3 * 3_600_000),
+        timezone: TZ,
+      },
+    });
+    await db.eventOccurrence.create({
+      data: {
+        orgId,
+        eventId: event.id,
+        start: new Date(DAY.getTime() + 2 * 3_600_000),
+        end: new Date(DAY.getTime() + 3 * 3_600_000),
+        roomId,
+        kind: "BOOKING",
+        status: "CONFIRMED",
+      },
+    });
+
+    for (const actor of [coordinator, learner, lecturer]) {
+      const grid = await callerFor(actor).timetable.grid({ date: DAY });
+      expect(
+        grid.occurrences.find((o) => o.title === "Staff Meeting")?.isMine,
+      ).toBe(false);
+    }
+  });
+});
+
 describe("a schedule of one's own", () => {
   it("gives a student the class they attend, and says who takes it", async () => {
     const day = await callerFor(learner).timetable.mySchedule({ date: DAY });
     expect(day.viewAs).toBe("student");
-    expect(day.occurrences.map((o) => o.title)).toEqual(["Scheduling, Applied"]);
+    expect(day.occurrences.map((o) => o.title)).toEqual([
+      "Scheduling, Applied",
+    ]);
     expect(day.detail).toMatchObject({ teaching: true, cohort: false });
     expect(day.viewingAs).toBeNull();
   });
@@ -214,7 +334,9 @@ describe("a schedule of one's own", () => {
   });
 
   it("offers a coordinator with no profile no angle of their own", async () => {
-    const day = await callerFor(coordinator).timetable.mySchedule({ date: DAY });
+    const day = await callerFor(coordinator).timetable.mySchedule({
+      date: DAY,
+    });
     expect(day.views).toEqual(["coordinator"]);
     expect(day.occurrences).toEqual([]);
   });
@@ -226,8 +348,13 @@ describe("looking at somebody else's schedule", () => {
       date: DAY,
       asUserId: lecturer.id,
     });
-    expect(day.viewingAs).toMatchObject({ name: "The Lecturer", isFaculty: true });
-    expect(day.occurrences.map((o) => o.title)).toEqual(["Scheduling, Applied"]);
+    expect(day.viewingAs).toMatchObject({
+      name: "The Lecturer",
+      isFaculty: true,
+    });
+    expect(day.occurrences.map((o) => o.title)).toEqual([
+      "Scheduling, Applied",
+    ]);
     // Described by what they are — a lecturer is told who is in the room.
     expect(day.detail).toMatchObject({ cohort: true, teaching: false });
   });
@@ -238,20 +365,43 @@ describe("looking at somebody else's schedule", () => {
       asUserId: learner.id,
     });
     expect(day.views).toEqual(["coordinator"]);
-    expect(day.viewingAs).toMatchObject({ name: "The Learner", isStudent: true });
+    expect(day.viewingAs).toMatchObject({
+      name: "The Learner",
+      isStudent: true,
+    });
     expect(day.detail).toMatchObject({ teaching: true, cohort: false });
   });
 
-  it("refuses a lecturer, who can see every event but not who people are", async () => {
-    await expect(
-      callerFor(lecturer).timetable.mySchedule({ date: DAY, asUserId: learner.id }),
-    ).rejects.toThrow(/permission/i);
+  it("lets a lecturer look up a student's day without the right to know who people are", async () => {
+    const day = await callerFor(lecturer).timetable.mySchedule({
+      date: DAY,
+      asUserId: learner.id,
+    });
+    expect(day.viewingAs).toMatchObject({ name: "The Learner", isStudent: true });
   });
 
-  it("refuses a student outright", async () => {
-    await expect(
-      callerFor(learner).timetable.mySchedule({ date: DAY, asUserId: lecturer.id }),
-    ).rejects.toThrow(/permission/i);
+  it("lets a student look up where a lecturer is, which is the point of it", async () => {
+    const day = await callerFor(learner).timetable.mySchedule({
+      date: DAY,
+      asUserId: lecturer.id,
+    });
+    expect(day.viewingAs).toMatchObject({ name: "The Lecturer", isFaculty: true });
+  });
+
+  /**
+   * Whose day may be read is now open; what the reader may *do* with it is not.
+   * The day is described by what its owner is — a lecturer's is a teaching day,
+   * cohorts and all — while editing stays with the viewer's own permissions, so
+   * opening the first door did not quietly open the second.
+   */
+  it("describes the subject's day but keeps the viewer's own powers", async () => {
+    const day = await callerFor(learner).timetable.mySchedule({
+      date: DAY,
+      asUserId: lecturer.id,
+    });
+    // The learner is offered no angle but their own to come back to.
+    expect(day.views).toEqual(["student"]);
+    expect(day.detail).toMatchObject({ scope: "teaching", modify: false });
   });
 
   it("refuses somebody from another institution", async () => {
@@ -266,7 +416,10 @@ describe("looking at somebody else's schedule", () => {
       create: { email: "sched-outsider@plannr-demo.invalid", orgId: other.id },
     });
     await expect(
-      callerFor(coordinator).timetable.mySchedule({ date: DAY, asUserId: outsider.id }),
+      callerFor(coordinator).timetable.mySchedule({
+        date: DAY,
+        asUserId: outsider.id,
+      }),
     ).rejects.toThrow(/No such person/i);
   });
 
@@ -282,7 +435,9 @@ describe("looking at somebody else's schedule", () => {
 
 describe("the people who can be looked at", () => {
   it("lists only those with a day of their own", async () => {
-    const people = await callerFor(coordinator).timetable.peopleWithSchedules({});
+    const people = await callerFor(coordinator).timetable.peopleWithSchedules(
+      {},
+    );
     const emails = people.map((p) => p.email);
     expect(emails).toContain("sched-lecturer@plannr-demo.invalid");
     expect(emails).toContain("sched-learner@plannr-demo.invalid");
@@ -291,7 +446,9 @@ describe("the people who can be looked at", () => {
   });
 
   it("says which of the two each one is", async () => {
-    const people = await callerFor(coordinator).timetable.peopleWithSchedules({});
+    const people = await callerFor(coordinator).timetable.peopleWithSchedules(
+      {},
+    );
     expect(people.find((p) => p.name === "The Lecturer")?.kind).toBe("faculty");
     expect(people.find((p) => p.name === "The Learner")).toMatchObject({
       kind: "student",
@@ -301,14 +458,30 @@ describe("the people who can be looked at", () => {
 
   it("searches by name, address and PRN", async () => {
     const caller = callerFor(coordinator);
-    expect((await caller.timetable.peopleWithSchedules({ query: "Lectur" })).map((p) => p.name)).toEqual(["The Lecturer"]);
-    expect((await caller.timetable.peopleWithSchedules({ query: "99930199001" })).map((p) => p.name)).toEqual(["The Learner"]);
-    expect((await caller.timetable.peopleWithSchedules({ query: "sched-learner@" })).map((p) => p.name)).toEqual(["The Learner"]);
+    expect(
+      (await caller.timetable.peopleWithSchedules({ query: "Lectur" })).map(
+        (p) => p.name,
+      ),
+    ).toEqual(["The Lecturer"]);
+    expect(
+      (
+        await caller.timetable.peopleWithSchedules({ query: "99930199001" })
+      ).map((p) => p.name),
+    ).toEqual(["The Learner"]);
+    expect(
+      (
+        await caller.timetable.peopleWithSchedules({ query: "sched-learner@" })
+      ).map((p) => p.name),
+    ).toEqual(["The Learner"]);
   });
 
   it("is closed to a lecturer and to a student", async () => {
-    await expect(callerFor(lecturer).timetable.peopleWithSchedules({})).rejects.toThrow(/permission/i);
-    await expect(callerFor(learner).timetable.peopleWithSchedules({})).rejects.toThrow(/permission/i);
+    await expect(
+      callerFor(lecturer).timetable.peopleWithSchedules({}),
+    ).rejects.toThrow(/permission/i);
+    await expect(
+      callerFor(learner).timetable.peopleWithSchedules({}),
+    ).rejects.toThrow(/permission/i);
   });
 });
 
@@ -454,6 +627,8 @@ describe("the day the schedule opens on", () => {
     // An explicit date is the day-stepper, and it must never be second-guessed.
     const day = await callerFor(learner).timetable.mySchedule({ date: DAY });
     expect(day.from).toEqual(startOfLocalDay(DAY, TZ));
-    expect(day.occurrences.map((o) => o.title)).toEqual(["Scheduling, Applied"]);
+    expect(day.occurrences.map((o) => o.title)).toEqual([
+      "Scheduling, Applied",
+    ]);
   });
 });

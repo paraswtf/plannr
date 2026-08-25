@@ -170,7 +170,9 @@ function cohortDto(group: Cohort) {
     name: group.label ?? group.name,
     kind: group.kind,
     batch: group.batch?.name ?? null,
-    programme: group.programme ? `${group.programme.code} · ${group.programme.name}` : null,
+    programme: group.programme
+      ? `${group.programme.code} · ${group.programme.name}`
+      : null,
     size: group._count.students,
   };
 }
@@ -209,6 +211,31 @@ async function profilesOf(db: Db, userId: string) {
   return { student, faculty };
 }
 
+/**
+ * Whether a sitting is the viewer's own: a class one of their cohorts attends,
+ * or one they teach.
+ *
+ * Deliberately the same rule the schedule screen and the calendar sync apply —
+ * the occurrence's own `groupId`, which for a combined lecture is the primary
+ * section only — so the timetable, `/schedule` and somebody's Google Calendar
+ * can never disagree about what "my classes" means. If that rule is ever
+ * widened to the `EventGroup` join, widening it here in step is what keeps the
+ * three honest.
+ *
+ * Both halves are tested rather than one taking precedence, because being
+ * enrolled and teaching are not exclusive: a research assistant who takes a lab
+ * and sits in on a lecture owns both of those blocks.
+ */
+function ownershipTest(profiles: Awaited<ReturnType<typeof profilesOf>>) {
+  const groupIds = new Set(
+    profiles.student?.memberships.map((m) => m.groupId) ?? [],
+  );
+  const facultyId = profiles.faculty?.id ?? null;
+  return (occurrence: { groupId: string | null; facultyId: string | null }) =>
+    (occurrence.groupId !== null && groupIds.has(occurrence.groupId)) ||
+    (facultyId !== null && occurrence.facultyId === facultyId);
+}
+
 async function orgTimezone(db: Db, orgId: string): Promise<string> {
   const org = await db.organization.findUnique({
     where: { id: orgId },
@@ -232,41 +259,49 @@ export const timetableRouter = createTRPCRouter({
       const from = startOfLocalDay(input.date, timeZone);
       const to = endOfLocalDay(input.date, timeZone);
 
-      const [rooms, occurrences, settings, buildings] = await Promise.all([
-        ctx.db.room.findMany({
-          where: {
-            orgId: ctx.orgId,
-            isActive: true,
-            ...(input.buildingId ? { buildingId: input.buildingId } : {}),
-          },
-          include: { building: { select: { id: true, name: true } } },
-          orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
-        }),
-        ctx.db.eventOccurrence.findMany({
-          where: {
-            orgId: ctx.orgId,
-            start: { lt: to },
-            end: { gt: from },
-            ...(input.includeCancelled
-              ? {}
-              : { status: { in: [...OCCUPYING_STATUSES] } }),
-            ...(input.buildingId
-              ? { room: { buildingId: input.buildingId } }
-              : {}),
-          },
-          select: selectOccurrence,
-          orderBy: { start: "asc" },
-        }),
-        ctx.db.orgSettings.findUnique({ where: { orgId: ctx.orgId } }),
-        // Every building with a room in it, whatever is being filtered to.
-        // The filter's own choices cannot come out of the filtered result, or
-        // choosing one building is the last choice anybody gets to make.
-        ctx.db.building.findMany({
-          where: { orgId: ctx.orgId, rooms: { some: { isActive: true } } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        }),
-      ]);
+      const [rooms, occurrences, settings, buildings, profiles] =
+        await Promise.all([
+          ctx.db.room.findMany({
+            where: {
+              orgId: ctx.orgId,
+              isActive: true,
+              ...(input.buildingId ? { buildingId: input.buildingId } : {}),
+            },
+            include: { building: { select: { id: true, name: true } } },
+            orderBy: [{ building: { name: "asc" } }, { code: "asc" }],
+          }),
+          ctx.db.eventOccurrence.findMany({
+            where: {
+              orgId: ctx.orgId,
+              start: { lt: to },
+              end: { gt: from },
+              ...(input.includeCancelled
+                ? {}
+                : { status: { in: [...OCCUPYING_STATUSES] } }),
+              ...(input.buildingId
+                ? { room: { buildingId: input.buildingId } }
+                : {}),
+            },
+            select: selectOccurrence,
+            orderBy: { start: "asc" },
+          }),
+          ctx.db.orgSettings.findUnique({ where: { orgId: ctx.orgId } }),
+          // Every building with a room in it, whatever is being filtered to.
+          // The filter's own choices cannot come out of the filtered result, or
+          // choosing one building is the last choice anybody gets to make.
+          ctx.db.building.findMany({
+            where: { orgId: ctx.orgId, rooms: { some: { isActive: true } } },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          }),
+          // Who the viewer is on this grid, so their own classes can be picked
+          // out of the whole campus's day. In with the rest rather than awaited
+          // first: it depends on nothing here, and the screen is a single round
+          // of queries.
+          profilesOf(ctx.db, ctx.actor.id),
+        ]);
+
+      const isMine = ownershipTest(profiles);
 
       return {
         timeZone,
@@ -274,7 +309,11 @@ export const timetableRouter = createTRPCRouter({
         to,
         rooms,
         buildings,
-        occurrences: (occurrences as OccurrenceRow[]).map(toDto),
+        occurrences: (occurrences as OccurrenceRow[]).map((row) => {
+          const dto = toDto(row);
+          /** Drawn in gold on the grid — see `ownershipTest`. */
+          return { ...dto, isMine: isMine(dto) };
+        }),
         settings,
       };
     }),
@@ -354,11 +393,88 @@ export const timetableRouter = createTRPCRouter({
    * browsing named individuals needs the people permission as well, which a
    * lecturer does not hold.
    */
+  /**
+   * The people the "view as" picker offers.
+   *
+   * Open to anybody with a session, unlike `peopleWithSchedules` below it.
+   * Choosing whose day to look at belongs to the schedule screen, which every
+   * signed-in person can reach, so gating the *names* behind ViewUsers would
+   * put a control on screen that most people could never fill in.
+   *
+   * It answers with the four fields the picker draws and nothing else — no
+   * address, no roles, no permission bits, no account state. Matching is on
+   * name and PRN only; an address is neither returned nor searchable here, so
+   * this cannot be used to test whether a given address has an account.
+   *
+   * Being allowed to *name* somebody is not being allowed to see their day:
+   * `mySchedule` decides that separately and still refuses another person's
+   * schedule without ViewAllEvents and ViewUsers.
+   */
+  searchPeople: protectedProcedure
+    .input(
+      z.object({ query: z.string().trim().max(120).optional() }).default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const people = await ctx.db.user.findMany({
+        where: {
+          orgId: ctx.orgId,
+          AND: [
+            {
+              OR: [
+                { studentProfile: { isNot: null } },
+                { facultyProfile: { isNot: null } },
+              ],
+            },
+            ...(input.query
+              ? [
+                  {
+                    OR: [
+                      {
+                        name: {
+                          contains: input.query,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      { studentProfile: { prn: { contains: input.query } } },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        },
+        // `email` is read so `personName` has its fallback for somebody who
+        // never set a name. It is not returned.
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          studentProfile: { select: { prn: true } },
+          facultyProfile: { select: { department: true } },
+        },
+        orderBy: [{ name: "asc" }, { email: "asc" }],
+        take: 30,
+      });
+
+      return people.map((person) => ({
+        id: person.id,
+        name: personName(person),
+        kind: person.facultyProfile
+          ? ("faculty" as const)
+          : ("student" as const),
+        detail:
+          person.facultyProfile?.department ??
+          person.studentProfile?.prn ??
+          null,
+      }));
+    }),
+
   peopleWithSchedules: permissionProcedure(
     PermissionFlags.ViewAllEvents,
     PermissionFlags.ViewUsers,
   )
-    .input(z.object({ query: z.string().trim().max(120).optional() }).default({}))
+    .input(
+      z.object({ query: z.string().trim().max(120).optional() }).default({}),
+    )
     .query(async ({ ctx, input }) => {
       const search = input.query
         ? {
@@ -400,8 +516,13 @@ export const timetableRouter = createTRPCRouter({
         id: person.id,
         name: personName(person),
         email: contactAddress(person.email),
-        kind: person.facultyProfile ? ("faculty" as const) : ("student" as const),
-        detail: person.facultyProfile?.department ?? person.studentProfile?.prn ?? null,
+        kind: person.facultyProfile
+          ? ("faculty" as const)
+          : ("student" as const),
+        detail:
+          person.facultyProfile?.department ??
+          person.studentProfile?.prn ??
+          null,
       }));
     }),
 
@@ -439,20 +560,18 @@ export const timetableRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const timeZone = await orgTimezone(ctx.db, ctx.orgId);
 
-      // Looking at somebody else is a permission rather than a perspective, and
-      // a stricter one than seeing the timetable: it needs the right to know
-      // who people are, which a lecturer does not hold.
+      // Anybody who can open the schedule may look at anybody else's day. A
+      // timetable says where a class is and who teaches it — the same thing the
+      // college posts on a noticeboard — so gating it behind ViewUsers only
+      // stopped students answering "where is my lecturer right now?".
+      //
+      // It opens whose day may be *read*, and nothing else: `perspectives`
+      // below still decides how much is said about each class, and every
+      // screen that edits or marks attendance keeps its own permission.
       const other =
-        input.asUserId && input.asUserId !== ctx.actor.id ? input.asUserId : null;
-      if (
-        other &&
-        !ctx.bits.hasAll(PermissionFlags.ViewAllEvents, PermissionFlags.ViewUsers)
-      ) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You do not have permission to do that.",
-        });
-      }
+        input.asUserId && input.asUserId !== ctx.actor.id
+          ? input.asUserId
+          : null;
 
       const mine = await profilesOf(ctx.db, ctx.actor.id);
       // The chooser always offers the viewer their own angles, whoever's day is

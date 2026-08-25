@@ -176,7 +176,13 @@ export function TimetableView({
     roomCode: o.roomCode,
     facultyName: o.facultyName,
     groupNames: o.groupNames,
+    isMine: o.isMine,
   }));
+
+  // Whether anything on this day is the viewer's own, which is what decides
+  // whether the gold is worth explaining. An admin with no classes of their own
+  // would otherwise be told about a colour that never appears.
+  const hasMine = events.some((e) => e.isMine);
 
   /**
    * What a click on a block does depends on what you are here for. A scheduler
@@ -252,7 +258,9 @@ export function TimetableView({
       // where it was. Saying so is the difference between "my drag was filed"
       // and "the app ignored me".
       setFlash({
-        text: result.applied ? "Moved" : "Change requested — waiting for approval",
+        text: result.applied
+          ? "Moved"
+          : "Change requested — waiting for approval",
       });
       await utils.timetable.invalidate();
       router.refresh();
@@ -350,6 +358,26 @@ export function TimetableView({
             >
               No rooms yet. An admin can add them from the Rooms tab.
             </div>
+          )}
+
+          {/*
+           * The gold is the only thing telling one block from another, so it is
+           * named wherever it is actually on screen — and only there. A swatch
+           * rather than the word "gold" alone, because the reader matching a
+           * colour to a sentence should not have to take the sentence's word for
+           * which colour it means.
+           */}
+          {hasMine && (
+            <p className="text-faint mt-3 flex items-center gap-2 text-[12.5px]">
+              <span
+                className="h-[13px] w-[21px] shrink-0 rounded-[5px]"
+                style={{
+                  background: "var(--mine-fill)",
+                  boxShadow: "inset 0 0 0 1px var(--mine-ring)",
+                }}
+              />
+              Blocks in gold are your own — the classes you attend or teach.
+            </p>
           )}
 
           {/*

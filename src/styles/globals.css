@@ -46,6 +46,17 @@
   --card-ring: rgba(68, 88, 121, 0.28);
   --card-soft: rgba(68, 88, 121, 0.08);
 
+  /*
+   * Your own classes, picked out of everybody else's on the campus timetable.
+   * The same fill-plus-ring pair as a card, in gold rather than slate: gold is
+   * the warm end of the brand gradient and is nothing else's colour on that
+   * grid, where red already means "happening now". The ring is deepened past
+   * --orange on purpose — a 1px hairline in a pale amber reads as a glow rather
+   * than a line.
+   */
+  --mine-fill: rgba(246, 167, 59, 0.16);
+  --mine-ring: #d99425;
+
   /* Elevation is a drawn hairline plus a soft shadow, never a border */
   --ring: inset 0 0 0 1px var(--card-ring);
   --shadow-card: 0 2px 10px rgba(13, 17, 23, 0.05);

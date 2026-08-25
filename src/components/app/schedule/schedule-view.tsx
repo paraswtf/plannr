@@ -125,17 +125,16 @@ export function ScheduleView({
 
   const bits = new PermissionBitField(BigInt(permissions));
   const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
-  // Looking at a named individual's day needs more than seeing the timetable.
-  const canViewOthers = bits.hasAll(
-    PermissionFlags.ViewAllEvents,
-    PermissionFlags.ViewUsers,
-  );
+  // Anybody who can open this screen may look at anybody else's day: a
+  // timetable is noticeboard information, and `searchPeople` answers with names
+  // alone. What each perspective *says* about a class is still decided server
+  // side, and editing and attendance keep their own permissions.
 
   // Live for as long as the picker is on screen. Switching it off once
   // somebody is chosen is exactly when it is needed: to choose somebody else.
-  const { data: people } = api.timetable.peopleWithSchedules.useQuery(
+  const { data: people } = api.timetable.searchPeople.useQuery(
     { query: personQuery || undefined },
-    { enabled: canViewOthers && (pickingPerson || asUserId !== null) },
+    { enabled: pickingPerson || asUserId !== null },
   );
   const viewingAs = data?.viewingAs ?? null;
   const canEdit =
@@ -196,75 +195,72 @@ export function ScheduleView({
             */}
             {!viewingAs && <CalendarSync />}
 
-            {(views.length > 1 || canViewOthers) && (
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                <span className="text-faint font-mono text-[12px]">view as</span>
-                <Select
-                  value={
-                    viewingAs || pickingPerson
-                      ? SOMEONE_ELSE
-                      : (viewAs ?? data?.viewAs ?? views[0] ?? SOMEONE_ELSE)
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <span className="text-faint font-mono text-[12px]">view as</span>
+              <Select
+                value={
+                  viewingAs || pickingPerson
+                    ? SOMEONE_ELSE
+                    : (viewAs ?? data?.viewAs ?? views[0] ?? SOMEONE_ELSE)
+                }
+                options={[
+                  ...views.map((view) => ({
+                    value: view,
+                    label: PERSPECTIVE_LABELS[view],
+                  })),
+                  { value: SOMEONE_ELSE, label: "Someone else…" },
+                ]}
+                onChange={(value) => {
+                  if (value === SOMEONE_ELSE) {
+                    setPickingPerson(true);
+                    return;
                   }
-                  options={[
-                    ...views.map((view) => ({
-                      value: view,
-                      label: PERSPECTIVE_LABELS[view],
-                    })),
-                    ...(canViewOthers
-                      ? [{ value: SOMEONE_ELSE, label: "Someone else…" }]
-                      : []),
-                  ]}
-                  onChange={(value) => {
-                    if (value === SOMEONE_ELSE) {
-                      setPickingPerson(true);
-                      return;
-                    }
-                    setPickingPerson(false);
-                    setAsUserId(null);
-                    setViewAs(value as Perspective);
-                  }}
-                  size="sm"
-                  ariaLabel="View this schedule as"
-                />
+                  setPickingPerson(false);
+                  setAsUserId(null);
+                  // Narrowed already: the SOMEONE_ELSE branch returned above.
+                  setViewAs(value);
+                }}
+                size="sm"
+                ariaLabel="View this schedule as"
+              />
 
-                {(pickingPerson || viewingAs) && (
-                  <div className="w-full sm:w-[260px]">
-                    <SearchSelect
-                      value={
-                        viewingAs
-                          ? { id: viewingAs.id, label: viewingAs.name }
-                          : null
-                      }
-                      onChange={(id) => {
-                        setAsUserId(id);
-                        // Stay in person mode either way: clearing goes back to
-                        // an open picker, not out of it.
-                        setPickingPerson(true);
-                        setPersonQuery("");
-                      }}
-                      page={{
-                        rows: (people ?? []).map((person) => ({
-                          id: person.id,
-                          label: person.name,
-                          hint: [
-                            person.kind === "faculty" ? "Faculty" : "Student",
-                            person.detail,
-                          ]
-                            .filter(Boolean)
-                            .join(" · "),
-                        })),
-                        total: people?.length ?? 0,
-                        hasMore: (people?.length ?? 0) >= 30,
-                      }}
-                      query={personQuery}
-                      onQueryChange={setPersonQuery}
-                      placeholder="Search students and staff…"
-                      emptyOption="Back to my own day"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+              {(pickingPerson || viewingAs) && (
+                <div className="w-full sm:w-[260px]">
+                  <SearchSelect
+                    value={
+                      viewingAs
+                        ? { id: viewingAs.id, label: viewingAs.name }
+                        : null
+                    }
+                    onChange={(id) => {
+                      setAsUserId(id);
+                      // Stay in person mode either way: clearing goes back to
+                      // an open picker, not out of it.
+                      setPickingPerson(true);
+                      setPersonQuery("");
+                    }}
+                    page={{
+                      rows: (people ?? []).map((person) => ({
+                        id: person.id,
+                        label: person.name,
+                        hint: [
+                          person.kind === "faculty" ? "Faculty" : "Student",
+                          person.detail,
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      })),
+                      total: people?.length ?? 0,
+                      hasMore: (people?.length ?? 0) >= 30,
+                    }}
+                    query={personQuery}
+                    onQueryChange={setPersonQuery}
+                    placeholder="Search students and staff…"
+                    emptyOption="Back to my own day"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {stale ? (
@@ -294,7 +290,10 @@ export function ScheduleView({
                 type="button"
                 onClick={() => void refetch()}
                 className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
-                style={{ background: "rgba(68,88,121,0.07)", color: "var(--slate)" }}
+                style={{
+                  background: "rgba(68,88,121,0.07)",
+                  color: "var(--slate)",
+                }}
               >
                 Try again now
               </button>
