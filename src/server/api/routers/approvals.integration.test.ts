@@ -52,6 +52,9 @@ function callerFor(actor: Actor) {
         roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
     actor,
@@ -81,7 +84,10 @@ async function makeActor(
     id: user.id,
     orgId,
     roles: roles.map(({ id, name: n, key }) => ({ id, name: n, key })),
-    permissions: roles.reduce((bits, r) => bits | r.permissions, user.permissions),
+    permissions: roles.reduce(
+      (bits, r) => bits | r.permissions,
+      user.permissions,
+    ),
   };
 }
 
@@ -184,14 +190,31 @@ beforeEach(async () => {
         },
       },
       update: {},
-      create: { orgId, programmeId: programme.id, semesterId: semester.id, name: "APR-1" },
+      create: {
+        orgId,
+        programmeId: programme.id,
+        semesterId: semester.id,
+        name: "APR-1",
+      },
     })
   ).id;
 
   admin = await makeActor("approvals-admin@test.local", "Admin", "admin");
-  coordinator = await makeActor("approvals-coord@test.local", "Coordinator", "coordinator");
-  student = await makeActor("approvals-student@test.local", "Student", "student");
-  teacher = await makeActor("approvals-teacher@test.local", "Teacher", "faculty");
+  coordinator = await makeActor(
+    "approvals-coord@test.local",
+    "Coordinator",
+    "coordinator",
+  );
+  student = await makeActor(
+    "approvals-student@test.local",
+    "Student",
+    "student",
+  );
+  teacher = await makeActor(
+    "approvals-teacher@test.local",
+    "Teacher",
+    "faculty",
+  );
 
   facultyId = (
     await db.facultyProfile.upsert({
@@ -223,7 +246,9 @@ describe("a student's booking waits for a decision", () => {
     const event = await studentBooks(10);
 
     expect(event.status).toBe(EventStatus.PENDING);
-    const sittings = await db.eventOccurrence.findMany({ where: { eventId: event.id } });
+    const sittings = await db.eventOccurrence.findMany({
+      where: { eventId: event.id },
+    });
     expect(sittings).toHaveLength(1);
     expect(sittings[0]!.status).toBe(EventStatus.PENDING);
   });
@@ -264,7 +289,10 @@ describe("a student's booking waits for a decision", () => {
       },
     });
 
-    await callerFor(coordinator).events.reject({ id: event.id, reason: "Room is being painted" });
+    await callerFor(coordinator).events.reject({
+      id: event.id,
+      reason: "Room is being painted",
+    });
 
     const after = await db.event.findUniqueOrThrow({ where: { id: event.id } });
     expect(after.status).toBe(EventStatus.REJECTED);
@@ -276,18 +304,18 @@ describe("a student's booking waits for a decision", () => {
     const event = await studentBooks(10);
     await callerFor(coordinator).events.approve({ id: event.id });
 
-    await expect(callerFor(coordinator).events.approve({ id: event.id })).rejects.toThrow(
-      /not waiting for a decision/i,
-    );
+    await expect(
+      callerFor(coordinator).events.approve({ id: event.id }),
+    ).rejects.toThrow(/not waiting for a decision/i);
   });
 
   it("will not resurrect a refused booking", async () => {
     const event = await studentBooks(10);
     await callerFor(coordinator).events.reject({ id: event.id });
 
-    await expect(callerFor(admin).events.approve({ id: event.id })).rejects.toThrow(
-      /not waiting for a decision/i,
-    );
+    await expect(
+      callerFor(admin).events.approve({ id: event.id }),
+    ).rejects.toThrow(/not waiting for a decision/i);
   });
 });
 
@@ -309,13 +337,13 @@ describe("two requests for the same room", () => {
     const second = await studentBooks(14);
 
     await callerFor(coordinator).events.approve({ id: first.id });
-    await expect(callerFor(coordinator).events.approve({ id: second.id })).rejects.toThrow(
-      /already booked/i,
-    );
+    await expect(
+      callerFor(coordinator).events.approve({ id: second.id }),
+    ).rejects.toThrow(/already booked/i);
 
-    expect((await db.event.findUniqueOrThrow({ where: { id: second.id } })).status).toBe(
-      EventStatus.PENDING,
-    );
+    expect(
+      (await db.event.findUniqueOrThrow({ where: { id: second.id } })).status,
+    ).toBe(EventStatus.PENDING);
   });
 
   // Two approvals racing through the router is a timing test: it passes with or
@@ -371,13 +399,21 @@ describe("the lock the approval path rests on", () => {
   }
 
   it("makes a second approval for the same room wait for the first", async () => {
-    expect(await raceOn(roomA, roomA)).toEqual(["first in", "first out", "second in"]);
+    expect(await raceOn(roomA, roomA)).toEqual([
+      "first in",
+      "first out",
+      "second in",
+    ]);
   });
 
   // Serialising every approval in the college would be a queue nobody wants;
   // only decisions that touch the same room wait for each other.
   it("does not make approvals for different rooms wait at all", async () => {
-    expect(await raceOn(roomA, roomB)).toEqual(["first in", "second in", "first out"]);
+    expect(await raceOn(roomA, roomB)).toEqual([
+      "first in",
+      "second in",
+      "first out",
+    ]);
   });
 });
 
@@ -410,10 +446,14 @@ describe("a change to something that already exists", () => {
     });
 
     expect(result.applied).toBe(false);
-    const after = await db.event.findUniqueOrThrow({ where: { id: lecture.id } });
+    const after = await db.event.findUniqueOrThrow({
+      where: { id: lecture.id },
+    });
     expect(after.roomId).toBe(roomA);
 
-    const requests = await db.eventChangeRequest.findMany({ where: { eventId: lecture.id } });
+    const requests = await db.eventChangeRequest.findMany({
+      where: { eventId: lecture.id },
+    });
     expect(requests).toHaveLength(1);
     expect(requests[0]!.newRoomId).toBe(roomB);
     expect(requests[0]!.status).toBe(RequestStatus.PENDING);
@@ -430,9 +470,13 @@ describe("a change to something that already exists", () => {
 
     await callerFor(coordinator).events.approveChange({ id: request.id });
 
-    const after = await db.event.findUniqueOrThrow({ where: { id: lecture.id } });
+    const after = await db.event.findUniqueOrThrow({
+      where: { id: lecture.id },
+    });
     expect(after.roomId).toBe(roomB);
-    const sittings = await db.eventOccurrence.findMany({ where: { eventId: lecture.id } });
+    const sittings = await db.eventOccurrence.findMany({
+      where: { eventId: lecture.id },
+    });
     expect(sittings.every((s) => s.roomId === roomB)).toBe(true);
   });
 
@@ -444,11 +488,18 @@ describe("a change to something that already exists", () => {
       newEndTime: at(4, 6, 16),
     });
 
-    await callerFor(coordinator).events.rejectChange({ id: request.id, reason: "Clashes with an exam" });
+    await callerFor(coordinator).events.rejectChange({
+      id: request.id,
+      reason: "Clashes with an exam",
+    });
 
-    const after = await db.event.findUniqueOrThrow({ where: { id: lecture.id } });
+    const after = await db.event.findUniqueOrThrow({
+      where: { id: lecture.id },
+    });
     expect(after.startTime.getTime()).toBe(at(4, 6, 9).getTime());
-    const decided = await db.eventChangeRequest.findUniqueOrThrow({ where: { id: request.id } });
+    const decided = await db.eventChangeRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
     expect(decided.status).toBe(RequestStatus.REJECTED);
     expect(decided.decisionNote).toBe("Clashes with an exam");
   });
@@ -470,7 +521,11 @@ describe("a change to something that already exists", () => {
     await db.eventOccurrence.create({
       data: {
         orgId,
-        eventId: (await db.event.findFirstOrThrow({ where: { orgId, title: "Occupied" } })).id,
+        eventId: (
+          await db.event.findFirstOrThrow({
+            where: { orgId, title: "Occupied" },
+          })
+        ).id,
         start: at(4, 6, 9),
         end: at(4, 6, 10),
         roomId: roomB,
@@ -487,7 +542,9 @@ describe("a change to something that already exists", () => {
     await expect(
       callerFor(coordinator).events.approveChange({ id: request.id }),
     ).rejects.toThrow(/already booked/i);
-    expect((await db.event.findUniqueOrThrow({ where: { id: lecture.id } })).roomId).toBe(roomA);
+    expect(
+      (await db.event.findUniqueOrThrow({ where: { id: lecture.id } })).roomId,
+    ).toBe(roomA);
   });
 
   it("lets a teacher ask for one sitting to be called off", async () => {
@@ -515,12 +572,16 @@ describe("a change to something that already exists", () => {
       newRoomId: roomB,
     });
 
-    await expect(callerFor(student).events.withdrawChange({ id: request.id })).rejects.toThrow(
-      /only the person who asked/i,
-    );
+    await expect(
+      callerFor(student).events.withdrawChange({ id: request.id }),
+    ).rejects.toThrow(/only the person who asked/i);
     await callerFor(teacher).events.withdrawChange({ id: request.id });
     expect(
-      (await db.eventChangeRequest.findUniqueOrThrow({ where: { id: request.id } })).status,
+      (
+        await db.eventChangeRequest.findUniqueOrThrow({
+          where: { id: request.id },
+        })
+      ).status,
     ).toBe(RequestStatus.WITHDRAWN);
   });
 
@@ -533,7 +594,9 @@ describe("a change to something that already exists", () => {
     });
 
     expect(result.applied).toBe(true);
-    expect((await db.event.findUniqueOrThrow({ where: { id: lecture.id } })).roomId).toBe(roomB);
+    expect(
+      (await db.event.findUniqueOrThrow({ where: { id: lecture.id } })).roomId,
+    ).toBe(roomB);
   });
 
   it("a student may still amend their own undecided booking", async () => {
@@ -545,7 +608,9 @@ describe("a change to something that already exists", () => {
     });
 
     expect(result.applied).toBe(true);
-    expect((await db.event.findUniqueOrThrow({ where: { id: booking.id } })).roomId).toBe(roomB);
+    expect(
+      (await db.event.findUniqueOrThrow({ where: { id: booking.id } })).roomId,
+    ).toBe(roomB);
   });
 
   // A two-hour cap is worth nothing if it can be escaped by booking for one
@@ -588,7 +653,10 @@ describe("the queue", () => {
     });
 
     const queue = await callerFor(coordinator).events.approvalQueue();
-    expect(queue.map((item) => item.kind).sort()).toEqual(["booking", "change"]);
+    expect(queue.map((item) => item.kind).sort()).toEqual([
+      "booking",
+      "change",
+    ]);
 
     const change = queue.find((item) => item.kind === "change")!;
     expect(change.was?.roomCode).toBe("AP-2");

@@ -44,6 +44,9 @@ function callerFor(actor: Actor) {
         roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
     actor,

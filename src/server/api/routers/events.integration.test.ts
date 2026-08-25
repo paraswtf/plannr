@@ -43,6 +43,9 @@ function callerFor(actor: Actor) {
         roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
     actor,
@@ -225,7 +228,11 @@ beforeEach(async () => {
   groupId = (
     await db.group.upsert({
       where: {
-        programmeId_semesterId_name: { programmeId, semesterId, name: "Test Cohort" },
+        programmeId_semesterId_name: {
+          programmeId,
+          semesterId,
+          name: "Test Cohort",
+        },
       },
       update: {},
       create: {
@@ -424,7 +431,11 @@ describe("events.create", () => {
     const caller = callerFor(admin);
     const other = await db.group.upsert({
       where: {
-        programmeId_semesterId_name: { programmeId, semesterId, name: "Other Cohort" },
+        programmeId_semesterId_name: {
+          programmeId,
+          semesterId,
+          name: "Other Cohort",
+        },
       },
       update: {},
       create: {
@@ -1245,5 +1256,48 @@ describe("combined lectures and their registers", () => {
     // It says who else is in the room.
     expect(lectures[0]!.sharedWith).toContain("Test Cohort");
     expect(lectures[0]!.attendance).toBeNull();
+  });
+});
+
+/**
+ * The other half of the service-principal rule.
+ *
+ * A machine identity is filtered out of every people-facing query — the staff
+ * directory, the pickers, the headcounts. Audit reads are the deliberate
+ * exception: "created by" has to resolve to the principal's name or the trail
+ * an API key leaves behind is a column of blanks, which is worse than having
+ * the bot on screen. This is the test that stops a future filter being applied
+ * one join too far.
+ */
+describe("what an API key leaves behind", () => {
+  it("still names the machine that made a booking", async () => {
+    const principal = await db.user.upsert({
+      where: { email: "itest-key@plannr-service.invalid" },
+      update: { name: "Booking Bot", isServiceAccount: true },
+      create: {
+        orgId,
+        email: "itest-key@plannr-service.invalid",
+        name: "Booking Bot",
+        isServiceAccount: true,
+      },
+    });
+
+    await db.event.create({
+      data: {
+        orgId,
+        kind: EventKind.BOOKING,
+        status: "PENDING",
+        title: "Booked by an integration",
+        roomId: roomA,
+        createdById: principal.id,
+        startTime: at(6, 3, 9),
+        endTime: at(6, 3, 10),
+        timezone: TZ,
+      },
+    });
+
+    const queue = await callerFor(admin).events.pendingApprovals();
+    const waiting = queue.find((e) => e.title === "Booked by an integration");
+    expect(waiting?.createdBy?.name).toBe("Booking Bot");
   });
 });

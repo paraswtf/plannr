@@ -94,7 +94,7 @@ model EventChangeRequest {
   requestedById String
   requestedBy   User   @relation("ChangeRequester", fields: [requestedById], references: [id], onDelete: Cascade)
 
-  scope RequestScope @default(SERIES)
+  scope         RequestScope @default(SERIES)
   /// Which sitting, for a change that is not to the whole series. As the rule
   /// would have produced it, matching EventException.originalStart.
   originalStart DateTime?
@@ -156,7 +156,7 @@ model Organization {
   batches         Batch[]
   groups          Group[]
   events          Event[]
-  changeRequests     EventChangeRequest[]
+  changeRequests  EventChangeRequest[]
   occurrences     EventOccurrence[]
   studentProfiles StudentProfile[]
   facultyProfiles FacultyProfile[]
@@ -164,6 +164,7 @@ model Organization {
   importBatches   ImportBatch[]
   schedulePlans   SchedulePlan[]
   calendarLinks   CalendarConnection[]
+  apiKeys         ApiKey[]
 }
 
 model OrgSettings {
@@ -214,6 +215,12 @@ model User {
   isActive           Boolean @default(true)
   emailNotifications Boolean @default(true)
 
+  /// True for the machine identity behind an API key. Such a row can never sign
+  /// in — it holds no Account and its address is on a domain Google will never
+  /// vouch for — and it is filtered out of every people-facing query, because a
+  /// bot is not a colleague and has no business in the staff directory.
+  isServiceAccount Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -233,6 +240,10 @@ model User {
   planComments    SchedulePlanComment[]  @relation("PlanCommenter")
   attendanceTaken AttendanceSession[]    @relation("AttendanceMarker")
   calendar        CalendarConnection?
+  /// The key this row is the machine identity for, if it is one.
+  apiKey          ApiKey?                @relation("ApiKeyPrincipal")
+  apiKeysCreated  ApiKey[]               @relation("ApiKeyCreator")
+  apiKeysRevoked  ApiKey[]               @relation("ApiKeyRevoker")
 
   @@index([orgId, name])
   @@index([orgId, email])
@@ -383,7 +394,7 @@ model Room {
   notes    String?
 
   events           Event[]
-  changeRequests   EventChangeRequest[] @relation("RequestedRoom")
+  changeRequests   EventChangeRequest[]      @relation("RequestedRoom")
   occurrences      EventOccurrence[]
   planRequirements SchedulePlanRequirement[]
   planSessions     SchedulePlanSession[]
@@ -1195,4 +1206,74 @@ model CalendarSyncTask {
 
   @@unique([connectionId, eventId])
   @@index([status, nextAttemptAt])
+}
+
+// ─── Public API ─────────────────────────────────────────────────────────────
+
+/// A credential an app authenticates with, and the identity it acts as.
+///
+/// A key is a *service principal*, not a stand-in for the admin who minted it:
+/// it carries its own permission bits and answers for itself in the audit
+/// trail. The `principal` is what makes that possible — a `User` row flagged
+/// `isServiceAccount`, holding no roles and no password, existing so that
+/// "who created this booking?" has an answer that is neither a lie about a
+/// person nor a null. Ownership rules therefore work unchanged: a key owns
+/// what it created and nothing else, which is why `ManageOwnEvents` on its own
+/// grants a key almost nothing and the `*All*` bits are the useful scopes.
+///
+/// The secret is shown once, at creation, and never stored — only its SHA-256.
+/// A leaked database therefore yields no working credentials.
+model ApiKey {
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  /// The public half, and the whole token's first segment: "plk_live_a1b2c3d4".
+  /// Safe to log and to show in a list, and enough to look a key up in one
+  /// indexed hit before any hashing happens.
+  prefix String @unique
+  /// SHA-256 of the secret half, hex. Compared in constant time.
+  hash   String
+  /// Last four characters of the secret, so a person holding several keys can
+  /// tell which is which without the app having to remember any of them.
+  last4  String
+
+  /// The machine identity. Cascades: deleting the key deletes the principal
+  /// through the application, and a principal without its key is meaningless.
+  principalId String @unique
+  principal   User   @relation("ApiKeyPrincipal", fields: [principalId], references: [id], onDelete: Cascade)
+
+  /// Permission bitfield, in exactly the vocabulary of src/lib/permissions.ts.
+  /// Never widened by roles — a key holds these bits and no others.
+  scopes BigInt @default(0)
+
+  createdById String?
+  createdBy   User?   @relation("ApiKeyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Null means it never expires, which is a choice the UI makes you make.
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedById String?
+  revokedBy   User?     @relation("ApiKeyRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  lastUsedAt   DateTime?
+  lastUsedIp   String?
+  requestCount Int       @default(0)
+
+  /// Fixed-window throttle, counted on the row itself. In-process counters are
+  /// useless on serverless — every request may land on a cold instance — so the
+  /// window lives where all instances can see it, and costs the one write the
+  /// `lastUsedAt` bump was going to make anyway.
+  rateLimitPerMinute Int       @default(120)
+  windowStartedAt    DateTime?
+  windowCount        Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, createdAt])
+  @@index([orgId, revokedAt])
 }

@@ -60,6 +60,22 @@ const serialise = (role: {
 });
 
 /**
+ * "3 people hold this role", on the roles screen and in the delete
+ * confirmation. A people count, so machine identities are out of it.
+ *
+ * It should never change a number: a principal holds no roles at all — its
+ * whole grant is its key's `scopes` column — and `users.setRoles` refuses to
+ * give it one. It is here so that if a `UserRole` row ever does land on a
+ * principal, the screen reports what an admin would recognise rather than
+ * quietly counting a bot as a colleague.
+ */
+const roleCounts = {
+  _count: {
+    select: { users: { where: { user: { isServiceAccount: false } } } },
+  },
+} as const;
+
+/**
  * Stops someone minting a role more powerful than themselves and assigning it
  * on. Without this, anyone who could manage roles could escalate to full admin.
  */
@@ -92,7 +108,7 @@ export const rolesRouter = createTRPCRouter({
     async ({ ctx }) => {
       const roles = await ctx.db.role.findMany({
         where: { orgId: ctx.orgId },
-        include: { _count: { select: { users: true } } },
+        include: roleCounts,
         orderBy: [{ isSystem: "desc" }, { name: "asc" }],
       });
       return roles.map(serialise);
@@ -104,7 +120,7 @@ export const rolesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const role = await ctx.db.role.findFirst({
         where: { id: input.id, orgId: ctx.orgId },
-        include: { _count: { select: { users: true } } },
+        include: roleCounts,
       });
       return role ? serialise(role) : null;
     }),
@@ -139,7 +155,7 @@ export const rolesRouter = createTRPCRouter({
           permissions: input.permissions,
           isSystem: false,
         },
-        include: { _count: { select: { users: true } } },
+        include: roleCounts,
       });
       return serialise(role);
     }),
@@ -207,7 +223,7 @@ export const rolesRouter = createTRPCRouter({
           description: input.description,
           permissions: input.permissions,
         },
-        include: { _count: { select: { users: true } } },
+        include: roleCounts,
       });
       return serialise(updated);
     }),
@@ -221,11 +237,14 @@ export const rolesRouter = createTRPCRouter({
           where: { id: input.id, orgId: ctx.orgId },
           select: { name: true, isSystem: true },
         }),
-        ctx.db.userRole.count({ where: { roleId: input.id } }),
+        ctx.db.userRole.count({
+          where: { roleId: input.id, user: { isServiceAccount: false } },
+        }),
       ]);
       const wouldStrand = await ctx.db.user.count({
         where: {
           orgId: ctx.orgId,
+          isServiceAccount: false,
           roles: { some: { roleId: input.id }, every: { roleId: input.id } },
         },
       });
@@ -253,10 +272,14 @@ export const rolesRouter = createTRPCRouter({
       }
 
       // Deleting a role would cascade its assignments away; anyone left with no
-      // role at all would silently lose access to everything.
+      // role at all would silently lose access to everything. A principal is
+      // not among them — it draws nothing from roles — so counting one here
+      // would block the delete forever behind a message about a person who
+      // does not exist.
       const stranded = await ctx.db.user.count({
         where: {
           orgId: ctx.orgId,
+          isServiceAccount: false,
           roles: { some: { roleId: role.id }, every: { roleId: role.id } },
         },
       });

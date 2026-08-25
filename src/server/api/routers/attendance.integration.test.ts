@@ -43,6 +43,9 @@ function callerFor(actor: Actor) {
         // them back into bits.
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
   });
@@ -55,7 +58,12 @@ let courseId: string;
 let occurrenceIds: string[] = [];
 
 /** A lecture of `courseId` at the given hour, with its single sitting. */
-async function lectureAt(day: number, hour: number, groupId: string, facultyId: string) {
+async function lectureAt(
+  day: number,
+  hour: number,
+  groupId: string,
+  facultyId: string,
+) {
   const start = new Date(Date.UTC(2026, 6, day, hour - 5, 30));
   const end = new Date(Date.UTC(2026, 6, day, hour - 4, 30));
   const event = await db.event.create({
@@ -159,10 +167,20 @@ beforeEach(async () => {
     create: { orgId, code: "BCA", name: "Computer Applications" },
   });
   const group = await db.group.create({
-    data: { orgId, programmeId: programme.id, semesterId: semester.id, name: "Div A" },
+    data: {
+      orgId,
+      programmeId: programme.id,
+      semesterId: semester.id,
+      name: "Div A",
+    },
   });
   const course = await db.course.create({
-    data: { orgId, semesterId: semester.id, programmeId: programme.id, title: "Deep Learning" },
+    data: {
+      orgId,
+      semesterId: semester.id,
+      programmeId: programme.id,
+      title: "Deep Learning",
+    },
   });
   courseId = course.id;
   await db.groupCourse.create({ data: { groupId: group.id, courseId } });
@@ -170,7 +188,11 @@ beforeEach(async () => {
   const teacherUser = await db.user.upsert({
     where: { email: "att-teacher@plannr-demo.invalid" },
     update: {},
-    create: { orgId, email: "att-teacher@plannr-demo.invalid", name: "Teacher" },
+    create: {
+      orgId,
+      email: "att-teacher@plannr-demo.invalid",
+      name: "Teacher",
+    },
   });
   const teacher = await db.facultyProfile.upsert({
     where: { userId: teacherUser.id },
@@ -181,10 +203,16 @@ beforeEach(async () => {
   const studentUser = await db.user.upsert({
     where: { email: "att-student@plannr-demo.invalid" },
     update: {},
-    create: { orgId, email: "att-student@plannr-demo.invalid", name: "Student" },
+    create: {
+      orgId,
+      email: "att-student@plannr-demo.invalid",
+      name: "Student",
+    },
   });
   await db.userRole.upsert({
-    where: { userId_roleId: { userId: studentUser.id, roleId: studentRole.id } },
+    where: {
+      userId_roleId: { userId: studentUser.id, roleId: studentRole.id },
+    },
     update: {},
     create: { userId: studentUser.id, roleId: studentRole.id },
   });
@@ -201,7 +229,9 @@ beforeEach(async () => {
   student = {
     id: studentUser.id,
     orgId,
-    roles: [{ id: studentRole.id, name: studentRole.name, key: studentRole.key }],
+    roles: [
+      { id: studentRole.id, name: studentRole.name, key: studentRole.key },
+    ],
     permissions: 0n,
   };
 
@@ -213,7 +243,10 @@ beforeEach(async () => {
 });
 
 /** Marks one sitting with a status for our student. */
-async function mark(index: number, status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED") {
+async function mark(
+  index: number,
+  status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED",
+) {
   const occurrence = await db.eventOccurrence.findUniqueOrThrow({
     where: { id: occurrenceIds[index]! },
   });
@@ -225,7 +258,11 @@ async function mark(index: number, status: "PRESENT" | "ABSENT" | "LATE" | "EXCU
       },
     },
     update: {},
-    create: { orgId, occurrenceId: occurrence.id, groupId: occurrence.groupId! },
+    create: {
+      orgId,
+      occurrenceId: occurrence.id,
+      groupId: occurrence.groupId!,
+    },
   });
   await db.attendanceRecord.upsert({
     where: { sessionId_studentId: { sessionId: session.id, studentId } },
@@ -252,13 +289,22 @@ describe("what a student's attendance says", () => {
   it("has no percentage at all before anybody takes a register", async () => {
     const [course] = (await callerFor(student).attendance.mine()).courses;
     // Nothing marked: 0 of 0 is not 0%, it is not yet a question.
-    expect(course).toMatchObject({ attended: 0, conducted: 0, scheduled: 4, percentage: null });
+    expect(course).toMatchObject({
+      attended: 0,
+      conducted: 0,
+      scheduled: 4,
+      percentage: null,
+    });
   });
 
   it("treats arriving late as having been there", async () => {
     await mark(0, "LATE");
     const [course] = (await callerFor(student).attendance.mine()).courses;
-    expect(course).toMatchObject({ attended: 1, conducted: 1, percentage: 100 });
+    expect(course).toMatchObject({
+      attended: 1,
+      conducted: 1,
+      percentage: 100,
+    });
   });
 
   it("lets an excused absence count on neither side", async () => {
@@ -266,7 +312,12 @@ describe("what a student's attendance says", () => {
     await mark(1, "EXCUSED");
     const [course] = (await callerFor(student).attendance.mine()).courses;
     // Being away with permission neither flatters the percentage nor damages it.
-    expect(course).toMatchObject({ attended: 1, conducted: 1, percentage: 100, scheduled: 4 });
+    expect(course).toMatchObject({
+      attended: 1,
+      conducted: 1,
+      percentage: 100,
+      scheduled: 4,
+    });
   });
 
   it("lists every sitting, marked or not, so the student can check the record", async () => {
@@ -282,7 +333,12 @@ describe("what a student's attendance says", () => {
     await mark(1, "ABSENT");
 
     const [course] = (await callerFor(student).attendance.mine()).courses;
-    expect(course).toMatchObject({ attended: 0, conducted: 2, scheduled: 4, percentage: 0 });
+    expect(course).toMatchObject({
+      attended: 0,
+      conducted: 2,
+      scheduled: 4,
+      percentage: 0,
+    });
     // Two sittings are left and even both would only reach 50%, so there is no
     // number to give — saying "2" would be a promise the arithmetic cannot keep.
     expect(course!.needed).toBeNull();

@@ -521,6 +521,12 @@ export const groupsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const where = {
         orgId: ctx.orgId,
+        // The faculty picker: who can be put in front of a class. A machine
+        // identity cannot hold a faculty profile — `users.update` refuses to
+        // give it one — so this should never change a row. It is here because
+        // this is the query that would put a bot in a "teaches" dropdown if it
+        // ever did, and that is worth a join to rule out.
+        user: { isServiceAccount: false },
         ...(input.query
           ? {
               OR: [
@@ -565,7 +571,11 @@ export const groupsRouter = createTRPCRouter({
         ctx.db.facultyProfile.count({ where }),
         input.includeIds?.length
           ? ctx.db.facultyProfile.findMany({
-              where: { orgId: ctx.orgId, id: { in: input.includeIds } },
+              where: {
+                orgId: ctx.orgId,
+                id: { in: input.includeIds },
+                user: { isServiceAccount: false },
+              },
               include,
               orderBy,
             })

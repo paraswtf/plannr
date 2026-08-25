@@ -44,6 +44,9 @@ function callerFor(actor: Actor) {
         roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
     actor,
@@ -320,6 +323,42 @@ describe("schedule plans", () => {
     await expect(
       api.plans.share({ id: planId, reviewerIds: [outsider.id] }),
     ).rejects.toThrow(/cannot approve schedule plans/i);
+  });
+
+  /**
+   * A key can hold `ApproveSchedulePlans` in its scopes and call the mutation
+   * perfectly well. What it cannot be is *nominated*: a plan waiting on a
+   * reviewer that will never open a screen would sit unapproved forever, so the
+   * picker does not offer one and sharing will not accept one by id.
+   */
+  it("never offers an API key's machine identity as a reviewer", async () => {
+    const principal = await db.user.upsert({
+      where: { email: "plan-itest-key@plannr-service.invalid" },
+      update: {
+        name: "Planner Key",
+        isServiceAccount: true,
+        permissions: PermissionFlags.ApproveSchedulePlans,
+      },
+      create: {
+        orgId,
+        email: "plan-itest-key@plannr-service.invalid",
+        name: "Planner Key",
+        isServiceAccount: true,
+        permissions: PermissionFlags.ApproveSchedulePlans,
+      },
+    });
+
+    // It holds the very bit the picker filters on, so only `isServiceAccount`
+    // can be what keeps it out.
+    const candidates = await callerFor(planner).plans.reviewerCandidates({});
+    expect(candidates.map((c) => c.id)).toContain(reviewer.id);
+    expect(candidates.map((c) => c.id)).not.toContain(principal.id);
+
+    const { api, planId } = await seedGeneratedPlan("Key reviewer");
+    await expect(
+      api.plans.share({ id: planId, reviewerIds: [principal.id] }),
+    ).rejects.toThrow();
+    expect(await db.schedulePlanReviewer.count({ where: { planId } })).toBe(0);
   });
 
   it("will not share a plan with nothing in it to review", async () => {

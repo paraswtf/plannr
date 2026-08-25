@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Toaster } from "sonner";
 
 import { AppShell, NAV_COOKIE } from "~/components/app/shell/app-shell";
 import { auth } from "~/server/auth";
@@ -44,6 +45,16 @@ export default async function AppLayout({
       >
         {children}
       </AppShell>
+      {/*
+       * Where the app's toasts land. It belongs here rather than in the root
+       * layout because every screen that raises one is behind this gate, and
+       * because the sign-in pages have their own way of reporting themselves.
+       *
+       * It was missing until now, which meant `toast()` — already called by the
+       * calendar sync panel — resolved to nothing at all: sonner drops a toast
+       * with no `Toaster` mounted to receive it, silently and without warning.
+       */}
+      <Toaster position="bottom-right" closeButton />
     </HydrateClient>
   );
 }

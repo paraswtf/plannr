@@ -52,6 +52,7 @@ interface UserRow {
   name: string | null;
   email: string;
   isActive: boolean;
+  isServiceAccount: boolean;
   permissions: bigint;
   createdAt: Date;
   roles: Array<{
@@ -76,6 +77,14 @@ const serialise = (u: UserRow) => {
     /** null for the students the college has not sent an address for yet. */
     email: contactAddress(u.email),
     isActive: u.isActive,
+    /**
+     * Always false on anything the directory hands back — `buildWhere` and
+     * `byId` filter machine identities out entirely rather than badging them.
+     * It is reported because `me` does not filter: a caller holding an API key
+     * asks `users.me` about itself, and "am I a key or a person?" is the one
+     * question it cannot answer from the token alone.
+     */
+    isServiceAccount: u.isServiceAccount,
     createdAt: u.createdAt,
     roles: u.roles.map((r) => ({
       id: r.role.id,
@@ -103,6 +112,33 @@ const userInclude = {
   _count: { select: { accounts: true } },
 } as const;
 
+/**
+ * An API key's machine identity is a `User` row, so nothing stops an admin
+ * screen from pointing any of these mutations at one. This says no.
+ *
+ * It is not tidiness. A key's authority is its `ApiKey.scopes` column and
+ * nothing else — that single row is the whole answer to "what can this key
+ * do?", which is what makes a key auditable and narrowable. Assign a role to
+ * its principal, or grant it a personal permission bit, and the key silently
+ * gains every permission that role carries, on every request, without ever
+ * appearing in the scope model: the grant goes around it entirely and no
+ * amount of reading the API keys screen would reveal it. Deleting the
+ * principal is just as wrong — it takes the audit trail with it, where
+ * revoking the key leaves "who created this event" still answerable.
+ *
+ * So the whole class of edits stops here and is done from the API keys screen,
+ * which is the only place that can change a key's powers honestly.
+ */
+function assertNotServiceAccount(target: { isServiceAccount: boolean }) {
+  if (target.isServiceAccount) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "That account belongs to an API key, not a person. Change its scopes or revoke it from the API keys screen.",
+    });
+  }
+}
+
 /** Loads the permission bits a target user holds, for the privilege comparison. */
 async function loadTarget(db: Db, orgId: string, userId: string) {
   const user = await db.user.findFirst({
@@ -113,6 +149,9 @@ async function loadTarget(db: Db, orgId: string, userId: string) {
   });
   if (!user)
     throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+  // Every mutation that edits, repermissions or deletes somebody comes through
+  // here, so one check covers update, setRoles, setExtraPermissions and delete.
+  assertNotServiceAccount(user);
 
   const permissions = user.roles.reduce(
     (bits, r) => bits | r.role.permissions,
@@ -203,7 +242,10 @@ export const usersRouter = createTRPCRouter({
     .input(z.object({ id: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
       const user = await ctx.db.user.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        // A person's page, reached from the directory. A principal has no page
+        // here — it has one on the API keys screen — so it answers null rather
+        // than rendering a colleague who does not exist.
+        where: { id: input.id, orgId: ctx.orgId, isServiceAccount: false },
         include: userInclude,
       });
       return user ? serialise(user) : null;
@@ -221,6 +263,10 @@ export const usersRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Deliberately unfiltered. This asks "is this address spoken for?", and
+      // the unique index it is standing in for does not care whose row holds
+      // it — hiding a principal here would trade a clear message for a raw
+      // constraint error a moment later.
       const existing = await ctx.db.user.findUnique({
         where: { email: input.email },
         select: { id: true },
@@ -293,6 +339,8 @@ export const usersRouter = createTRPCRouter({
       // Both of these are unique, so check them up front and say which value
       // clashed rather than surfacing a database constraint error.
       if (input.email && input.email !== target.user.email) {
+        // Unfiltered for the same reason as `create`: this stands in for a
+        // unique index, which is blind to what kind of row holds the address.
         const clash = await ctx.db.user.findUnique({
           where: { email: input.email },
           select: { id: true },
@@ -412,7 +460,7 @@ export const usersRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.db.studentProfile.findUnique({
         where: { userId: input.id },
-        select: { id: true },
+        select: { id: true, user: { select: { isServiceAccount: true } } },
       });
       if (!profile) {
         throw new TRPCError({
@@ -421,6 +469,11 @@ export const usersRouter = createTRPCRouter({
             "Give this person a PRN first — group membership is recorded against their student record.",
         });
       }
+      // A principal cannot hold a student profile — `update` refuses to give it
+      // one — so this can only fire if something else put one there. Checked
+      // anyway, because the alternative failure is a key quietly joining a
+      // cohort and turning up on sixty people's rosters.
+      assertNotServiceAccount(profile.user);
 
       const groups = await ctx.db.group.findMany({
         where: { id: { in: input.groupIds }, orgId: ctx.orgId },
@@ -545,6 +598,20 @@ export const usersRouter = createTRPCRouter({
       const skipped: Array<{ id: string; who: string; reason: string }> = [];
 
       for (const target of targets) {
+        // This procedure's contract is to skip and explain rather than fail the
+        // whole selection, so a principal caught in a select-all is reported
+        // the same way a protected colleague is — the outcome is the same
+        // refusal `assertNotServiceAccount` makes elsewhere.
+        if (target.isServiceAccount) {
+          skipped.push({
+            id: target.id,
+            who: personName(target),
+            reason:
+              "That account belongs to an API key. Revoke it from the API keys screen.",
+          });
+          continue;
+        }
+
         const permissions = target.roles.reduce(
           (bits, r) => bits | r.role.permissions,
           target.permissions,
@@ -747,6 +814,9 @@ export const usersRouter = createTRPCRouter({
       const found = await ctx.db.user.findMany({
         where: {
           orgId: ctx.orgId,
+          // Whatever this resolves to gets added to a group, a roster or a
+          // reviewer list, so a paste must never land on a machine identity.
+          isServiceAccount: false,
           OR: [
             { email: { in: emails } },
             { studentProfile: { prn: { in: prns } } },
@@ -837,6 +907,14 @@ async function planImport(
     ctx.db.user.findMany({
       where: {
         orgId: ctx.orgId,
+        // This lookup decides which rows the commit will *update* — and an
+        // update rewrites the person's whole role set. Matching a principal
+        // would hand it every role named in a spreadsheet column, which is the
+        // escalation `assertNotServiceAccount` exists to prevent, so it is not
+        // matchable at all. It cannot happen anyway: `rowSchema` rejects any
+        // address outside the Workspace domain, and a principal's address is
+        // deliberately on a domain Google will never vouch for.
+        isServiceAccount: false,
         OR: [
           { email: { in: emailsInFile } },
           { studentProfile: { prn: { in: prnsInFile } } },
@@ -912,6 +990,9 @@ function buildWhere(
   const q = input.query;
   return {
     orgId,
+    // The staff directory, and the "N matches" count above it, are a list of
+    // colleagues. A machine identity is neither a colleague nor a headcount.
+    isServiceAccount: false,
     ...(input.roleId ? { roles: { some: { roleId: input.roleId } } } : {}),
     ...(input.status === "active" ? { isActive: true } : {}),
     ...(input.status === "inactive" ? { isActive: false } : {}),

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { SYSTEM_ROLES } from "~/lib/permissions";
+import { PermissionFlags, SYSTEM_ROLES } from "~/lib/permissions";
 import { appRouter } from "~/server/api/root";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
@@ -19,6 +19,9 @@ import { db } from "~/server/db";
 
 const TZ = "Asia/Kolkata";
 const ORG = "cat-itest";
+/** The machine identity the last block here works against, and a foil for it. */
+const KEY_EMAIL = "cat-key@plannr-service.invalid";
+const BYSTANDER_EMAIL = "cat-bystander@plannr-demo.invalid";
 const createCaller = createCallerFactory(appRouter);
 
 let orgId: string;
@@ -44,6 +47,9 @@ function callerFor(user: {
         roles: user.roles,
         permissions: user.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
   });
@@ -66,7 +72,14 @@ beforeEach(async () => {
   // the account behind makes the next run collide on it.
   await db.user.deleteMany({
     where: {
-      email: { in: ["77777777777@unknown.invalid", "nay2324777@sicsr.ac.in"] },
+      email: {
+        in: [
+          "77777777777@unknown.invalid",
+          "nay2324777@sicsr.ac.in",
+          KEY_EMAIL,
+          BYSTANDER_EMAIL,
+        ],
+      },
     },
   });
   await db.group.deleteMany({ where: { orgId } });
@@ -95,7 +108,11 @@ beforeEach(async () => {
   const user = await db.user.upsert({
     where: { email: "cat-admin@plannr-demo.invalid" },
     update: {},
-    create: { orgId, email: "cat-admin@plannr-demo.invalid", name: "Coordinator" },
+    create: {
+      orgId,
+      email: "cat-admin@plannr-demo.invalid",
+      name: "Coordinator",
+    },
   });
   coordinator = callerFor({
     id: user.id,
@@ -157,7 +174,11 @@ beforeEach(async () => {
   const teacherUser = await db.user.upsert({
     where: { email: "cat-teacher@plannr-demo.invalid" },
     update: {},
-    create: { orgId, email: "cat-teacher@plannr-demo.invalid", name: "Dr. Teacher" },
+    create: {
+      orgId,
+      email: "cat-teacher@plannr-demo.invalid",
+      name: "Dr. Teacher",
+    },
   });
   facultyId = (
     await db.facultyProfile.upsert({
@@ -286,9 +307,7 @@ describe("a student the college has sent no address for", () => {
       data: { email: "nay2324777@sicsr.ac.in", isActive: true },
     });
 
-    expect(
-      await db.studentProfile.count({ where: { orgId, prn } }),
-    ).toBe(1);
+    expect(await db.studentProfile.count({ where: { orgId, prn } })).toBe(1);
     const after = await db.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(after.email).toBe("nay2324777@sicsr.ac.in");
     expect(after.isActive).toBe(true);
@@ -300,7 +319,8 @@ describe("opening the next semester", () => {
     const finishing = await db.batch.create({
       data: {
         orgId,
-        programmeId: (await db.programme.findFirstOrThrow({ where: { orgId } })).id,
+        programmeId: (await db.programme.findFirstOrThrow({ where: { orgId } }))
+          .id,
         name: "22-26 BCA",
         startYear: 2022,
         endYear: 2026,
@@ -340,7 +360,9 @@ describe("opening the next semester", () => {
     });
     expect(result.carried).toBe(0);
     expect(
-      await db.batchSemester.count({ where: { semesterId: result.semester.id } }),
+      await db.batchSemester.count({
+        where: { semesterId: result.semester.id },
+      }),
     ).toBe(0);
   });
 
@@ -441,5 +463,177 @@ describe("the shape of the institution", () => {
     const structure = await coordinator.courses.structure();
     expect(structure?.gaps.coursesWithoutFaculty).toBe(1);
     expect(structure?.gaps.lecturesWithoutCourse).toBe(1);
+  });
+});
+
+/**
+ * An API key's machine identity.
+ *
+ * A key acts as its own hidden `User` row so that audit columns — who created
+ * this event, who asked for this change — have a truthful answer that is not a
+ * person. That row is a hazard on every people-facing screen: left alone it
+ * turns up in the staff directory, in pickers, in headcounts. Worse, it is a
+ * target: hand it a role and the key silently gains every permission that role
+ * carries, on every request, without the scope model ever mentioning it.
+ *
+ * So the rule these protect is a simple one stated twice — a principal is not
+ * shown to anybody, and it cannot be edited from here at all.
+ */
+describe("an API key's machine identity", () => {
+  /**
+   * Deliberately the worst case: a principal carrying a faculty profile, which
+   * is what would put it in front of a class. Nothing in the app can give it
+   * one — `users.update` refuses — so it is written straight to the table, and
+   * the screens are asked to hold up anyway.
+   */
+  async function makePrincipal() {
+    const user = await db.user.upsert({
+      where: { email: KEY_EMAIL },
+      update: {
+        name: "Timetable Sync",
+        isServiceAccount: true,
+        permissions: 0n,
+      },
+      create: {
+        orgId,
+        email: KEY_EMAIL,
+        name: "Timetable Sync",
+        isServiceAccount: true,
+      },
+    });
+    await db.facultyProfile.upsert({
+      where: { userId: user.id },
+      update: { shortName: "Sync", department: "Integrations" },
+      create: {
+        userId: user.id,
+        orgId,
+        shortName: "Sync",
+        department: "Integrations",
+      },
+    });
+    return user;
+  }
+
+  it("is in neither the directory nor the headcount an admin is shown", async () => {
+    const before = await coordinator.users.count({});
+    const principal = await makePrincipal();
+
+    expect(await coordinator.users.count({})).toBe(before);
+    expect(await coordinator.users.count({ query: "Timetable Sync" })).toBe(0);
+
+    const listed = await coordinator.users.list({ pageSize: 200 });
+    expect(listed.total).toBe(before);
+    expect(listed.rows.map((r) => r.id)).not.toContain(principal.id);
+
+    // Not reachable by id either, so a link cannot open a page for a bot.
+    expect(await coordinator.users.byId({ id: principal.id })).toBeNull();
+  });
+
+  it("cannot be handed a role, which is how a key would be widened", async () => {
+    const principal = await makePrincipal();
+    const faculty = await db.role.findUniqueOrThrow({
+      where: { orgId_key: { orgId, key: "faculty" } },
+    });
+
+    await expect(
+      coordinator.users.setRoles({
+        id: principal.id,
+        roleIds: [faculty.id],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      coordinator.users.setRoles({
+        id: principal.id,
+        roleIds: [faculty.id],
+      }),
+    ).rejects.toThrow(/API keys screen/i);
+
+    expect(await db.userRole.count({ where: { userId: principal.id } })).toBe(
+      0,
+    );
+  });
+
+  it("cannot be renamed, repermissioned or deleted from the people screen", async () => {
+    const principal = await makePrincipal();
+
+    await expect(
+      coordinator.users.update({ id: principal.id, name: "Dr Innocent" }),
+    ).rejects.toThrow(/API keys screen/i);
+    await expect(
+      coordinator.users.setExtraPermissions({
+        id: principal.id,
+        permissions: PermissionFlags.Administrator.toString(),
+      }),
+    ).rejects.toThrow(/API keys screen/i);
+    await expect(
+      coordinator.users.delete({ id: principal.id }),
+    ).rejects.toThrow(/API keys screen/i);
+
+    // Deleting it would take the audit trail with it, so it is still here,
+    // still a machine, and still holding nothing.
+    const after = await db.user.findUniqueOrThrow({
+      where: { id: principal.id },
+    });
+    expect(after.name).toBe("Timetable Sync");
+    expect(after.permissions).toBe(0n);
+    expect(after.isServiceAccount).toBe(true);
+  });
+
+  it("is skipped, not deleted, when a select-all sweeps it up", async () => {
+    const principal = await makePrincipal();
+    const bystander = await db.user.create({
+      data: { orgId, email: BYSTANDER_EMAIL, name: "Ordinary Person" },
+    });
+
+    const result = await coordinator.users.bulkDelete({
+      ids: [principal.id, bystander.id],
+    });
+
+    expect(result.deleted).toBe(1);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]).toMatchObject({ id: principal.id });
+    expect(result.skipped[0]!.reason).toMatch(/API keys screen/i);
+    expect(await db.user.count({ where: { id: principal.id } })).toBe(1);
+    expect(await db.user.count({ where: { id: bystander.id } })).toBe(0);
+  });
+
+  it("cannot be pasted into a bulk-add by its address", async () => {
+    await makePrincipal();
+
+    const resolved = await coordinator.users.resolveIdentifiers({
+      identifiers: [KEY_EMAIL],
+    });
+    expect(resolved.matched).toEqual([]);
+    expect(resolved.unmatched).toEqual([KEY_EMAIL]);
+  });
+
+  it("is not offered as somebody who could take a class", async () => {
+    await makePrincipal();
+
+    const faculty = await coordinator.groups.facultyList({ pageSize: 100 });
+    expect(faculty.rows.map((f) => f.name)).not.toContain("Sync");
+    expect(faculty.rows.map((f) => f.email)).not.toContain(KEY_EMAIL);
+  });
+
+  it("is not counted among the people who hold a role", async () => {
+    const principal = await makePrincipal();
+    const student = await db.role.findUniqueOrThrow({
+      where: { orgId_key: { orgId, key: "student" } },
+    });
+    const countOf = async () =>
+      (await coordinator.roles.list()).find((r) => r.key === "student")!
+        .userCount;
+
+    const before = await countOf();
+    // Straight into the join table, because `setRoles` refuses — this is the
+    // "if it ever slips through" case the filter is there for.
+    await db.userRole.create({
+      data: { userId: principal.id, roleId: student.id },
+    });
+
+    expect(await countOf()).toBe(before);
+    expect(
+      (await coordinator.roles.deleteImpact({ id: student.id })).userCount,
+    ).toBe(before);
   });
 });

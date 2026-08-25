@@ -25,6 +25,13 @@ declare module "next-auth" {
        */
       permissions: string;
       isActive: boolean;
+      /**
+       * True when the caller is an API key's machine identity rather than a
+       * person. Set only by the bearer-token path — the cookie path can never
+       * produce one, because a service account holds no OAuth account and its
+       * address fails the Workspace-domain check above.
+       */
+      isServiceAccount: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -145,6 +152,9 @@ export const authConfig = {
           roles: roles.map(({ id, name, key }) => ({ id, name, key })),
           permissions: permissions.toString(),
           isActive: row.isActive,
+          // A cookie session is always a person: service principals never hold
+          // an Account, so no OAuth flow can ever land on one.
+          isServiceAccount: false,
         },
       };
     },

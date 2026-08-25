@@ -649,6 +649,11 @@ export const plansRouter = createTRPCRouter({
         where: {
           orgId: ctx.orgId,
           isActive: true,
+          // Signing a plan off is a judgement somebody makes. A key can hold
+          // the approval bit in its scopes and call the mutation, but it can
+          // never be *asked* to — offering one here would leave a plan waiting
+          // on a reviewer that will never open it.
+          isServiceAccount: false,
           ...(input.query
             ? {
                 OR: [
@@ -1808,7 +1813,16 @@ async function assertGroupInOrg(ctx: Ctx, groupId: string): Promise<void> {
 /** Refuses to invite anyone who could not answer once invited. */
 async function assertCanApprove(ctx: Ctx, userIds: string[]): Promise<void> {
   const users = await ctx.db.user.findMany({
-    where: { id: { in: userIds }, orgId: ctx.orgId, isActive: true },
+    // Machine identities are unreachable here for the same reason
+    // `reviewerCandidates` never offers one. Filtering rather than checking
+    // means an id that names one simply fails to resolve, and the count
+    // mismatch below refuses the whole invitation.
+    where: {
+      id: { in: userIds },
+      orgId: ctx.orgId,
+      isActive: true,
+      isServiceAccount: false,
+    },
     select: {
       id: true,
       name: true,

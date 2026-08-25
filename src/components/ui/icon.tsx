@@ -207,6 +207,28 @@ const PATHS = {
       <path d="M12 4.5V15" />
     </>
   ),
+  /** Bow bottom-left, two teeth on the blade — the API key screen. */
+  key: (
+    <>
+      <circle cx="8" cy="16" r="5" />
+      <path d="M11.6 12.4 20.5 3.5" />
+      <path d="m14.3 9.7 2.3 2.3" />
+      <path d="m17.1 6.9 2.3 2.3" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8.5" y="8.5" width="12.5" height="12.5" rx="2.5" />
+      <path d="M5 15.5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2" />
+    </>
+  ),
+  /** Rolling a credential: the same thing, come round again. */
+  rotate: (
+    <>
+      <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1.1 6.7 2.8L21 8" />
+      <path d="M21 3v5h-5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

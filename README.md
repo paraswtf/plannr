@@ -49,6 +49,43 @@ computed at check time rather than copied onto rows, so changing what "faculty"
 can do applies to everyone at once; the `permissions` column only stores extra
 grants for an individual.
 
+## The public API
+
+Everything the web client can do is also reachable over HTTP, at `/api/v1`. It is
+not a second implementation of anything: an endpoint is declared as data
+(`src/server/rest/routes/*.ts`) naming a tRPC procedure, and the handler calls
+that procedure through the ordinary server-side caller. So the API cannot drift
+from the app, and the layer above adds no authorisation of its own — the rule
+about who may cancel a lecture is the one in `events.cancel`, and both doorways
+get it.
+
+Callers send an API key as `Authorization: Bearer plk_live_<prefix>.<secret>`. A
+key is a **service principal**: it acts as itself rather than as the
+administrator who minted it. It carries its own bits in `ApiKey.scopes` — the
+same bitfield as above, minus `Administrator`, which may never be granted to a
+key — and it owns a hidden `User` row, so `Event.createdById` and the NOT NULL
+`EventChangeRequest.requestedById` have a truthful answer that is not a person.
+Bearer auth exchanges the token for an ordinary next-auth `Session`, which is why
+every procedure and every permission check written for the browser works
+unchanged.
+
+Keys are minted by people, never by keys: one that could mint keys would be a
+leaked token that had learned to reproduce. **Settings → API keys** is where an
+administrator does it — the route is gated on `ManageSettings` and everything on
+the screen on `ManageRoles`, since minting a key is the same act as writing a
+role. The secret is shown once, when the key is created, and never again; a lost
+key is rolled, not recovered.
+
+`GET /api/v1/openapi.json` is the OpenAPI 3.1 document, generated from the routes
+and the procedures' own zod schemas, so it cannot go stale; feed it to a client
+generator. `GET /api/v1/health` needs no credential, and `GET /api/v1/me` says
+what a key is and what it may do.
+
+[docs/api.md](docs/api.md) is the reference an integrator reads: the scope table
+and how implication widens it, the error envelope, the rate limits, the
+endpoints that refuse a key and what to call instead, and every path grouped by
+subject.
+
 ## How scheduling works
 
 Recurring classes are stored once, as a start instant plus an RFC 5545 `RRULE`,
@@ -62,7 +99,7 @@ Two consequences worth knowing:
 - Recurring events must be bounded (`UNTIL` or `COUNT`, capped at 500
   occurrences). There is no background job extending a rolling horizon, and this
   is why one is not needed.
-- Any write to an `Event` must call `regenerateOccurrences` in the *same*
+- Any write to an `Event` must call `regenerateOccurrences` in the _same_
   transaction. That invariant is what lets every reader stay simple.
 
 Occurrences are expanded in **local wall time**, not UTC: "Tuesdays at 09:00"
@@ -136,7 +173,7 @@ Three details carry most of the weight:
   semester-long class with sixty students is sixty rows, not 2,400.
 - **Mirrors are keyed on `(eventId, originalStart)`, never the occurrence id** —
   regeneration reissues those ids on every write. `originalStart` survives, which
-  is what makes a reschedule a *patch* to the same Google event, preserving the
+  is what makes a reschedule a _patch_ to the same Google event, preserving the
   reminder someone set on it.
 - **A digest of the rendered body decides whether to call Google at all.** An
   unchanged class costs one database read and no API call, which is what makes
@@ -188,7 +225,7 @@ permission on someone's calendar, redeemable by anyone holding it.
   immediate.
 - **"Cancel this and following"** truncates the recurrence rule, so those
   sittings stop existing rather than becoming cancelled rows. They are therefore
-  *removed* from calendars rather than retitled, unlike a single or whole-series
+  _removed_ from calendars rather than retitled, unlike a single or whole-series
   cancellation.
 - Entitlement deliberately matches `/schedule` exactly — an occurrence is yours
   if its group is one of yours or its faculty is you. For a combined lecture
@@ -293,23 +330,23 @@ through the app's people and group screens.
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Development server |
-| `npm test` | Unit tests (no database needed) |
-| `npm run typecheck` | TypeScript |
-| `npm run lint` | ESLint |
-| `npm run test:integration` | Router and Google-Calendar-sync tests against the local container only |
-| `npm run db:start` / `db:stop` | Local Postgres container |
-| `npm run db:migrate` | Apply migrations to whatever `DIRECT_URL` points at |
-| `npm run db:seed` | Reset demo data |
-| `npm run db:studio` | Browse the database |
-| `npm run db:import` | Re-read the college's timetable into this database — destructive |
-| `npm run roster` | Rebuild `data/students.csv` from the documents under `data/` — no database |
+| Command                                             | What it does                                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                       | Development server                                                                                         |
+| `npm test`                                          | Unit tests (no database needed)                                                                            |
+| `npm run typecheck`                                 | TypeScript                                                                                                 |
+| `npm run lint`                                      | ESLint                                                                                                     |
+| `npm run test:integration`                          | Router and Google-Calendar-sync tests against the local container only                                     |
+| `npm run db:start` / `db:stop`                      | Local Postgres container                                                                                   |
+| `npm run db:migrate`                                | Apply migrations to whatever `DIRECT_URL` points at                                                        |
+| `npm run db:seed`                                   | Reset demo data                                                                                            |
+| `npm run db:studio`                                 | Browse the database                                                                                        |
+| `npm run db:import`                                 | Re-read the college's timetable into this database — destructive                                           |
+| `npm run roster`                                    | Rebuild `data/students.csv` from the documents under `data/` — no database                                 |
 | `npm run db:students` / `db:courses` / `db:faculty` | Put the roster, subjects and teachers back after an import (need `data/students.csv` and a `faculty*.csv`) |
-| `npm run db:verify-schedule` | Compare a database against the live college timetable |
-| `npm run db:sync-schedule` | Carry this timetable to the database in `TARGET_DATABASE_URL`, class by class (`-- --dry` first) |
-| `npm run db:cancel-classes` | Call off one day's sittings of a named class — a cancellation the college's timetable never carries |
+| `npm run db:verify-schedule`                        | Compare a database against the live college timetable                                                      |
+| `npm run db:sync-schedule`                          | Carry this timetable to the database in `TARGET_DATABASE_URL`, class by class (`-- --dry` first)           |
+| `npm run db:cancel-classes`                         | Call off one day's sittings of a named class — a cancellation the college's timetable never carries        |
 
 ## Deployment
 
@@ -320,10 +357,10 @@ Vercel for the app, Supabase (`ap-south-1`) for the database.
 Supabase offers three ways in and the app needs two of them, because a
 serverless runtime and a migration want opposite things from a connection.
 
-| Variable | Port | Why that one |
-| --- | --- | --- |
+| Variable       | Port   | Why that one                                                                                                                                                                                                                                                                                                          |
+| -------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL` | `6543` | Transaction pooler. A query borrows a connection and returns it at once, which is how a few hundred lambdas share the ~60 connections Postgres will hand out. It cannot hold a session, so the URL carries `?pgbouncer=true&connection_limit=1` and Prisma stops naming prepared statements it would never see again. |
-| `DIRECT_URL` | `5432` | Session pooler. One connection held for a whole run — what DDL and Prisma's migration advisory lock need. `prisma migrate` uses it, and so do the timetable scripts, which write in long sequential batches the transaction pooler handles badly. |
+| `DIRECT_URL`   | `5432` | Session pooler. One connection held for a whole run — what DDL and Prisma's migration advisory lock need. `prisma migrate` uses it, and so do the timetable scripts, which write in long sequential batches the transaction pooler handles badly.                                                                     |
 
 Both go through `aws-0-ap-south-1.pooler.supabase.com`, not the direct
 `db.<ref>.supabase.co` host: that one resolves to IPv6 only, and Vercel's
@@ -359,16 +396,16 @@ Set these in Vercel → Settings → Environment Variables. `next.config.js` imp
 `src/env.js`, so the build fails with a named error rather than a broken deploy
 if one is missing.
 
-| Variable | Notes |
-| --- | --- |
-| `DATABASE_URL` | Pooler, port 6543, with `?pgbouncer=true&connection_limit=1` |
-| `DIRECT_URL` | Session pooler, port 5432 — or, in `.env.prod`, the IPv6-only direct host, which the timetable scripts use from a laptop |
-| `AUTH_SECRET` | `npx auth secret`; must be ≥32 chars in production |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From the Google Cloud console |
-| `GOOGLE_WORKSPACE_DOMAIN` | `sicsr.ac.in` — nobody outside it can sign in |
-| `SEED_ADMIN_EMAILS` | Optional; the admin already exists in the database |
-| `NEXT_PUBLIC_APP_URL` | The deployed origin. Defaults to `localhost:3000`, which would put localhost links in outgoing email |
-| `EMAIL_PROVIDER` / `EMAIL_ENABLED` / `EMAIL_FROM` | `console` and `false` are safe defaults |
+| Variable                                          | Notes                                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                                    | Pooler, port 6543, with `?pgbouncer=true&connection_limit=1`                                                             |
+| `DIRECT_URL`                                      | Session pooler, port 5432 — or, in `.env.prod`, the IPv6-only direct host, which the timetable scripts use from a laptop |
+| `AUTH_SECRET`                                     | `npx auth secret`; must be ≥32 chars in production                                                                       |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`           | From the Google Cloud console                                                                                            |
+| `GOOGLE_WORKSPACE_DOMAIN`                         | `sicsr.ac.in` — nobody outside it can sign in                                                                            |
+| `SEED_ADMIN_EMAILS`                               | Optional; the admin already exists in the database                                                                       |
+| `NEXT_PUBLIC_APP_URL`                             | The deployed origin. Defaults to `localhost:3000`, which would put localhost links in outgoing email                     |
+| `EMAIL_PROVIDER` / `EMAIL_ENABLED` / `EMAIL_FROM` | `console` and `false` are safe defaults                                                                                  |
 
 `AUTH_URL` is not needed: NextAuth trusts the host automatically when `VERCEL`
 is set. On any other host, set `AUTH_TRUST_HOST=true`.

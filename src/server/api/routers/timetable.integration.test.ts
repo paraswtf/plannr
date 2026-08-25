@@ -40,6 +40,9 @@ function callerFor(actor: Actor) {
         roles: actor.roles,
         permissions: actor.permissions.toString(),
         isActive: true,
+        // A cookie session is always a person; the fixture says so explicitly
+        // so that a machine identity can never sneak in through a caller.
+        isServiceAccount: false,
       },
     },
     actor,
@@ -377,7 +380,10 @@ describe("looking at somebody else's schedule", () => {
       date: DAY,
       asUserId: learner.id,
     });
-    expect(day.viewingAs).toMatchObject({ name: "The Learner", isStudent: true });
+    expect(day.viewingAs).toMatchObject({
+      name: "The Learner",
+      isStudent: true,
+    });
   });
 
   it("lets a student look up where a lecturer is, which is the point of it", async () => {
@@ -385,7 +391,10 @@ describe("looking at somebody else's schedule", () => {
       date: DAY,
       asUserId: lecturer.id,
     });
-    expect(day.viewingAs).toMatchObject({ name: "The Lecturer", isFaculty: true });
+    expect(day.viewingAs).toMatchObject({
+      name: "The Lecturer",
+      isFaculty: true,
+    });
   });
 
   /**
@@ -482,6 +491,50 @@ describe("the people who can be looked at", () => {
     await expect(
       callerFor(learner).timetable.peopleWithSchedules({}),
     ).rejects.toThrow(/permission/i);
+  });
+
+  /**
+   * An API key acts as its own hidden `User` row, so a bot can look exactly
+   * like a colleague here. The principal is deliberately given a faculty
+   * profile so that what excludes it is `isServiceAccount` and not the "has a
+   * day of their own" clause that would have hidden it by accident.
+   */
+  it("never offers an API key's machine identity", async () => {
+    const principal = await db.user.upsert({
+      where: { email: "sched-key@plannr-service.invalid" },
+      update: { name: "Timetable Sync", isServiceAccount: true },
+      create: {
+        orgId,
+        email: "sched-key@plannr-service.invalid",
+        name: "Timetable Sync",
+        isServiceAccount: true,
+      },
+    });
+    await db.facultyProfile.upsert({
+      where: { userId: principal.id },
+      update: { shortName: "Sync" },
+      create: { userId: principal.id, orgId, shortName: "Sync" },
+    });
+
+    const caller = callerFor(coordinator);
+    expect(
+      (await caller.timetable.peopleWithSchedules({})).map((p) => p.id),
+    ).not.toContain(principal.id);
+    expect(
+      await caller.timetable.peopleWithSchedules({ query: "Timetable Sync" }),
+    ).toEqual([]);
+
+    // The picker every signed-in person sees is filtered the same way.
+    expect(
+      (await callerFor(learner).timetable.searchPeople({ query: "Sync" })).map(
+        (p) => p.id,
+      ),
+    ).not.toContain(principal.id);
+
+    // And its day cannot be summoned by id, so no screen can name it either.
+    await expect(
+      caller.timetable.mySchedule({ date: DAY, asUserId: principal.id }),
+    ).rejects.toThrow(/No such person/i);
   });
 });
 

@@ -418,6 +418,11 @@ export const timetableRouter = createTRPCRouter({
       const people = await ctx.db.user.findMany({
         where: {
           orgId: ctx.orgId,
+          // An API key's machine identity is a `User` row and has no business
+          // in a picker of colleagues. Belt and braces: it also holds neither
+          // profile, so the clause below would exclude it anyway — but this one
+          // says why, and survives somebody relaxing that clause.
+          isServiceAccount: false,
           AND: [
             {
               OR: [
@@ -489,6 +494,8 @@ export const timetableRouter = createTRPCRouter({
       const people = await ctx.db.user.findMany({
         where: {
           orgId: ctx.orgId,
+          // A machine has no day. See `searchPeople` above.
+          isServiceAccount: false,
           // Two separate conditions, both required: it must be somebody with a
           // day of their own, and it must match what was typed.
           AND: [
@@ -584,7 +591,10 @@ export const timetableRouter = createTRPCRouter({
 
       const subject = other
         ? await ctx.db.user.findFirst({
-            where: { id: other, orgId: ctx.orgId },
+            // Naming somebody puts their name on screen as "viewing X's day".
+            // A principal is not a somebody, so an id pointing at one answers
+            // "No such person." rather than rendering a bot's empty week.
+            where: { id: other, orgId: ctx.orgId, isServiceAccount: false },
             select: { id: true, name: true, email: true },
           })
         : null;

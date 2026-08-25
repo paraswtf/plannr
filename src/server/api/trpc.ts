@@ -8,6 +8,7 @@
  */
 
 import { initTRPC, TRPCError } from "@trpc/server";
+import { type Session } from "next-auth";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
@@ -27,13 +28,26 @@ import { db } from "~/server/db";
  *
  * @see https://trpc.io/docs/server/context
  */
-export const createTRPCContext = async (opts: { headers: Headers }) => {
-  const session = await auth();
+export const createTRPCContext = async (opts: {
+  headers: Headers;
+  /**
+   * An already-resolved session, for callers that did not arrive with a cookie.
+   *
+   * The public REST API authenticates a bearer token itself and hands the
+   * result in here, which is the seam that lets an API key reach the very same
+   * procedures a browser does. Passing `null` means "definitely nobody";
+   * omitting it entirely means "look for a cookie", which is what every
+   * in-app caller wants.
+   */
+  session?: Session | null;
+}) => {
+  const { session: provided, ...rest } = opts;
+  const session = provided !== undefined ? provided : await auth();
 
   return {
     db,
     session,
-    ...opts,
+    ...rest,
   };
 };
 
@@ -141,6 +155,17 @@ export const protectedProcedure = t.procedure
       orgId: user.orgId,
       roles: user.roles,
       permissions,
+      /**
+       * Whether a person or an app is on the other end.
+       *
+       * Almost nothing should branch on this — the permission bits are the
+       * authorisation story, and a key that holds the bit may do the thing.
+       * It exists for the handful of operations that are meaningless without a
+       * human behind them: connecting somebody's Google Calendar, reading
+       * "my" timetable. Those refuse a service principal outright rather than
+       * quietly returning an empty answer.
+       */
+      kind: user.isServiceAccount ? ("service" as const) : ("user" as const),
     };
 
     return next({
