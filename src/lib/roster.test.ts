@@ -16,7 +16,10 @@ import {
   readSourceName,
   ROSTER_COLUMNS,
   rosterRow,
+  sectionFromTitle,
+  shortSection,
   tidyName,
+  titleWithoutSection,
   toCsv,
   type RosterStudent,
 } from "./roster";
@@ -165,6 +168,48 @@ describe("electiveForTitle", () => {
     // paper by almost that name; the scheme decides which is meant.
     expect(electiveForTitle("IT Infrastructure & Service Management", BBA_IT_SEM_V)?.group).toBe(2);
     expect(electiveForTitle("Deep Learning", BBA_IT_SEM_VII)).toBeNull();
+  });
+});
+
+describe("the section a class names", () => {
+  it("reads the marker the timetable puts in front of a sectioned subject", () => {
+    // Both spacings are the college's own, from the same term's grid.
+    expect(sectionFromTitle("G1 Analytics Foundations")).toBe("Group 1");
+    expect(sectionFromTitle("G2 - Services Marketing")).toBe("Group 2");
+    expect(sectionFromTitle("G1 - Fundamentals of Marketing")).toBe("Group 1");
+  });
+
+  it("says nothing of a class taught to the whole elective", () => {
+    expect(sectionFromTitle("Network Essentials")).toBe("");
+    expect(sectionFromTitle("IT Infrastructure & Service Management")).toBe("");
+  });
+
+  it("does not read a subject merely beginning with a G as a section", () => {
+    expect(sectionFromTitle("Grid Computing and Utility computing")).toBe("");
+    expect(sectionFromTitle("Glimpses of India: Post Independence")).toBe("");
+    // The marker only counts at the front, where the college writes it.
+    expect(sectionFromTitle("Analytics Foundations G1")).toBe("");
+  });
+
+  it("hands the subject on with the marker taken off", () => {
+    expect(titleWithoutSection("G1 Analytics Foundations")).toBe("Analytics Foundations");
+    expect(titleWithoutSection("G2 - Services Marketing")).toBe("Services Marketing");
+    expect(titleWithoutSection("Network Essentials")).toBe("Network Essentials");
+  });
+
+  it("matches a sectioned class to its elective once the marker is off", () => {
+    const of = (title: string) => electiveForTitle(titleWithoutSection(title), BBA_IT_SEM_V)?.name;
+    expect(of("G1 - Fundamentals of Marketing")).toBe("Digital Marketing");
+    expect(of("G2 - Services Marketing")).toBe("Digital Marketing");
+    expect(of("G1 Analytics Foundations")).toBe("Analytics");
+    expect(of("Network Essentials")).toBe("IT Infrastructure Management");
+  });
+
+  it("writes a section back the short way, for naming a group", () => {
+    expect(shortSection("Group 1")).toBe("G1");
+    expect(shortSection("Group 2")).toBe("G2");
+    // "NE & IT Infra" names the whole minor, and is left as it is.
+    expect(shortSection("NE & IT Infra")).toBe("NE & IT Infra");
   });
 });
 

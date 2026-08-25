@@ -31,6 +31,9 @@ import {
   electiveForTitle,
   fromCsv,
   schemeFor,
+  sectionFromTitle,
+  shortSection,
+  titleWithoutSection,
   type ElectiveScheme,
 } from "../src/lib/roster";
 import { electiveForClass, isJointResearchClass } from "../src/lib/student-lists";
@@ -73,6 +76,8 @@ interface Row {
   track: string;
   majorGroup: number;
   minorGroup: number;
+  /** The section a sectioned minor is taught to, e.g. "Group 1"; else empty. */
+  section: string;
 }
 
 async function main() {
@@ -89,6 +94,7 @@ async function main() {
     track: row.track ?? "",
     majorGroup: Number(row.major_group ?? "") || 0,
     minorGroup: Number(row.minor_group ?? "") || 0,
+    section: (row.section ?? "").trim(),
   }));
 
   const org = await db.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG } });
@@ -106,40 +112,91 @@ interface Cohort {
 const cohortPrefix = (programme: string, semester: string) => `${programme} (${semester})`;
 
 /**
+ * An elective as this app holds it: the group of everyone who chose it, and —
+ * where it is taught more than once over — a group per sitting beneath that.
+ */
+interface ElectivePlacement {
+  /** Everyone who chose it, whichever sitting they attend. */
+  id: string;
+  /** "Group 1" → the group that attends that sitting. Empty when undivided. */
+  sections: Map<string, string>;
+}
+
+/**
  * The groups a year splits into for its electives, one per choice.
  *
  * The timetable files them all under a bucket or two — "Major Courses",
  * "Minor Courses" — because MRBS gives a cohort one colour and no more. That is
  * fine for a wall chart and useless for a student, who wants their own classes
  * and not the whole year's, so the buckets are opened out here.
+ *
+ * An elective too big for one room is taught twice over, and then choosing it
+ * is not the same as attending it: the college splits the takers into a Group 1
+ * and a Group 2 that meet at different hours. Those sittings are groups too,
+ * and they are the ones the classes hang off — a student joins both, so the
+ * elective still answers "who is reading Digital Marketing" while the section
+ * answers "who is in room 306 on Saturday morning".
+ *
+ * Which sections exist is read off the roster rather than declared: they are
+ * whatever the college's own list put its students into.
  */
-async function electiveGroups(orgId: string, scheme: ElectiveScheme, cohort: Cohort) {
-  const ids = new Map<number, string>();
-  for (const elective of scheme.electives) {
-    const name = `${cohortPrefix(scheme.programme, scheme.semester)} - ${elective.name}`;
-    const codes = elective.subjects.map((s) => s.code).filter(Boolean).join(", ");
-    const group = await db.group.upsert({
+async function electiveGroups(
+  orgId: string,
+  scheme: ElectiveScheme,
+  cohort: Cohort,
+  members: Row[],
+) {
+  const placements = new Map<number, ElectivePlacement>();
+  const prefix = cohortPrefix(scheme.programme, scheme.semester);
+
+  const upsert = (name: string, label: string, kind: keyof typeof GroupKind) =>
+    db.group.upsert({
       where: {
         programmeId_semesterId_name: { programmeId: cohort.programmeId, semesterId: cohort.semesterId, name },
       },
-      update: { kind: GroupKind[elective.kind], batchId: cohort.batchId },
+      update: { kind: GroupKind[kind], batchId: cohort.batchId },
       create: {
         orgId,
         programmeId: cohort.programmeId,
         semesterId: cohort.semesterId,
         batchId: cohort.batchId,
         name,
-        label: codes ? `Group ${elective.group} · ${codes}` : `Group ${elective.group}`,
-        kind: GroupKind[elective.kind],
+        label,
+        kind: GroupKind[kind],
       },
     });
-    ids.set(elective.group, group.id);
+
+  for (const elective of scheme.electives) {
+    const name = `${prefix} - ${elective.name}`;
+    const codes = elective.subjects.map((s) => s.code).filter(Boolean).join(", ");
+    const label = codes ? `Group ${elective.group} · ${codes}` : `Group ${elective.group}`;
+    const group = await upsert(name, label, elective.kind);
+
+    // The roster records a section against the minor, which is the only kind
+    // the college divides; an elective nobody is sectioned into keeps the one
+    // group, as "NE & IT Infra" does with its thirteen.
+    const sections = new Map<string, string>();
+    if (scheme.sectioned) {
+      const found = new Set(
+        members
+          .filter((student) => student.minorGroup === elective.group && student.section)
+          .map((student) => student.section),
+      );
+      for (const section of [...found].sort()) {
+        const short = shortSection(section);
+        const sub = await upsert(`${name} ${short}`, `${label} · ${short}`, elective.kind);
+        sections.set(section, sub.id);
+      }
+    }
+
+    placements.set(elective.group, { id: group.id, sections });
   }
-  return ids;
+  return placements;
 }
 
 /**
- * Moves each elective class off the coarse bucket and onto its own elective.
+ * Moves each elective class off the coarse bucket and onto the group that sits
+ * in it — the elective itself, or one of its sections where it has them.
  *
  * A student's timetable is the intersection of their groups and the group
  * stamped on each occurrence, so a class reaches the right people only if it
@@ -150,7 +207,7 @@ async function electiveGroups(orgId: string, scheme: ElectiveScheme, cohort: Coh
 async function repointElectiveClasses(
   orgId: string,
   scheme: ElectiveScheme,
-  electives: Map<number, string>,
+  electives: Map<number, ElectivePlacement>,
 ) {
   const prefix = cohortPrefix(scheme.programme, scheme.semester);
   const buckets = await db.group.findMany({
@@ -164,14 +221,29 @@ async function repointElectiveClasses(
 
   // The BCA lists carry the college's own stream code on every class line,
   // which is a surer signal than a title; nothing else does, so elsewhere the
-  // subject is matched against the scheme this cohort follows.
+  // subject is matched against the scheme this cohort follows — after any "G1"
+  // in front of it is set aside, since that names the sitting and not the paper.
   const match = (event: { title: string; notes: string | null }) =>
     scheme.programme === "BCA"
       ? electiveForClass(event)
-      : { elective: electiveForTitle(event.title, scheme), disagreed: false };
+      : {
+          elective: electiveForTitle(
+            scheme.sectioned ? titleWithoutSection(event.title) : event.title,
+            scheme,
+          ),
+          disagreed: false,
+        };
 
+  // The electives are read back as well as the buckets, so this re-derives
+  // where a class belongs rather than draining it one way. A sitting the
+  // college renames from G1 to G2 has already left the bucket, and scanning
+  // only the bucket would leave it on the wrong section for ever.
+  const owners = [
+    ...buckets.map((b) => b.id),
+    ...[...electives.values()].flatMap((e) => [e.id, ...e.sections.values()]),
+  ];
   const events = await db.event.findMany({
-    where: { orgId, groupId: { in: buckets.map((b) => b.id) } },
+    where: { orgId, groupId: { in: owners } },
     select: { id: true, title: true, notes: true, groupId: true },
   });
 
@@ -179,13 +251,25 @@ async function repointElectiveClasses(
   const unmatched: string[] = [];
   for (const event of events) {
     const { elective, disagreed } = match(event);
-    const target = elective ? electives.get(elective.group) : undefined;
+    const placement = elective ? electives.get(elective.group) : undefined;
+    // A sectioned elective's class says which sitting it is; one that names no
+    // section is taught to the whole elective, as the thirteen of "NE & IT
+    // Infra" are.
+    const section = scheme.sectioned ? sectionFromTitle(event.title) : "";
+    const target = section ? placement?.sections.get(section) : placement?.id;
     if (!target) {
       unmatched.push(
-        disagreed ? `${event.title} (its stream and its subject disagree)` : event.title,
+        disagreed
+          ? `${event.title} (its stream and its subject disagree)`
+          : section && placement
+            ? `${event.title} (no student is in ${section} of ${elective!.name})`
+            : event.title,
       );
       continue;
     }
+    // Already where it belongs. Regenerating anyway would rewrite every
+    // occurrence — and so every mirrored calendar — for no change at all.
+    if (event.groupId === target) continue;
 
     await db.$transaction(async (tx) => {
       await tx.event.update({ where: { id: event.id }, data: { groupId: target } });
@@ -200,10 +284,13 @@ async function repointElectiveClasses(
 
   console.log(`✓ ${moved} ${prefix} elective classes moved onto the group that takes them`);
   for (const title of [...new Set(unmatched)]) {
-    console.log(`  ! left on the bucket, matching no elective: ${title}`);
+    console.log(`  ! left where it was, matching no elective: ${title}`);
   }
 
-  await alignTeaching([...electives.values(), ...buckets.map((b) => b.id)]);
+  await alignTeaching([
+    ...[...electives.values()].flatMap((e) => [e.id, ...e.sections.values()]),
+    ...buckets.map((b) => b.id),
+  ]);
   return { moved, unmatched };
 }
 
@@ -375,6 +462,8 @@ async function replaceStudents(orgId: string, students: Row[]) {
   /** Which groups each student joins, worked out a cohort at a time. */
   const placement = new Map<string, string[]>();
   const unplaced: Array<{ student: Row; reason: string }> = [];
+  /** In a sectioned elective, but named a sitting no group was built for. */
+  const unsectioned: Array<{ prn: string; section: string }> = [];
   const cohorts = new Map<string, Row[]>();
   for (const student of students) {
     const key = `${student.programme}|${student.semester}`;
@@ -395,21 +484,19 @@ async function replaceStudents(orgId: string, students: Row[]) {
     const byName = new Map(groups.map((g) => [g.name, g.id]));
     const scheme = schemeFor(programme, semester);
     const electives = scheme
-      ? await electiveGroups(orgId, scheme, {
-          programmeId: anchor.programmeId,
-          semesterId: anchor.semesterId!,
-          batchId: anchor.batchId!,
-        })
-      : new Map<number, string>();
+      ? await electiveGroups(
+          orgId,
+          scheme,
+          {
+            programmeId: anchor.programmeId,
+            semesterId: anchor.semesterId!,
+            batchId: anchor.batchId!,
+          },
+          members,
+        )
+      : new Map<number, ElectivePlacement>();
 
-    if (scheme && !scheme.sectioned) {
-      await repointElectiveClasses(orgId, scheme, electives);
-    } else if (scheme?.sectioned) {
-      console.log(
-        `  · ${prefix} electives are taught in two sections, so their classes stay` +
-          " on the timetable's own bucket until the sections are groups",
-      );
-    }
+    if (scheme) await repointElectiveClasses(orgId, scheme, electives);
     const research = byName.get(`${prefix} - Honours with Research`);
     if (research && programme === "BCA") {
       await claimJointResearchClasses(orgId, research);
@@ -429,8 +516,8 @@ async function replaceStudents(orgId: string, students: Row[]) {
 
       if (!home) {
         // On the roll but nowhere to sit yet: recorded so the college can see
-        // them, with no groups until a document says which division they are
-        // in. Leaving them out entirely would make the app disagree with the
+        // them, and left without a division until a document states one.
+        // Leaving them out entirely would make the app disagree with the
         // register about who is enrolled.
         unplaced.push({
           student,
@@ -438,12 +525,25 @@ async function replaceStudents(orgId: string, students: Row[]) {
             ? `no ${prefix} group for ${student.track || `division ${student.division}`}`
             : `${prefix} states no division for them`,
         });
-        placement.set(student.prn, []);
-        continue;
       }
+
+      // Both the elective and the sitting: the first is what they chose, the
+      // second is where they are on Saturday morning, and the classes are on
+      // the second. A student the college sectioned but whose section has no
+      // group — a spelling nobody else used — keeps the elective and is
+      // reported, rather than being dropped from it as well.
+      const minor = electives.get(student.minorGroup);
+      const section = minor && student.section ? minor.sections.get(student.section) : undefined;
+      if (minor && student.section && !section) {
+        unsectioned.push({ prn: student.prn, section: student.section });
+      }
+      // A division and an elective are separate facts on separate documents.
+      // Missing the first is no reason to withhold the second: the elective
+      // list names this student's minor and their sitting, so they get the
+      // classes taught to it and go on missing only their division's.
       placement.set(
         student.prn,
-        [home, electives.get(student.majorGroup), electives.get(student.minorGroup)].filter(
+        [home, electives.get(student.majorGroup)?.id, minor?.id, section].filter(
           (id): id is string => Boolean(id),
         ),
       );
@@ -530,7 +630,10 @@ async function replaceStudents(orgId: string, students: Row[]) {
   const byReason = new Map<string, number>();
   for (const { reason } of unplaced) byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
   for (const [reason, n] of [...byReason].sort((a, b) => b[1] - a[1])) {
-    console.log(`  · ${n} students are on the roll with no group: ${reason}`);
+    console.log(`  · ${n} students are on the roll with nowhere to sit: ${reason}`);
+  }
+  for (const { prn, section } of unsectioned) {
+    console.log(`  ! ${prn} is in "${section}", which is no sitting of their elective`);
   }
 
   console.log(`✓ ${created} students added, ${updated} already had an account`);

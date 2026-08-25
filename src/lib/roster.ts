@@ -89,8 +89,8 @@ export interface ElectiveScheme {
   /**
    * True where an elective is taught twice over, to a Group 1 and a Group 2
    * section. Knowing the elective is then not enough to know which class a
-   * student attends, so the classes are left where the timetable put them
-   * until the sections themselves are groups.
+   * student attends, so each section is a group of its own and the classes go
+   * onto those rather than onto the elective.
    */
   sectioned?: boolean;
 }
@@ -253,6 +253,34 @@ export function electiveFromLabel(
   const words = label.toLowerCase();
   return scheme.electives.find((e) => words.includes(e.name.toLowerCase()));
 }
+
+/**
+ * The marker a sectioned elective's class carries in front of its subject.
+ *
+ * The timetable is the only place that says which of two identical sittings is
+ * which, and it says it as "G1 Analytics Foundations" or "G2 - Services
+ * Marketing". Anchored to the start so that a subject merely beginning with a
+ * G — "Grid Computing" — is never read as a section.
+ */
+const SECTION_MARKER = /^\s*G\s*([12])\b\s*[-–]?\s*/i;
+
+/**
+ * The section a class's title names, spelled as the roster spells it.
+ *
+ * The college's elective list writes "Group 1" where its timetable writes "G1".
+ * Returning the list's spelling is what lets a class and a student's `section`
+ * column be compared without either side having to know about the other.
+ */
+export function sectionFromTitle(title: string): string {
+  const found = SECTION_MARKER.exec(title);
+  return found ? `Group ${found[1]}` : "";
+}
+
+/** The title with any section marker taken off, ready to be matched by subject. */
+export const titleWithoutSection = (title: string) => title.replace(SECTION_MARKER, "").trim();
+
+/** "Group 1" as the timetable writes it, for naming and labelling a section. */
+export const shortSection = (section: string) => section.replace(/^Group\s*/i, "G");
 
 const normalise = (text: string) =>
   text
