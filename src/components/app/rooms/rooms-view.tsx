@@ -19,6 +19,7 @@ import { Select } from "~/components/ui/select";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { RoomDialog, type EditableRoom } from "./room-dialog";
+import { RoomPlaque } from "./room-plaque";
 import { roomStatus, type RoomOccurrence } from "./room-status";
 import { TYPE_LABEL, type RoomTypeName } from "./room-vocab";
 
@@ -40,9 +41,11 @@ export function RoomsView({
   const [editing, setEditing] = useState<{ room?: EditableRoom } | null>(null);
   const now = useNow(30_000);
 
-  const canManage = new PermissionBitField(BigInt(permissions)).has(
-    PermissionFlags.ManageRooms,
-  );
+  const bits = new PermissionBitField(BigInt(permissions));
+  const canManage = bits.has(PermissionFlags.ManageRooms);
+  // Requesting a room and running the estate are different jobs. This screen is
+  // open to everybody now, and most of them hold neither.
+  const canBook = bits.has(PermissionFlags.BookRoom);
 
   // Archived rooms are not on the timetable at all, so they need their own
   // read; it only runs when the tab asking for them is open.
@@ -126,7 +129,11 @@ export function RoomsView({
     <>
       <PageHeader
         title="Rooms"
-        subtitle="Browse spaces and reserve one"
+        subtitle={
+          canBook
+            ? "Browse spaces and reserve one"
+            : "Browse spaces and see what is free"
+        }
         actions={
           canManage && (
             <button
@@ -205,51 +212,72 @@ export function RoomsView({
                 timeZone,
                 workingHours,
               );
+              // Built once, so the line and the tooltip that recovers it when
+              // it truncates cannot come to say two different things.
+              const where = `${room.building.name} · ${
+                room.floor === 0 ? "ground" : `floor ${room.floor}`
+              }`;
               return (
                 <Card key={room.id} pad={18} className="flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-display text-title text-[19px] font-bold">
-                        {room.code}
+                  {/*
+                   * The identity block. The number is the entire reason anybody
+                   * opened this page — "where is 403?" — so it gets a plate of
+                   * its own, and everything else arranges itself around it: the
+                   * live status at the top of the column beside it, the address
+                   * at the foot of that column, level with the plate.
+                   *
+                   * The band wraps rather than compresses. On the narrowest
+                   * track a card has 232px of content, and a plate wide enough
+                   * for a named room plus a `booked soon` badge plus a
+                   * manager's edit chip do not all fit on one line; the minimum
+                   * on the column is what makes the row drop it onto a line of
+                   * its own instead of squeezing either the number or the
+                   * status label. A taller card is a fine outcome — a shrunken
+                   * number is the one thing this whole layout exists to stop.
+                   */}
+                  <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                    <RoomPlaque code={room.code} />
+                    <div className="flex min-w-[124px] flex-1 flex-col items-end justify-between gap-2 self-stretch">
+                      <div className="flex items-center gap-1.5">
+                        <Badge tone={status.tone} dot>
+                          {status.label}
+                        </Badge>
+                        {canManage && (
+                          <button
+                            type="button"
+                            aria-label={`Edit ${room.code}`}
+                            onClick={() =>
+                              setEditing({
+                                room: {
+                                  id: room.id,
+                                  code: room.code,
+                                  buildingId: room.building.id,
+                                  floor: room.floor,
+                                  capacity: room.capacity,
+                                  type: room.type,
+                                  features: room.features,
+                                  notes: room.notes,
+                                },
+                              })
+                            }
+                            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
+                            style={{ background: "rgba(68,88,121,0.07)" }}
+                          >
+                            <Icon
+                              name="settings"
+                              size={13}
+                              color="var(--slate)"
+                              stroke={2}
+                            />
+                          </button>
+                        )}
                       </div>
-                      <div className="text-muted mt-0.5 text-[12.5px]">
-                        {room.building.name} ·{" "}
-                        {room.floor === 0 ? "ground" : `floor ${room.floor}`}
+                      <div
+                        title={where}
+                        className="text-muted w-full truncate text-right text-[12.5px]"
+                      >
+                        {where}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Badge tone={status.tone} dot>
-                        {status.label}
-                      </Badge>
-                      {canManage && (
-                        <button
-                          type="button"
-                          aria-label={`Edit ${room.code}`}
-                          onClick={() =>
-                            setEditing({
-                              room: {
-                                id: room.id,
-                                code: room.code,
-                                buildingId: room.building.id,
-                                floor: room.floor,
-                                capacity: room.capacity,
-                                type: room.type,
-                                features: room.features,
-                                notes: room.notes,
-                              },
-                            })
-                          }
-                          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
-                          style={{ background: "rgba(68,88,121,0.07)" }}
-                        >
-                          <Icon
-                            name="settings"
-                            size={13}
-                            color="var(--slate)"
-                            stroke={2}
-                          />
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -293,13 +321,21 @@ export function RoomsView({
                     <div className="text-faint text-[12px]">{status.line}</div>
                   </div>
 
-                  <Link
-                    href={`/book?room=${room.id}`}
-                    className="text-slate inline-flex min-h-10 items-center gap-1.5 self-start text-[13px] font-bold lg:min-h-0"
-                  >
-                    Book this room
-                    <Icon name="arrowRight" size={15} color="var(--slate)" />
-                  </Link>
+                  {/*
+                   * /book is itself behind BookRoom, so offering this to
+                   * somebody without it is a link that bounces them home. The
+                   * card is complete without it — the occupancy block above
+                   * carries `mt-auto` and stays pinned to the bottom either way.
+                   */}
+                  {canBook && (
+                    <Link
+                      href={`/book?room=${room.id}`}
+                      className="text-slate inline-flex min-h-10 items-center gap-1.5 self-start text-[13px] font-bold lg:min-h-0"
+                    >
+                      Book this room
+                      <Icon name="arrowRight" size={15} color="var(--slate)" />
+                    </Link>
+                  )}
                 </Card>
               );
             })}
@@ -381,13 +417,15 @@ function ArchivedRooms({
           }
         >
           {/*
-           * The code keeps its own column where the row reads as a table, but
-           * on a phone the row is three stacked lines and a fixed 90px in front
-           * of the first one only wastes the width.
+           * The same plate as the cards, at row scale, so an archived room
+           * reads as the same object at rest rather than a different one. The
+           * `sm:` minimum is what lines the plates into a column and lets the
+           * row read as a table — on a phone the row is three stacked lines and
+           * a fixed width in front of the first only wastes what little there
+           * is. 72px of plate is optically the 90px of bare text it replaces,
+           * because the plate carries its own padding.
            */}
-          <span className="font-display text-title text-[15px] font-bold sm:min-w-[90px]">
-            {room.code}
-          </span>
+          <RoomPlaque code={room.code} scale="row" />
           <span className="text-muted text-[12.5px]">
             {room.building.name} · {TYPE_LABEL[room.type] ?? room.type} ·{" "}
             {room.capacity} seats

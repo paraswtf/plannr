@@ -49,6 +49,7 @@ export function DatePicker({
   timeZone,
   size = "md",
   ariaLabel = "Date",
+  label,
   className,
 }: {
   /** The chosen day, as an instant; read in `timeZone`. */
@@ -58,6 +59,13 @@ export function DatePicker({
   timeZone: string;
   size?: "sm" | "md";
   ariaLabel?: string;
+  /**
+   * What the closed button says, when the chosen day is not the whole story.
+   * The schedule's week and month spans pass the span they are showing —
+   * "10–16 Aug 2026", "August 2026" — because the grid behind the button picks
+   * a day either way, and the day it picks is the one the week wraps around.
+   */
+  label?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -166,7 +174,9 @@ export function DatePicker({
             color="var(--muted)"
             className="shrink-0"
           />
-          <span className="truncate">{formatFullDate(value, timeZone)}</span>
+          <span className="truncate">
+            {label ?? formatFullDate(value, timeZone)}
+          </span>
         </span>
         <Icon
           name="chevronDown"

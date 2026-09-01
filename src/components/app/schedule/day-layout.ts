@@ -14,6 +14,49 @@ export interface DaySpan {
   end: Date;
 }
 
+/**
+ * The calendar's geometry, in one place because three components draw against
+ * it now — the day, the week and the loading frames for both. Two copies of
+ * these numbers is how a skeleton ends up a different height from the thing it
+ * is standing in for.
+ */
+
+/** Width of the hour column down the left. */
+export const GUTTER = 58;
+/** Pixels per hour. */
+export const ROW_HEIGHT = 84;
+/** Enough for a title even on a fifteen-minute sitting. */
+export const MIN_BLOCK = 26;
+const PADDING = 16;
+const TITLE_LINE = 17;
+const SMALL_LINE = 15;
+
+/** How tall a block covering `span` decimal hours is drawn. */
+export function blockHeight(span: number, rowHeight: number): number {
+  return Math.max(MIN_BLOCK, span * rowHeight - 4);
+}
+
+/**
+ * As many of `lines` as the block can actually hold.
+ *
+ * Worked out from the block's height rather than guessed at: a short lecture
+ * spilling its text over the one below reads far worse than one that says less.
+ * `hasRoom` is whether the time-and-room line above them was drawn at all,
+ * which on a very short sitting it is not.
+ */
+export function fitLines(
+  span: number,
+  rowHeight: number,
+  lines: string[],
+): string[] {
+  const spare =
+    blockHeight(span, rowHeight) -
+    PADDING -
+    TITLE_LINE -
+    (span >= 0.5 ? SMALL_LINE : 0);
+  return lines.slice(0, Math.max(0, Math.floor(spare / SMALL_LINE)));
+}
+
 export interface Placed<T> {
   event: T;
   /** Which column of its overlapping cluster this one takes, from zero. */
@@ -33,7 +76,8 @@ export interface Placed<T> {
 export function packOverlaps<T extends DaySpan>(events: T[]): Array<Placed<T>> {
   const ordered = [...events].sort(
     (a, b) =>
-      a.start.getTime() - b.start.getTime() || b.end.getTime() - a.end.getTime(),
+      a.start.getTime() - b.start.getTime() ||
+      b.end.getTime() - a.end.getTime(),
   );
 
   const placed: Array<Placed<T>> = [];

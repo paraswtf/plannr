@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useLongPress } from "~/components/ui/use-long-press";
 import { decimalHour, formatHourLabel, SNAP_MINUTES } from "~/lib/dates";
 import { useNow } from "./use-now";
 
@@ -47,8 +48,13 @@ export interface GridEvent {
   groupNames?: string[];
   /** One of the viewer's own — a class they attend or teach. Drawn in gold. */
   isMine?: boolean;
-  /** Whether a register has already been taken for this sitting. */
-  attendanceMarked?: boolean;
+  /**
+   * Whether a register has already been taken for this sitting, or null for a
+   * viewer not entitled to know. Null and false are deliberately different: the
+   * panel says "register taken" on true and says nothing on either of the
+   * others, rather than telling a student a lecture went unregistered.
+   */
+  attendanceMarked?: boolean | null;
 }
 
 /** A span of one room's column, in decimal local hours. */
@@ -70,6 +76,8 @@ interface TimetableGridProps {
   /** Show the now-line when the grid is displaying today. */
   showNowLine?: boolean;
   onEventClick?: (event: GridEvent) => void;
+  /** A press-and-hold or a right-click on a booked block. */
+  onEventPress?: (event: GridEvent) => void;
   /** Enables dragging booked blocks to a new time or room. */
   onEventMove?: (event: GridEvent, target: GridRange) => void;
   /** Enables drag-to-select; called with the snapped span as it settles. */
@@ -136,6 +144,7 @@ export function TimetableGrid({
   rowHeight = 60,
   showNowLine = false,
   onEventClick,
+  onEventPress,
   onEventMove,
   onRangeSelect,
   selection,
@@ -255,6 +264,37 @@ export function TimetableGrid({
     measureColumns();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDrag(next);
+  };
+
+  /**
+   * Picking a booked block up. Lifted out of the block itself so that the
+   * component drawing it can stay ignorant of columns, steps and capture — all
+   * it has is a pointer event and which room it is in.
+   */
+  const beginMove = (
+    event: GridEvent,
+    roomId: string,
+    from: number,
+    to: number,
+    e: React.PointerEvent,
+  ) => {
+    measureColumns();
+    const first = stepOf(from);
+    const length = Math.max(1, Math.round((to - from) / step));
+    beginDrag(
+      {
+        kind: "move",
+        event,
+        roomId,
+        first,
+        length,
+        grab: Math.max(0, stepIn(roomId, e.clientY) - first),
+        originX: e.clientX,
+        originY: e.clientY,
+        moved: false,
+      },
+      e,
+    );
   };
 
   /** Every drag reports through here; only the mode differs. */
@@ -568,104 +608,27 @@ export function TimetableGrid({
                   />
                 )}
 
-                {(byRoom.get(room.id) ?? []).map((event) => {
-                  const from = decimalHour(event.start, timeZone);
-                  const to = decimalHour(event.end, timeZone);
-                  const live = event.start <= now && now < event.end;
-                  const beingMoved =
-                    moving?.event?.occurrenceId === event.occurrenceId;
-                  return (
-                    <button
-                      key={event.occurrenceId}
-                      type="button"
-                      onClick={() => {
-                        // The release that ended a move also fires a click.
-                        if (movedRef.current) {
-                          movedRef.current = false;
-                          return;
-                        }
-                        onEventClick?.(event);
-                      }}
-                      onPointerDown={(e) => {
-                        if (
-                          !onEventMove ||
-                          e.pointerType === "touch" ||
-                          e.button !== 0
-                        ) {
-                          return;
-                        }
-                        measureColumns();
-                        const first = stepOf(from);
-                        const length = Math.max(
-                          1,
-                          Math.round((to - from) / step),
-                        );
-                        beginDrag(
-                          {
-                            kind: "move",
-                            event,
-                            roomId: room.id,
-                            first,
-                            length,
-                            grab: Math.max(
-                              0,
-                              stepIn(room.id, e.clientY) - first,
-                            ),
-                            originX: e.clientX,
-                            originY: e.clientY,
-                            moved: false,
-                          },
-                          e,
-                        );
-                      }}
-                      {...(onEventMove ? dragHandlers : {})}
-                      // Blocks cover most of a column, so pinning touch to one
-                      // axis here would leave a phone unable to scroll the grid
-                      // sideways at all. A touch never starts a drag anyway.
-                      className="plr-clip absolute inset-x-1 touch-auto overflow-hidden rounded-lg px-2 py-1.5 text-left"
-                      style={{
-                        top: (from - startHour) * rowHeight + 2,
-                        height: Math.max(22, (to - from) * rowHeight - 4),
-                        /*
-                         * Two separate questions, answered in two places, so a
-                         * block that is both still says both: the fill is whose
-                         * class it is — gold for the viewer's own — and the ring
-                         * is whether it is running right now. Letting either one
-                         * win outright would take the gold off the very block
-                         * somebody is looking for, or drop the now-marker from
-                         * the only class it matters most on.
-                         */
-                        background: event.isMine
-                          ? "var(--mine-fill)"
-                          : live
-                            ? "rgba(220,56,72,0.10)"
-                            : "var(--card-soft)",
-                        boxShadow: live
-                          ? "inset 0 0 0 1px var(--red)"
-                          : event.isMine
-                            ? "inset 0 0 0 1px var(--mine-ring)"
-                            : "inset 0 0 0 1px var(--card-ring)",
-                        opacity: beingMoved ? 0.35 : 1,
-                        cursor: onEventMove
-                          ? drag?.kind === "move"
-                            ? "grabbing"
-                            : "grab"
-                          : onEventClick
-                            ? "pointer"
-                            : "default",
-                      }}
-                    >
-                      <span className="text-title block truncate text-[12px] leading-tight font-semibold">
-                        {event.title}
-                      </span>
-                      {event.subtitle && to - from >= 0.75 && (
-                        <span className="text-muted block truncate text-[11px]">
-                          {event.subtitle}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                {(byRoom.get(room.id) ?? []).map((event) => (
+                  <EventBlock
+                    key={event.occurrenceId}
+                    event={event}
+                    roomId={room.id}
+                    startHour={startHour}
+                    rowHeight={rowHeight}
+                    timeZone={timeZone}
+                    now={now}
+                    beingMoved={
+                      moving?.event?.occurrenceId === event.occurrenceId
+                    }
+                    grabbing={drag?.kind === "move"}
+                    movedRef={movedRef}
+                    onEventClick={onEventClick}
+                    onEventPress={onEventPress}
+                    onEventMove={onEventMove}
+                    onBeginMove={beginMove}
+                    dragHandlers={dragHandlers}
+                  />
+                ))}
 
                 {ghost && (
                   <RangeBlock
@@ -779,6 +742,160 @@ interface DragHandlers {
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: () => void;
   onPointerCancel: () => void;
+}
+
+/**
+ * One booked block.
+ *
+ * Its own component because the press-and-hold gesture is a hook, and a hook
+ * cannot be called inside the `.map()` that draws these — which is the right
+ * shape anyway, the gesture's state belonging to the block that owns it.
+ *
+ * The two sets of pointer handlers are composed by hand rather than by spread,
+ * because both want the same four events and the order matters: the press is
+ * offered every one first, and the drag machine sees them unchanged afterwards.
+ * They cannot fight, and the reason is worth stating rather than trusting —
+ * `useLongPress` arms its timer for everything except a mouse, and `beginMove`
+ * below refuses everything except a mouse and a pen. So on the pointer that
+ * drags there is no timer, and on the pointer that holds there is no drag.
+ */
+function EventBlock({
+  event,
+  roomId,
+  startHour,
+  rowHeight,
+  timeZone,
+  now,
+  beingMoved,
+  grabbing,
+  movedRef,
+  onEventClick,
+  onEventPress,
+  onEventMove,
+  onBeginMove,
+  dragHandlers,
+}: {
+  event: GridEvent;
+  roomId: string;
+  startHour: number;
+  rowHeight: number;
+  timeZone: string;
+  now: Date;
+  beingMoved: boolean;
+  grabbing: boolean;
+  /** Set by a drag that landed somewhere, so the release does not also click. */
+  movedRef: React.RefObject<boolean>;
+  onEventClick?: (event: GridEvent) => void;
+  onEventPress?: (event: GridEvent) => void;
+  onEventMove?: (event: GridEvent, target: GridRange) => void;
+  onBeginMove: (
+    event: GridEvent,
+    roomId: string,
+    from: number,
+    to: number,
+    e: React.PointerEvent,
+  ) => void;
+  dragHandlers: DragHandlers;
+}) {
+  const press = useLongPress(
+    onEventPress ? () => onEventPress(event) : undefined,
+  );
+
+  const from = decimalHour(event.start, timeZone);
+  const to = decimalHour(event.end, timeZone);
+  const live = event.start <= now && now < event.end;
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // The release that ended a move also fires a click.
+        if (movedRef.current) {
+          movedRef.current = false;
+          return;
+        }
+        onEventClick?.(event);
+      }}
+      onContextMenu={(e) => {
+        // Not while a block is being dragged. The mouse's right button can be
+        // pressed mid-drag, and answering it would put a modal over a move that
+        // is still running underneath and would commit itself on release.
+        if (grabbing) {
+          e.preventDefault();
+          return;
+        }
+        press.onContextMenu(e);
+      }}
+      onPointerDown={(e) => {
+        press.onPointerDown(e);
+        if (!onEventMove || e.pointerType === "touch" || e.button !== 0) return;
+        onBeginMove(event, roomId, from, to, e);
+      }}
+      onPointerMove={(e) => {
+        press.onPointerMove(e);
+        if (onEventMove) dragHandlers.onPointerMove(e);
+      }}
+      onPointerUp={() => {
+        press.onPointerUp();
+        if (onEventMove) dragHandlers.onPointerUp();
+      }}
+      onPointerCancel={() => {
+        press.onPointerCancel();
+        if (onEventMove) dragHandlers.onPointerCancel();
+      }}
+      onPointerLeave={press.onPointerLeave}
+      // Blocks cover most of a column, so pinning touch to one axis here would
+      // leave a phone unable to scroll the grid sideways at all. A touch never
+      // starts a drag anyway — and the hold above answers `pointercancel`, so
+      // a scroll that claims the finger cancels the press rather than fighting
+      // it.
+      className="plr-clip absolute inset-x-1 touch-auto overflow-hidden rounded-lg px-2 py-1.5 text-left select-none"
+      style={{
+        top: (from - startHour) * rowHeight + 2,
+        height: Math.max(22, (to - from) * rowHeight - 4),
+        /*
+         * Two separate questions, answered in two places, so a block that is
+         * both still says both: the fill is whose class it is — gold for the
+         * viewer's own — and the ring is whether it is running right now.
+         * Letting either one win outright would take the gold off the very
+         * block somebody is looking for, or drop the now-marker from the only
+         * class it matters most on.
+         */
+        background: event.isMine
+          ? "var(--mine-fill)"
+          : live
+            ? "rgba(220,56,72,0.10)"
+            : "var(--card-soft)",
+        boxShadow: live
+          ? "inset 0 0 0 1px var(--red)"
+          : event.isMine
+            ? "inset 0 0 0 1px var(--mine-ring)"
+            : "inset 0 0 0 1px var(--card-ring)",
+        opacity: beingMoved ? 0.35 : 1,
+        cursor: onEventMove
+          ? grabbing
+            ? "grabbing"
+            : "grab"
+          : onEventClick
+            ? "pointer"
+            : "default",
+        // iOS answers a long press with a magnifier and a callout menu of its
+        // own. The gesture is ours here, so both go, and `select-none` above is
+        // the other half — without it the press starts selecting the title
+        // under the finger.
+        WebkitTouchCallout: "none",
+      }}
+    >
+      <span className="text-title block truncate text-[12px] leading-tight font-semibold">
+        {event.title}
+      </span>
+      {event.subtitle && to - from >= 0.75 && (
+        <span className="text-muted block truncate text-[11px]">
+          {event.subtitle}
+        </span>
+      )}
+    </button>
+  );
 }
 
 /**

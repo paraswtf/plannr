@@ -12,6 +12,15 @@ import {
  * declares what it needs, and everyone sees the screens they can actually open.
  * The middleware, the sidebar and the post-login redirect all read from here,
  * so a link can never appear for someone who would be bounced off it.
+ *
+ * `requires` answers one question and one only: may this person *open* the
+ * screen. Whether they get more than a read of it is asked twice more, and
+ * neither time here — by the screen itself against `PermissionBitField`, and
+ * again by the tRPC procedure behind every write, which is the one that counts.
+ * That separation is why two of the screens below ask only for the permission
+ * everybody holds and are still read-only for almost everybody: the timetable
+ * and the room list are noticeboard information, and reading a noticeboard was
+ * never the privileged act.
  */
 
 export interface NavItem {
@@ -33,11 +42,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "calendar",
     requires: ["ViewOwnEvents"],
   },
+  // The campus day, open to anybody who has one of their own. A student stands
+  // in the corridor and reads the same grid off a noticeboard, so what it costs
+  // is the permission everybody already holds, and the screen withholds the
+  // affordances that would change anything. ViewAllEvents is still the gate on
+  // the genuinely privileged read — other people's schedules, by name, through
+  // `timetable.peopleWithSchedules`.
   {
     href: "/timetable",
     label: "Timetable",
     icon: "grid",
-    requires: ["ViewAllEvents"],
+    requires: ["ViewOwnEvents"],
   },
   // Two screens in one, and the looser of the two requirements is the one that
   // has to be listed: a student reads their own attendance without holding
@@ -65,7 +80,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "checkCircle",
     requires: ["ApproveBookings"],
   },
-  { href: "/rooms", label: "Rooms", icon: "door", requires: ["ViewRooms"] },
+  // Both listed, for the reason /attendance lists both: the looser requirement
+  // is what opens the screen now, but nothing implies ViewRooms and ViewRooms
+  // implies nothing, so a role holding only it — a porter, a facilities account
+  // — would lose the room directory if this were narrowed to the events
+  // permission alone.
+  {
+    href: "/rooms",
+    label: "Rooms",
+    icon: "door",
+    requires: ["ViewOwnEvents", "ViewRooms"],
+  },
   { href: "/book", label: "Book a room", icon: "plus", requires: ["BookRoom"] },
   { href: "/people", label: "People", icon: "users", requires: ["ViewUsers"] },
   {

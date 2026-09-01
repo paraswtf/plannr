@@ -81,9 +81,10 @@ export const timetableRoutes: RouteDef[] = [
     method: "GET",
     path: "/timetable/my-schedule",
     procedure: "timetable.mySchedule",
-    summary: "Read the caller's schedule for a day, from a chosen perspective",
+    summary:
+      "Read the caller's schedule for a day, week or month, from a chosen perspective",
     description:
-      "One day's sittings with every cohort attending and the headcount they add up to, plus the perspectives this person is entitled to. A perspective decides two things at once: which classes count as theirs — the ones they attend, the ones they take, or both — and how much is said about each. With no `date`, the answer is the day the next class falls on, which on a Friday evening is Monday. `asUserId` shows somebody else's day, but the perspectives and the level of detail are still worked out from the *caller's* own profiles and permissions, which is why this is closed to keys rather than merely narrowed: a principal has no profile, so it would read an empty day whoever it named. `GET /timetable/week?groupId=…` or `?facultyId=…` is the explicit-subject read.",
+      "One day's sittings with every cohort attending and the headcount they add up to, plus the perspectives this person is entitled to. `span` widens that to `week` or `month` — the window is derived from the anchor and the span rather than stated, so the widest answer this can be asked for is one month grid of six Monday-aligned weeks, and `truncated` says so if even that ran past the cap. A perspective decides two things at once: which classes count as theirs — the ones they attend, the ones they take, or both — and how much is said about each. With no `date`, the answer is the day the next class falls on, which on a Friday evening is Monday. `asUserId` shows somebody else's day, but the perspectives and the level of detail are still worked out from the *caller's* own profiles and permissions, which is why this is closed to keys rather than merely narrowed: a principal has no profile, so it would read an empty day whoever it named. `GET /timetable/week?groupId=…` or `?facultyId=…` is the explicit-subject read.",
     tag: "Timetable",
     scopes: [],
     actor: "session",

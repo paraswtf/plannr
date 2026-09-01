@@ -6,13 +6,23 @@ import { useState } from "react";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { DayNavigator } from "~/components/app/timetable/day-navigator";
 import { EventDrawer } from "~/components/app/timetable/event-drawer";
+import { EventModal } from "~/components/app/timetable/event-modal";
 import type { GridEvent } from "~/components/app/timetable/timetable-grid";
 import { useNow } from "~/components/app/timetable/use-now";
 import { Card } from "~/components/ui/card";
 import { SearchSelect } from "~/components/ui/entity-picker";
+import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
-import { isSameLocalDay } from "~/lib/dates";
+import { addDays, isSameLocalDay, startOfLocalDay } from "~/lib/dates";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
+import {
+  spanHolds,
+  SPAN_LABELS,
+  SPAN_NOUNS,
+  SPANS,
+  startOfLocalWeek,
+  type ScheduleSpan,
+} from "~/lib/schedule-spans";
 import {
   describeClass,
   PERSPECTIVE_LABELS,
@@ -20,23 +30,37 @@ import {
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CalendarSync } from "./calendar-sync";
-import { DayCalendar } from "./day-calendar";
+import { DayCalendar, type DayCalendarEvent } from "./day-calendar";
 import { dayWindow } from "./day-layout";
 import { DaySkeleton } from "./day-skeleton";
+import { MonthGrid } from "./month-grid";
+import { monthLayout } from "./month-layout";
+import { MonthSkeleton } from "./month-skeleton";
+import { WeekCalendar } from "./week-calendar";
+import { WeekSkeleton } from "./week-skeleton";
 
 type Schedule = RouterOutputs["timetable"]["mySchedule"];
 
 /** The chooser's own entry for "not one of my own angles". */
 const SOMEONE_ELSE = "__someone";
 
+const SPAN_ITEMS = SPANS.map((span) => ({
+  value: span,
+  label: SPAN_LABELS[span],
+}));
+
 /**
- * The schedule: one day, from whichever angle you are involved in it.
+ * The schedule: a day, a week or a month, from whichever angle you are involved
+ * in it.
  *
- * The calendar is the same for everybody — the day drawn top to bottom with a
- * line across the present — and the perspective decides what is written on each
- * class and whether it can be opened. Somebody who is only one thing never sees
- * the chooser; somebody who teaches and coordinates, or studies and administers,
- * switches between their own answers to "what am I doing today?".
+ * The calendar is the same for everybody — time drawn down the page with a line
+ * across the present — and the perspective decides what is written on each
+ * class. The span decides how far you can see, and the two are independent: a
+ * coordinator can look at somebody else's month.
+ *
+ * Somebody who is only one thing never sees the perspective chooser; somebody
+ * who teaches and coordinates, or studies and administers, switches between
+ * their own answers to "what am I doing?".
  */
 export function ScheduleView({
   initial,
@@ -49,51 +73,61 @@ export function ScheduleView({
   const router = useRouter();
   const utils = api.useUtils();
 
-  const [date, setDate] = useState(() => new Date(initial.from));
+  const [span, setSpan] = useState<ScheduleSpan>("day");
+  const [date, setDate] = useState(() => new Date(initial.anchor));
   /**
-   * Whether the day on screen was chosen by the person reading it.
+   * Whether the stretch on screen was chosen by the person reading it.
    *
-   * The screen opens on the day of the next class, which on a Friday evening is
-   * Monday — a jump nobody asked for and, unexplained, one that reads as the
-   * app having lost today. Saying so is only honest until they move the day
-   * themselves — with `Today`, the arrows, the date or a tab — after which it
-   * is their choice and needs no caption.
+   * The screen opens on the next class, which on a Friday evening is Monday — a
+   * jump nobody asked for and, unexplained, one that reads as the app having
+   * lost today. Saying so is only honest until they move it themselves — with
+   * `Today`, the arrows, the date or a tab — after which it is their choice and
+   * needs no caption.
    */
   const [moved, setMoved] = useState(false);
   const goTo = (day: Date) => {
     setMoved(true);
     setDate(day);
   };
-  /** Whose day is on screen, when it is not your own. */
+  /** Whose schedule is on screen, when it is not your own. */
   const [asUserId, setAsUserId] = useState<string | null>(null);
   const [pickingPerson, setPickingPerson] = useState(false);
   const [personQuery, setPersonQuery] = useState("");
   // Null means "however the server chose", which is what the page was rendered
   // with; picking from the dropdown is what makes it explicit.
   const [viewAs, setViewAs] = useState<Perspective | null>(null);
-  const [opened, setOpened] = useState<GridEvent | null>(null);
+  const [opened, setOpened] = useState<{
+    event: GridEvent;
+    via: "click" | "press";
+  } | null>(null);
 
   // Seeded only for the day and angle the page was rendered with. Handing the
   // same data to every other key would make it look answered — the client holds
-  // results for half a minute — and changing the date or the perspective would
-  // appear to do nothing at all.
+  // results for half a minute — and changing the date, the span or the
+  // perspective would appear to do nothing at all.
   const isRendered =
+    span === "day" &&
     viewAs === null &&
     asUserId === null &&
-    date.getTime() === new Date(initial.from).getTime();
+    date.getTime() === new Date(initial.anchor).getTime();
 
   const { data, isPending, isPlaceholderData, isError, refetch } =
     api.timetable.mySchedule.useQuery(
-      { date, viewAs: viewAs ?? undefined, asUserId: asUserId ?? undefined },
+      {
+        date,
+        span,
+        viewAs: viewAs ?? undefined,
+        asUserId: asUserId ?? undefined,
+      },
       {
         initialData: isRendered ? initial : undefined,
-        // The previous day's response is held on to, but only for the frame it
-        // came in: the timezone, the perspectives on offer, whose day this is.
-        // None of those change from one day to the next, so keeping them stops
-        // the toolbar collapsing and rebuilding on every step.
+        // The previous key's response is held on to, but only for the frame it
+        // came in: the timezone, the perspectives on offer, whose schedule this
+        // is. None of those change from one day to the next, so keeping them
+        // stops the toolbar collapsing and rebuilding on every step.
         //
         // The classes are a different matter and are hidden until they are this
-        // day's — see `stale` below.
+        // window's — see `stale` below.
         placeholderData: (previous) => previous,
         refetchInterval: 60_000,
         refetchOnWindowFocus: true,
@@ -101,11 +135,12 @@ export function ScheduleView({
     );
 
   /**
-   * Whether what is in `data` belongs to the day (or person) now being asked
-   * about. Placeholder data is the previous key's answer, and a previous day's
-   * lectures drawn under today's date cannot be told apart from real ones — so
-   * while this is true the calendar gives way to a skeleton rather than lying
-   * quietly.
+   * Whether what is in `data` belongs to the window (or person) now being asked
+   * about. Placeholder data is the previous key's answer, and a previous week's
+   * lectures drawn under this week's dates cannot be told apart from real ones
+   * — so while this is true the calendar gives way to a skeleton rather than
+   * lying quietly. Switching span changes the query key, so this covers that
+   * for free.
    */
   const stale = isPending || isPlaceholderData;
 
@@ -114,18 +149,46 @@ export function ScheduleView({
   const detail = data?.detail ?? null;
   const classes = data?.occurrences ?? [];
 
-  // The hours the day spans. Taken from whatever is in hand — the previous day
-  // while the next loads — because the skeleton and the calendar have to agree
-  // on the page's height or the switch shows up as a jump.
+  const blocks: DayCalendarEvent[] = detail
+    ? classes.map((o) => ({
+        id: o.occurrenceId,
+        start: o.start,
+        end: o.end,
+        title: o.title,
+        roomCode: o.roomCode,
+        lines: describeClass(o, detail),
+      }))
+    : [];
+
+  // The columns a week is drawn in, and the cells a month is. Both are computed
+  // from the date and the timezone rather than from the response, so the
+  // skeletons can draw the identical frame while the classes are still coming.
+  const weekDays = Array.from({ length: 7 }, (_, i) =>
+    addDays(startOfLocalWeek(date, timeZone), i, timeZone),
+  );
+  const month = monthLayout(date, blocks, now, timeZone);
+
+  // The hours the calendar spans. Taken from whatever is in hand — the previous
+  // window while the next loads — because the skeleton and the calendar have to
+  // agree on the page's height or the switch shows up as a jump.
+  //
+  // "Is now in view" has to be asked the way the calendar itself asks it: a
+  // week holding today stretches its window to reach the current hour even when
+  // the anchor day is Monday and the clock says Friday evening, and a skeleton
+  // that asked only about the anchor day would stand a couple of hours shorter
+  // than the thing replacing it.
+  const showsNow = weekDays.some((day) => isSameLocalDay(day, now, timeZone));
   const frame = dayWindow(
-    classes,
-    isSameLocalDay(date, now, timeZone) ? now : null,
+    blocks,
+    (span === "day" ? isSameLocalDay(date, now, timeZone) : showsNow)
+      ? now
+      : null,
     timeZone,
   );
 
   const bits = new PermissionBitField(BigInt(permissions));
   const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
-  // Anybody who can open this screen may look at anybody else's day: a
+  // Anybody who can open this screen may look at anybody else's schedule: a
   // timetable is noticeboard information, and `searchPeople` answers with names
   // alone. What each perspective *says* about a class is still decided server
   // side, and editing and attendance keep their own permissions.
@@ -144,61 +207,121 @@ export function ScheduleView({
       PermissionFlags.ManageOwnEvents,
     );
 
-  const openable = canEdit || canMarkAttendance;
+  /**
+   * Opening a class, whichever span it was found in and whichever way in was
+   * used. Everybody gets the panel — a class is noticeboard information, and
+   * what it *offers* is still decided by what the reader may do.
+   */
+  const open = (event: DayCalendarEvent, via: "click" | "press") => {
+    const full = classes.find((o) => o.occurrenceId === event.id);
+    if (!full) return;
+    setOpened({ event: toGridEvent(full), via });
+  };
+  const onEventClick = (event: DayCalendarEvent) => open(event, "click");
+  const onEventPress = (event: DayCalendarEvent) => open(event, "press");
+  /** A day cell or a week's column heading drops into that day. */
+  const dropIntoDay = (day: Date) => {
+    setMoved(true);
+    setSpan("day");
+    setDate(startOfLocalDay(day, timeZone));
+  };
+
+  const noun = SPAN_NOUNS[span];
+  const busyDays = new Set(
+    blocks.map((b) => startOfLocalDay(b.start, timeZone).getTime()),
+  ).size;
 
   return (
-    // The drawer is a column beside the day from `lg`, and below it falls in
-    // underneath: it is an ordinary item in this box, not a sheet over the
+    // The drawer is a column beside the calendar from `lg`, and below it falls
+    // in underneath: it is an ordinary item in this box, not a sheet over the
     // page, so the box has to stop being a row or the two would share one line
-    // and the day would collapse to nothing beside a full-width panel.
+    // and the calendar would collapse to nothing beside a full-width panel.
     //
     // `min-h-screen` comes in with the docking, for the same reason it does on
     // the timetable: below lg it would add the hamburger bar's height to a full
     // screen and leave a phone scrolling past the end of the day.
     <div className="flex flex-col lg:min-h-screen lg:flex-row lg:items-start">
       {/*
-        The day keeps its place at every width — it is what the drawer opens
-        beside on a laptop, and what it opens under on a phone.
+        The calendar keeps its place at every width — it is what the drawer
+        opens beside on a laptop, and what it opens under on a phone.
       */}
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Schedule"
           subtitle={[
-            viewingAs ? `${viewingAs.name}'s day` : null,
-            // Why the screen is not on today. Drops away the moment the day is
-            // stepped by hand, because from then on it is not a surprise.
+            viewingAs ? `${viewingAs.name}'s ${noun}` : null,
+            // Why the screen is not on today. Drops away the moment the window
+            // is stepped by hand, because from then on it is not a surprise —
+            // and it asks whether *now* is in view rather than whether the day
+            // is today, since on a Monday morning a week view is showing now.
             //
             // Backwards is the half-hour grace after a class that ended near
             // midnight still holding its own day: rare, but "the next class"
             // would be a plain untruth about a day that has already happened.
-            !moved && !isSameLocalDay(date, now, timeZone)
+            !moved && !spanHolds(date, span, now, timeZone)
               ? date > now
-                ? "Opened on the next class"
-                : "Opened on your last class"
+                ? span === "day"
+                  ? "Opened on the next class"
+                  : `Opened on the ${noun} of your next class`
+                : span === "day"
+                  ? "Opened on your last class"
+                  : `Opened on the ${noun} of your last class`
               : null,
-            // The count is the previous day's until the new one lands, and
+            // The count is the previous window's until the new one lands, and
             // "4 classes" above an empty calendar is the same lie in words.
-            stale
-              ? "Loading…"
-              : classes.length > 0
-                ? `${classes.length} class${classes.length === 1 ? "" : "es"}`
-                : "Nothing scheduled",
+            stale ? "Loading…" : countPhrase(classes.length, busyDays, span),
+            // Said out loud rather than quietly showing a short month: the cap
+            // is a backstop, but a calendar missing sittings has to say so.
+            data?.truncated ? "Too many classes to draw them all" : null,
           ]
             .filter(Boolean)
             .join(" · ")}
         />
         <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <DayNavigator date={date} timeZone={timeZone} onChange={goTo} />
-
+          {/*
+           * `ml-auto` on the right-hand cluster rather than `justify-between`
+           * on the row: with four wrapping children, space-between decides
+           * where the third one lands, and it is never where you wanted it.
+           */}
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             {/*
-              Only on your own day. Somebody else's classes are not yours to
-              put in your calendar, and the control would be claiming to sync
-              whatever is currently on screen.
-            */}
-            {!viewingAs && <CalendarSync />}
+             * First, because it changes what every other control in the row
+             * means, and a control that redefines its neighbours belongs
+             * upstream of them. A whole line to itself on a phone: three pills
+             * come to about 200px, which shares a line with nothing that also
+             * has to hold a date.
+             */}
+            <div className="w-full sm:w-auto">
+              {/*
+               * Changing the span deliberately does not count as moving. The
+               * anchor stays exactly where it was — only how much of the
+               * calendar around it is drawn changes — so the caption explaining
+               * why the screen opened away from today is still owed. Consuming
+               * it here left the week and month strings below unreachable, and
+               * the surprise they exist to explain unexplained.
+               */}
+              <Segmented
+                items={SPAN_ITEMS}
+                value={span}
+                onChange={setSpan}
+                size="sm"
+              />
+            </div>
 
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <DayNavigator
+              date={date}
+              span={span}
+              timeZone={timeZone}
+              onChange={goTo}
+            />
+
+            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+              {/*
+                Only on your own schedule. Somebody else's classes are not yours
+                to put in your calendar, and the control would be claiming to
+                sync whatever is currently on screen.
+              */}
+              {!viewingAs && <CalendarSync />}
               <span className="text-faint font-mono text-[12px]">view as</span>
               <Select
                 value={
@@ -226,57 +349,77 @@ export function ScheduleView({
                 size="sm"
                 ariaLabel="View this schedule as"
               />
-
-              {(pickingPerson || viewingAs) && (
-                <div className="w-full sm:w-[260px]">
-                  <SearchSelect
-                    value={
-                      viewingAs
-                        ? { id: viewingAs.id, label: viewingAs.name }
-                        : null
-                    }
-                    onChange={(id) => {
-                      setAsUserId(id);
-                      // Stay in person mode either way: clearing goes back to
-                      // an open picker, not out of it.
-                      setPickingPerson(true);
-                      setPersonQuery("");
-                    }}
-                    page={{
-                      rows: (people?.rows ?? []).map((person) => ({
-                        id: person.id,
-                        label: person.name,
-                        hint: [
-                          person.kind === "faculty" ? "Faculty" : "Student",
-                          person.detail,
-                        ]
-                          .filter(Boolean)
-                          .join(" · "),
-                      })),
-                      // Everybody the search matched, which is not the same as
-                      // the number of names on the list — a full page used to
-                      // be the only clue that there were more, and it could
-                      // not say how many more.
-                      total: people?.total ?? 0,
-                      hasMore: (people?.page ?? 1) < (people?.pageCount ?? 1),
-                    }}
-                    query={personQuery}
-                    onQueryChange={setPersonQuery}
-                    placeholder="Search students and staff…"
-                    emptyOption="Back to my own day"
-                  />
-                </div>
-              )}
             </div>
+
+            {/*
+             * A sibling of the cluster above rather than a member of it, so
+             * below `lg` it takes a full line of its own instead of being
+             * wedged into an already-wrapped row at 260px.
+             */}
+            {(pickingPerson || viewingAs) && (
+              <div className="w-full lg:ml-auto lg:w-[260px]">
+                <SearchSelect
+                  value={
+                    viewingAs
+                      ? { id: viewingAs.id, label: viewingAs.name }
+                      : null
+                  }
+                  onChange={(id) => {
+                    setAsUserId(id);
+                    // Stay in person mode either way: clearing goes back to an
+                    // open picker, not out of it.
+                    setPickingPerson(true);
+                    setPersonQuery("");
+                  }}
+                  page={{
+                    rows: (people?.rows ?? []).map((person) => ({
+                      id: person.id,
+                      label: person.name,
+                      hint: [
+                        person.kind === "faculty" ? "Faculty" : "Student",
+                        person.detail,
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                    })),
+                    // Everybody the search matched, which is not the same as
+                    // the number of names on the list — a full page used to be
+                    // the only clue that there were more, and it could not say
+                    // how many more.
+                    total: people?.total ?? 0,
+                    hasMore: (people?.page ?? 1) < (people?.pageCount ?? 1),
+                  }}
+                  query={personQuery}
+                  onQueryChange={setPersonQuery}
+                  placeholder="Search students and staff…"
+                  emptyOption="Back to my own schedule"
+                />
+              </div>
+            )}
           </div>
 
           {stale ? (
-            // Sized from the window the last day left behind, so the page does
-            // not change height underneath whoever is reading it.
-            <DaySkeleton startHour={frame.startHour} endHour={frame.endHour} />
+            // Sized from the window the last answer left behind, so the page
+            // does not change height underneath whoever is reading it.
+            span === "day" ? (
+              <DaySkeleton
+                startHour={frame.startHour}
+                endHour={frame.endHour}
+              />
+            ) : span === "week" ? (
+              <WeekSkeleton
+                days={weekDays}
+                timeZone={timeZone}
+                now={now}
+                startHour={frame.startHour}
+                endHour={frame.endHour}
+              />
+            ) : (
+              <MonthSkeleton weeks={month.weeks} timeZone={timeZone} />
+            )
           ) : isError && !data ? (
             /*
-              A failed request is not an empty day. Without this branch the
+              A failed request is not an empty week. Without this branch the
               screen falls through to the card below and says "You have no
               classes of your own", which is the same untruth the skeleton was
               added to stop — stated with more confidence, because it reads as
@@ -287,7 +430,7 @@ export function ScheduleView({
             */
             <Card>
               <p className="text-title m-0 text-[14px] font-semibold">
-                This day could not be loaded.
+                This {noun} could not be loaded.
               </p>
               <p className="text-muted mt-1 mb-3 text-[13px]">
                 Nothing is wrong with your timetable — the request did not get
@@ -305,34 +448,36 @@ export function ScheduleView({
                 Try again now
               </button>
             </Card>
-          ) : classes.length > 0 && detail ? (
+          ) : span === "month" ? (
+            // The month draws its own empty days, so it stands whether or not
+            // anything is on it — an empty month grid is a true and useful
+            // answer, where an empty day column is just a blank.
+            <MonthGrid
+              weeks={month.weeks}
+              timeZone={timeZone}
+              now={now}
+              onDayClick={dropIntoDay}
+              onEventClick={onEventClick}
+              onEventPress={onEventPress}
+            />
+          ) : span === "week" ? (
+            <WeekCalendar
+              events={blocks}
+              days={weekDays}
+              timeZone={timeZone}
+              now={now}
+              onEventClick={onEventClick}
+              onEventPress={onEventPress}
+              onDayClick={dropIntoDay}
+            />
+          ) : blocks.length > 0 ? (
             <DayCalendar
-              events={classes.map((o) => ({
-                id: o.occurrenceId,
-                start: o.start,
-                end: o.end,
-                title: o.title,
-                roomCode: o.roomCode,
-                lines: describeClass(o, detail),
-              }))}
+              events={blocks}
               timeZone={timeZone}
               now={now}
               isToday={isSameLocalDay(date, now, timeZone)}
-              onEventClick={
-                openable
-                  ? (event) => {
-                      const full = classes.find(
-                        (o) => o.occurrenceId === event.id,
-                      );
-                      if (!full) return;
-                      if (!canEdit && canMarkAttendance) {
-                        router.push(`/attendance/${full.occurrenceId}`);
-                        return;
-                      }
-                      setOpened(toGridEvent(full));
-                    }
-                  : undefined
-              }
+              onEventClick={onEventClick}
+              onEventPress={onEventPress}
             />
           ) : (
             <Card>
@@ -346,21 +491,45 @@ export function ScheduleView({
         </div>
       </div>
 
-      {opened && (
-        <EventDrawer
-          event={opened}
-          timeZone={timeZone}
-          canEdit={canEdit}
-          canMarkAttendance={canMarkAttendance}
-          onClose={() => setOpened(null)}
-          onChanged={async () => {
-            await utils.timetable.invalidate();
-            router.refresh();
-          }}
-        />
-      )}
+      {opened &&
+        (() => {
+          const Frame = opened.via === "press" ? EventModal : EventDrawer;
+          return (
+            <Frame
+              event={opened.event}
+              timeZone={timeZone}
+              canEdit={canEdit}
+              canMarkAttendance={canMarkAttendance}
+              onClose={() => setOpened(null)}
+              onChanged={async () => {
+                await utils.timetable.invalidate();
+                router.refresh();
+              }}
+            />
+          );
+        })()}
     </div>
   );
+}
+
+/**
+ * How much is on. "Across N days" is the number that actually helps on a wide
+ * span: forty-eight classes tells you nothing a month grid has not already
+ * shown, and nineteen busy days out of thirty does.
+ */
+function countPhrase(
+  count: number,
+  busyDays: number,
+  span: ScheduleSpan,
+): string {
+  if (count === 0) {
+    return span === "day"
+      ? "Nothing scheduled"
+      : `Nothing scheduled this ${SPAN_NOUNS[span]}`;
+  }
+  const classes = `${count} class${count === 1 ? "" : "es"}`;
+  if (span === "day" || busyDays <= 1) return classes;
+  return `${classes} across ${busyDays} days`;
 }
 
 /** The drawer speaks the grid's language, so a class is translated on the way in. */
@@ -378,5 +547,6 @@ function toGridEvent(o: Schedule["occurrences"][number]): GridEvent {
     roomCode: o.roomCode,
     facultyName: o.facultyName,
     groupNames: o.cohorts.map((c) => c.name),
+    attendanceMarked: o.attendanceMarked,
   };
 }

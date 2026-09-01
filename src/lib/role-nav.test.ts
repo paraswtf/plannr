@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PermissionBitField, SYSTEM_ROLES } from "./permissions";
+import {
+  PermissionBitField,
+  PermissionFlags as F,
+  SYSTEM_ROLES,
+} from "./permissions";
 import { canOpen, homeFor, navFor } from "./role-nav";
 
 const permsFor = (...keys: string[]) =>
@@ -11,13 +15,19 @@ const permsFor = (...keys: string[]) =>
 const hrefs = (permissions: bigint) => navFor(permissions).map((i) => i.href);
 
 describe("navFor", () => {
-  it("shows a student their own day, their attendance, and booking", () => {
+  it("shows a student the campus screens read-only, beside their own day", () => {
     // Attendance is on that list because reading your own is not the same
     // permission as reading everybody's: a student holds ViewOwnEvents, and the
-    // screen decides which half of itself to draw.
+    // screen decides which half of itself to draw. The timetable and the rooms
+    // are there for the same reason — both are opened by ViewOwnEvents, and
+    // what a student may *do* on them is gated inside the screens rather than
+    // here. The order matters as much as the membership: `homeFor` lands people
+    // on the first thing they can open, so these two must not reach the head.
     expect(hrefs(permsFor("student"))).toEqual([
       "/schedule",
+      "/timetable",
       "/attendance",
+      "/rooms",
       "/book",
     ]);
   });
@@ -56,7 +66,17 @@ describe("navFor", () => {
   });
 
   it("shows nothing to someone with no roles", () => {
+    // Load-bearing: the proof that widening two screens to ViewOwnEvents did
+    // not quietly become "anybody with a session".
     expect(hrefs(0n)).toEqual([]);
+  });
+
+  it("leaves a rooms-only role with just the rooms screen", () => {
+    // Why the /rooms entry lists both permissions. Nothing implies ViewRooms,
+    // so a porter or a facilities account holds it without ViewOwnEvents, and
+    // narrowing that entry to the events permission alone would take the room
+    // directory away from them with no other test noticing.
+    expect(hrefs(F.ViewRooms)).toEqual(["/rooms"]);
   });
 
   it("includes the schedule for anyone who can see their own events", () => {
@@ -70,6 +90,9 @@ describe("homeFor", () => {
     expect(homeFor(permsFor("student"))).toBe("/schedule");
     expect(homeFor(permsFor("faculty"))).toBe("/schedule");
     expect(homeFor(permsFor("admin"))).toBe("/schedule");
+    // The case opening the timetable to everybody could have broken: this role
+    // cannot open /schedule at all, so /rooms has to stay reachable and first.
+    expect(homeFor(F.ViewRooms)).toBe("/rooms");
   });
 
   it("has a fallback for a user with no access at all", () => {
@@ -83,7 +106,22 @@ describe("canOpen", () => {
     expect(canOpen(student, "/schedule")).toBe(true);
     expect(canOpen(student, "/people")).toBe(false);
     expect(canOpen(student, "/settings")).toBe(false);
-    expect(canOpen(student, "/timetable")).toBe(false);
+  });
+
+  it("lets any signed-in member read the timetable and the rooms", () => {
+    // Read-only is enforced inside those screens and by the tRPC procedures
+    // behind every write, not here — `requires` only answers whether the door
+    // opens.
+    const student = permsFor("student");
+    expect(canOpen(student, "/timetable")).toBe(true);
+    expect(canOpen(student, "/rooms")).toBe(true);
+  });
+
+  it("still asks for an events permission, not merely a session", () => {
+    // The widening stopped at ViewOwnEvents and did not become "anybody at
+    // all": a freshly imported account with no roles yet still reaches nothing.
+    expect(canOpen(F.ViewRooms, "/timetable")).toBe(false);
+    expect(canOpen(0n, "/timetable")).toBe(false);
   });
 
   it("covers nested paths under a prefix", () => {
@@ -93,8 +131,10 @@ describe("canOpen", () => {
   });
 
   it("does not let a prefix match a longer unrelated segment", () => {
-    // "/rooms" must not grant "/roomsomething".
-    expect(canOpen(permsFor("student"), "/roomsomething")).toBe(true);
+    // "/people" must not grant "/peopleish". Deliberately not the rooms case
+    // any more: a student can now open /rooms, so that assertion would pass
+    // whether or not the prefix bug existed.
+    expect(canOpen(permsFor("student"), "/peopleish")).toBe(true);
   });
 
   it("leaves unlisted routes open to any signed-in user", () => {

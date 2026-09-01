@@ -23,6 +23,7 @@ import {
 } from "~/lib/dates";
 import { DayNavigator } from "./day-navigator";
 import { EventDrawer } from "./event-drawer";
+import { EventModal } from "./event-modal";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import {
@@ -69,9 +70,18 @@ export function TimetableView({
     PermissionFlags.ManageOwnEvents,
   );
   const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
-  // The block that was clicked. Someone who can only take registers never sees
-  // this — they are sent to the register itself.
-  const [opened, setOpened] = useState<GridEvent | null>(null);
+  /**
+   * The block that was opened, and which way in was used.
+   *
+   * Both frames show the same thing; a click gets the drawer beside the
+   * calendar, and a press-and-hold or a right-click gets it over the block
+   * instead, which on a phone is the difference between the answer and a
+   * screen's worth of scrolling to reach it.
+   */
+  const [opened, setOpened] = useState<{
+    event: GridEvent;
+    via: "click" | "press";
+  } | null>(null);
 
   const { data } = api.timetable.grid.useQuery(
     { date, buildingId },
@@ -177,6 +187,7 @@ export function TimetableView({
     facultyName: o.facultyName,
     groupNames: o.groupNames,
     isMine: o.isMine,
+    attendanceMarked: o.attendanceMarked,
   }));
 
   // Whether anything on this day is the viewer's own, which is what decides
@@ -185,17 +196,18 @@ export function TimetableView({
   const hasMine = events.some((e) => e.isMine);
 
   /**
-   * What a click on a block does depends on what you are here for. A scheduler
-   * gets the lecture and its actions; someone whose only business is the
-   * register goes straight to it.
+   * Every block opens, for everybody.
+   *
+   * It used to open only for somebody who could change it or take its register,
+   * and a lecturer holding only the latter was sent straight past the panel to
+   * the register itself. Both were the screen apologising for a panel most
+   * people could not reach: a class is noticeboard information, and now that
+   * everyone gets the panel, routing one group around it would cost them the
+   * room, the cohorts, the lecturer and the duration to save a single tap —
+   * with the register still one tap away in the footer.
    */
-  const openEvent = (event: GridEvent) => {
-    if (!canMoveEvents && canMarkAttendance) {
-      router.push(`/attendance/${event.occurrenceId}`);
-      return;
-    }
-    setOpened(event);
-  };
+  const openEvent = (event: GridEvent) => setOpened({ event, via: "click" });
+  const pressEvent = (event: GridEvent) => setOpened({ event, via: "press" });
 
   const isToday = isSameLocalDay(date, new Date(), timeZone);
 
@@ -345,9 +357,12 @@ export function TimetableView({
               showNowLine={isToday}
               onRangeSelect={canBook ? takeRange : undefined}
               onEventMove={canMoveEvents ? takeMove : undefined}
-              onEventClick={
-                canMoveEvents || canMarkAttendance ? openEvent : undefined
-              }
+              // Always live. Every block is a real button whatever may be done
+              // with it, so withholding the handler left a focusable control
+              // that answered to nothing; a reader who can change none of this
+              // can still ask what it is.
+              onEventClick={openEvent}
+              onEventPress={pressEvent}
               selection={selection}
               unavailableRoomIds={unavailableRooms}
             />
@@ -397,13 +412,21 @@ export function TimetableView({
                 block&apos;s edges or middle to adjust it
                 {canMoveEvents &&
                   ", or drag a booked block to another time or room"}
-                .
+                . Press and hold a block, or right-click it, for its details
+                without leaving the grid.
+              </>
+            ) : canMoveEvents ? (
+              <>
+                Each block is a scheduled class or booking. With a mouse, one
+                can be dragged to another time or room; press and hold, or
+                right-click, for its details without leaving the grid.
               </>
             ) : (
               <>
-                Each block is a scheduled class or booking.
-                {canMoveEvents &&
-                  " With a mouse, one can be dragged to another time or room."}
+                Each block is a scheduled class or booking — open one to see who
+                teaches it, which groups sit in it and how long it runs. Press
+                and hold, or right-click, to see the same without leaving the
+                grid.
               </>
             )}
           </p>
@@ -436,19 +459,23 @@ export function TimetableView({
         </div>
       )}
 
-      {opened && (
-        <EventDrawer
-          event={opened}
-          timeZone={timeZone}
-          canEdit={canMoveEvents}
-          canMarkAttendance={canMarkAttendance}
-          onClose={() => setOpened(null)}
-          onChanged={async () => {
-            await utils.timetable.invalidate();
-            router.refresh();
-          }}
-        />
-      )}
+      {opened &&
+        (() => {
+          const Frame = opened.via === "press" ? EventModal : EventDrawer;
+          return (
+            <Frame
+              event={opened.event}
+              timeZone={timeZone}
+              canEdit={canMoveEvents}
+              canMarkAttendance={canMarkAttendance}
+              onClose={() => setOpened(null)}
+              onChanged={async () => {
+                await utils.timetable.invalidate();
+                router.refresh();
+              }}
+            />
+          );
+        })()}
 
       {pendingMove && (
         <Dialog

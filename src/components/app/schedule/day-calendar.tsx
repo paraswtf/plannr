@@ -2,8 +2,16 @@
 
 import { useEffect, useRef } from "react";
 
+import { useLongPress } from "~/components/ui/use-long-press";
 import { decimalHour, formatHourLabel } from "~/lib/dates";
-import { dayWindow, packOverlaps } from "./day-layout";
+import {
+  blockHeight,
+  dayWindow,
+  fitLines,
+  GUTTER,
+  packOverlaps,
+  ROW_HEIGHT,
+} from "./day-layout";
 
 /**
  * One day, drawn down the page.
@@ -25,15 +33,10 @@ export interface DayCalendarEvent {
   lines?: string[];
 }
 
-/** Width of the hour column down the left. Shared with the loading state. */
-export const GUTTER = 58;
-/** Pixels per hour. Shared, so a skeleton cannot be a different day's height. */
-export const ROW_HEIGHT = 84;
-/** Enough for a title even on a fifteen-minute sitting. */
-const MIN_BLOCK = 26;
-const PADDING = 16;
-const TITLE_LINE = 17;
-const SMALL_LINE = 15;
+// Re-exported because the geometry moved into the pure module beside this one
+// and three files import it from here today. Both names mean what they always
+// meant.
+export { GUTTER, ROW_HEIGHT };
 
 export function DayCalendar({
   events,
@@ -43,6 +46,7 @@ export function DayCalendar({
   isToday = true,
   rowHeight = ROW_HEIGHT,
   onEventClick,
+  onEventPress,
 }: {
   events: DayCalendarEvent[];
   timeZone: string;
@@ -50,10 +54,16 @@ export function DayCalendar({
   isToday?: boolean;
   rowHeight?: number;
   onEventClick?: (event: DayCalendarEvent) => void;
+  /** A press-and-hold or a right-click on a block. */
+  onEventPress?: (event: DayCalendarEvent) => void;
 }) {
   const nowRef = useRef<HTMLDivElement>(null);
 
-  const { startHour, endHour } = dayWindow(events, isToday ? now : null, timeZone);
+  const { startHour, endHour } = dayWindow(
+    events,
+    isToday ? now : null,
+    timeZone,
+  );
   const height = (endHour - startHour) * rowHeight;
 
   const nowHour = decimalHour(now, timeZone);
@@ -75,64 +85,20 @@ export function DayCalendar({
     <div className="relative" style={{ height }}>
       <HourGrid startHour={startHour} endHour={endHour} rowHeight={rowHeight} />
 
-      {packOverlaps(events).map(({ event, column, columns }) => {
-        const from = decimalHour(event.start, timeZone);
-        const to = decimalHour(event.end, timeZone) || 24;
-        const live = event.start <= now && now < event.end;
-        const past = event.end <= now;
-        const span = to - from;
-
-        const when = `${formatHourLabel(event.start, timeZone)} – ${formatHourLabel(event.end, timeZone)}`;
-        const room = [when, event.roomCode].filter(Boolean).join(" · ");
-
-        // As much as the block can actually hold, worked out from its height
-        // rather than guessed at: a short lecture spilling its text over the one
-        // below reads far worse than one that says less.
-        const boxHeight = Math.max(MIN_BLOCK, span * rowHeight - 4);
-        const spare = boxHeight - PADDING - TITLE_LINE - (span >= 0.5 ? SMALL_LINE : 0);
-        const lines = (event.lines ?? []).slice(
-          0,
-          Math.max(0, Math.floor(spare / SMALL_LINE)),
-        );
-
-        return (
-          <button
-            key={event.id}
-            type="button"
-            onClick={onEventClick ? () => onEventClick(event) : undefined}
-            className="plr-clip absolute overflow-hidden rounded-xl px-3 py-2 text-left"
-            style={{
-              top: (from - startHour) * rowHeight + 2,
-              height: boxHeight,
-              left: `calc(${GUTTER}px + ${(column / columns) * 100}% - ${(GUTTER * column) / columns}px)`,
-              width: `calc(${(1 / columns) * 100}% - ${GUTTER / columns}px - 4px)`,
-              background: live ? "rgba(220,56,72,0.10)" : "var(--card-soft)",
-              boxShadow: live
-                ? "inset 0 0 0 1px var(--red)"
-                : "inset 0 0 0 1px var(--card-ring)",
-              opacity: past && !live ? 0.62 : 1,
-              cursor: onEventClick ? "pointer" : "default",
-            }}
-          >
-            <span className="text-title block truncate text-[13px] leading-tight font-semibold">
-              {event.title}
-            </span>
-            {span >= 0.5 && (
-              <span className="text-muted mt-0.5 block truncate font-mono text-[11px]">
-                {room}
-              </span>
-            )}
-            {lines.map((line) => (
-              <span
-                key={line}
-                className="text-faint mt-0.5 block truncate text-[11px]"
-              >
-                {line}
-              </span>
-            ))}
-          </button>
-        );
-      })}
+      {packOverlaps(events).map(({ event, column, columns }) => (
+        <DayBlock
+          key={event.id}
+          event={event}
+          column={column}
+          columns={columns}
+          startHour={startHour}
+          rowHeight={rowHeight}
+          timeZone={timeZone}
+          now={now}
+          onClick={onEventClick}
+          onPress={onEventPress}
+        />
+      ))}
 
       {showNow && (
         <div
@@ -142,7 +108,11 @@ export function DayCalendar({
         >
           <span
             className="font-mono text-[11px] font-semibold"
-            style={{ color: "var(--red)", width: GUTTER - 12, textAlign: "right" }}
+            style={{
+              color: "var(--red)",
+              width: GUTTER - 12,
+              textAlign: "right",
+            }}
           >
             {formatHourLabel(now, timeZone)}
           </span>
@@ -150,10 +120,98 @@ export function DayCalendar({
             className="ml-[6px] h-[7px] w-[7px] shrink-0 rounded-full"
             style={{ background: "var(--red)" }}
           />
-          <span className="h-[2px] flex-1" style={{ background: "var(--red)" }} />
+          <span
+            className="h-[2px] flex-1"
+            style={{ background: "var(--red)" }}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One sitting.
+ *
+ * Its own component because the press-and-hold gesture is a hook, and a hook
+ * cannot be called inside the `.map()` that draws these. That is the right
+ * shape anyway: the gesture's state belongs to the block that owns it.
+ */
+function DayBlock({
+  event,
+  column,
+  columns,
+  startHour,
+  rowHeight,
+  timeZone,
+  now,
+  onClick,
+  onPress,
+}: {
+  event: DayCalendarEvent;
+  column: number;
+  columns: number;
+  startHour: number;
+  rowHeight: number;
+  timeZone: string;
+  now: Date;
+  onClick?: (event: DayCalendarEvent) => void;
+  onPress?: (event: DayCalendarEvent) => void;
+}) {
+  const press = useLongPress(onPress ? () => onPress(event) : undefined);
+
+  const from = decimalHour(event.start, timeZone);
+  const to = decimalHour(event.end, timeZone) || 24;
+  const live = event.start <= now && now < event.end;
+  const past = event.end <= now;
+  const span = to - from;
+
+  const when = `${formatHourLabel(event.start, timeZone)} – ${formatHourLabel(event.end, timeZone)}`;
+  const room = [when, event.roomCode].filter(Boolean).join(" · ");
+  const lines = fitLines(span, rowHeight, event.lines ?? []);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick ? () => onClick(event) : undefined}
+      {...press}
+      className="plr-clip absolute overflow-hidden rounded-xl px-3 py-2 text-left select-none"
+      style={{
+        top: (from - startHour) * rowHeight + 2,
+        height: blockHeight(span, rowHeight),
+        left: `calc(${GUTTER}px + ${(column / columns) * 100}% - ${(GUTTER * column) / columns}px)`,
+        width: `calc(${(1 / columns) * 100}% - ${GUTTER / columns}px - 4px)`,
+        background: live ? "rgba(220,56,72,0.10)" : "var(--card-soft)",
+        boxShadow: live
+          ? "inset 0 0 0 1px var(--red)"
+          : "inset 0 0 0 1px var(--card-ring)",
+        opacity: past && !live ? 0.62 : 1,
+        cursor: onClick ? "pointer" : "default",
+        // iOS answers a long press on its own, with a magnifier and a callout
+        // menu. The gesture is ours here, so both go; `select-none` above is
+        // the other half, or the press starts selecting the title under the
+        // finger. `touch-action` is deliberately left alone — pinning it would
+        // cost the page the vertical scroll a thumb needs to read the day.
+        WebkitTouchCallout: "none",
+      }}
+    >
+      <span className="text-title block truncate text-[13px] leading-tight font-semibold">
+        {event.title}
+      </span>
+      {span >= 0.5 && (
+        <span className="text-muted mt-0.5 block truncate font-mono text-[11px]">
+          {room}
+        </span>
+      )}
+      {lines.map((line) => (
+        <span
+          key={line}
+          className="text-faint mt-0.5 block truncate text-[11px]"
+        >
+          {line}
+        </span>
+      ))}
+    </button>
   );
 }
 

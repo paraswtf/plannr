@@ -199,3 +199,69 @@ export function addDays(instant: Date, days: number, timeZone: string): Date {
   const wall = toWallTime(instant, timeZone);
   return fromWallTime({ ...wall, day: wall.day + days }, timeZone);
 }
+
+/** Local midnight on the first of the month containing `instant`. */
+export function startOfLocalMonth(instant: Date, timeZone: string): Date {
+  const wall = toWallTime(instant, timeZone);
+  return fromWallTime(
+    { ...wall, day: 1, hour: 0, minute: 0, second: 0 },
+    timeZone,
+  );
+}
+
+/**
+ * The same day of the month, `months` away, clamped to the month's own length.
+ *
+ * `addDays` can lean on the fact that a 32nd of January is the 1st of February
+ * and mean it. A month cannot: stepping a calendar forward from the 31st of
+ * January has to land in February, and rolling over to the 3rd of March would
+ * skip the month the reader asked for entirely — then skip another on the way
+ * back, so the two arrows would not undo each other.
+ */
+export function addMonths(
+  instant: Date,
+  months: number,
+  timeZone: string,
+): Date {
+  const wall = toWallTime(instant, timeZone);
+  const target = wall.month - 1 + months;
+  const year = wall.year + Math.floor(target / 12);
+  const month = ((target % 12) + 12) % 12;
+  // Day zero of the following month is the last day of this one, which is the
+  // shortest way to ask a calendar how long a month is.
+  const length = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return fromWallTime(
+    {
+      ...wall,
+      year,
+      month: month + 1,
+      day: Math.min(wall.day, length),
+      hour: 0,
+      minute: 0,
+      second: 0,
+    },
+    timeZone,
+  );
+}
+
+/**
+ * The span a week covers, written as shortly as it can be said without becoming
+ * ambiguous: "10–16 Aug 2026", or "28 Sep – 4 Oct 2026" when it straddles two
+ * months, or both years when it straddles new year.
+ */
+export function formatWeekLabel(monday: Date, timeZone: string): string {
+  const sunday = addDays(monday, 6, timeZone);
+  const from = toWallTime(monday, timeZone);
+  const to = toWallTime(sunday, timeZone);
+
+  const part = (instant: Date, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-GB", { ...opts, timeZone }).format(instant);
+
+  if (from.year !== to.year) {
+    return `${part(monday, { day: "numeric", month: "short", year: "numeric" })} – ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+  }
+  if (from.month !== to.month) {
+    return `${part(monday, { day: "numeric", month: "short" })} – ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+  }
+  return `${from.day}–${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+}

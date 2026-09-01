@@ -48,6 +48,7 @@ function bodyBlock(node: unknown) {
 export function Dialog({
   open,
   title,
+  subtitle,
   icon,
   iconTone = "var(--slate)",
   width = 520,
@@ -57,6 +58,8 @@ export function Dialog({
 }: {
   open: boolean;
   title: string;
+  /** The line under the title, drawn the same way the drawer draws its own. */
+  subtitle?: string;
   icon?: IconName;
   iconTone?: string;
   width?: number;
@@ -188,9 +191,19 @@ export function Dialog({
               <Icon name={icon} size={19} color={iconTone} stroke={1.9} />
             </span>
           )}
-          <h2 className="font-display text-title min-w-0 flex-1 pt-1.5 text-[19px] font-bold tracking-[-0.02em]">
-            {title}
-          </h2>
+          {/*
+           * The title takes the wrapper's padding rather than its own, so that
+           * a subtitle sits under it rather than beside it. With none passed
+           * this renders exactly what the bare `<h2 className="… pt-1.5">` did.
+           */}
+          <div className="min-w-0 flex-1 pt-1.5">
+            <h2 className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="text-muted mt-0.5 text-[12.5px]">{subtitle}</p>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

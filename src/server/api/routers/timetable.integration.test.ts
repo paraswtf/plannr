@@ -689,3 +689,118 @@ describe("the day the schedule opens on", () => {
     ]);
   });
 });
+
+/**
+ * How much of the calendar one answer carries.
+ *
+ * The window arithmetic itself is unit-tested in `src/lib/schedule-spans.test.ts`;
+ * what is worth proving against a real database is that the span reaches the
+ * query — that a week genuinely returns the days either side of the anchor, and
+ * that widening it did not quietly change what a day means for every caller
+ * that never asks for one.
+ */
+describe("a schedule over a week and a month", () => {
+  const HOUR = 3_600_000;
+
+  /** A class for the learner, `days` from the fixture's Wednesday, at 10am. */
+  async function classOn(days: number, title: string) {
+    const start = new Date(DAY.getTime() + days * 24 * HOUR);
+    const end = new Date(start.getTime() + HOUR);
+    const faculty = await db.facultyProfile.findUniqueOrThrow({
+      where: { userId: lecturer.id },
+      select: { id: true },
+    });
+    const event = await db.event.create({
+      data: {
+        orgId,
+        roomId,
+        groupId,
+        facultyId: faculty.id,
+        title,
+        kind: "CLASS",
+        status: "CONFIRMED",
+        startTime: start,
+        endTime: end,
+        timezone: TZ,
+      },
+    });
+    await db.eventOccurrence.create({
+      data: {
+        orgId,
+        eventId: event.id,
+        start,
+        end,
+        roomId,
+        groupId,
+        facultyId: faculty.id,
+        kind: "CLASS",
+        status: "CONFIRMED",
+      },
+    });
+  }
+
+  it("answers a day exactly as it always did", async () => {
+    // The default, and the guard on every caller that never passes a span:
+    // `from`/`to` keep their names and, for a day, their old values to the
+    // millisecond.
+    const day = await callerFor(learner).timetable.mySchedule({ date: DAY });
+    expect(day.span).toBe("day");
+    expect(day.from).toEqual(startOfLocalDay(DAY, TZ));
+    expect(day.to.getTime() - day.from.getTime()).toBe(24 * HOUR);
+    expect(day.anchor).toEqual(day.from);
+    expect(day.truncated).toBe(false);
+  });
+
+  it("reaches either side of the anchor for a week", async () => {
+    // Monday and Sunday of the fixture's week — the two ends a day view cannot
+    // see and a week must.
+    await classOn(-2, "Monday");
+    await classOn(4, "Sunday");
+
+    const week = await callerFor(learner).timetable.mySchedule({
+      date: DAY,
+      span: "week",
+    });
+    expect(week.span).toBe("week");
+    // The anchor stays the day asked about; the window is the week around it.
+    expect(week.anchor).toEqual(startOfLocalDay(DAY, TZ));
+    expect(week.to.getTime() - week.from.getTime()).toBe(7 * 24 * HOUR);
+    expect(week.occurrences.map((o) => o.title)).toEqual([
+      "Monday",
+      "Scheduling, Applied",
+      "Sunday",
+    ]);
+  });
+
+  it("takes in the neighbouring months' lead-in days for a month", async () => {
+    // 1 August 2026 is a Saturday, so the grid opens on Monday 27 July — and a
+    // class on the 29th belongs to a cell the grid draws. A window that began
+    // on the 1st would leave it off and the grid would say so in confidence.
+    await classOn(-14, "Late July");
+
+    const month = await callerFor(learner).timetable.mySchedule({
+      date: DAY,
+      span: "month",
+    });
+    expect(month.span).toBe("month");
+    const days = (month.to.getTime() - month.from.getTime()) / (24 * HOUR);
+    expect(days % 7).toBe(0);
+    expect(days).toBeLessThanOrEqual(42);
+    expect(month.occurrences.map((o) => o.title)).toContain("Late July");
+  });
+
+  it("keeps the perspective and the register flag across every span", async () => {
+    // The two things a wider window must not quietly drop: whose eyes it is
+    // seen through, and whether a register has been taken — the latter being a
+    // correlated count on the same query rather than a second round trip.
+    for (const span of ["day", "week", "month"] as const) {
+      const answer = await callerFor(lecturer).timetable.mySchedule({
+        date: DAY,
+        span,
+      });
+      expect(answer.detail?.scope).toBe("teaching");
+      expect(answer.views).toContain("faculty");
+      expect(answer.occurrences[0]?.attendanceMarked).toBe(false);
+    }
+  });
+});

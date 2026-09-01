@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { DEFAULT_TIMEZONE, endOfLocalDay, startOfLocalDay } from "~/lib/dates";
 import { addressSearch, contactAddress, personName } from "~/lib/people";
+import { spanWindow, SPANS } from "~/lib/schedule-spans";
 import {
   detailFor,
   PERSPECTIVES,
@@ -74,6 +75,14 @@ const selectOccurrence = {
       user: { select: { name: true } },
     },
   },
+  // Whether a register has been taken, as a count rather than the rows: the
+  // detail panel only ever asks the yes/no question, and one correlated count
+  // on a query that already runs is cheaper than the panel fetching for itself
+  // every time somebody opens a block. A combined lecture has one session per
+  // cohort — `AttendanceSession` is unique on `[occurrenceId, groupId]` — so
+  // "more than none" is "at least one cohort's register is in", which is what
+  // the sentence in the panel claims.
+  _count: { select: { attendance: true } },
 } as const;
 
 type OccurrenceRow = {
@@ -99,9 +108,16 @@ type OccurrenceRow = {
     shortName: string | null;
     user: { name: string | null };
   } | null;
+  _count: { attendance: number };
 };
 
-function toDto(row: OccurrenceRow) {
+/**
+ * @param readsAttendance Whether this viewer may be told that a register has
+ *   been taken. Withheld as `null` rather than `false` from everybody else,
+ *   because "no" and "you may not ask" are different answers and a screen that
+ *   confused them would draw "not yet taken" over a lecture that was.
+ */
+function toDto(row: OccurrenceRow, readsAttendance: boolean) {
   return {
     occurrenceId: row.id,
     eventId: row.eventId,
@@ -130,6 +146,19 @@ function toDto(row: OccurrenceRow) {
       ),
     ],
     isRecurring: row.event.rrule !== null,
+    /**
+     * Whether anybody's register has been taken for this sitting, or null for a
+     * viewer who is not entitled to know.
+     *
+     * The timetable is open to every signed-in member now, and this is the one
+     * field on it that is not noticeboard information: everywhere else the app
+     * puts reading a register behind ViewAttendance, and a whole term of "was
+     * this class registered" over the campus grid is a different thing from a
+     * student reading where their own lecture is. So it costs the permission it
+     * costs elsewhere — which MarkAttendance implies, so the lecturer who is
+     * about to take the register still sees it.
+     */
+    attendanceMarked: readsAttendance ? row._count.attendance > 0 : null,
   };
 }
 
@@ -180,7 +209,7 @@ function cohortDto(group: Cohort) {
 
 export type CohortDto = ReturnType<typeof cohortDto>;
 
-function toScheduleDto(row: ScheduleRow) {
+function toScheduleDto(row: ScheduleRow, readsAttendance: boolean) {
   // The occurrence carries the primary cohort and the join carries the rest; a
   // combined lecture needs all of them, and each of them once.
   const seen = new Map<string, Cohort>();
@@ -190,7 +219,7 @@ function toScheduleDto(row: ScheduleRow) {
   const cohorts = [...seen.values()].map(cohortDto);
 
   return {
-    ...toDto(row),
+    ...toDto(row, readsAttendance),
     cohorts,
     /** Everyone expected in the room, across every cohort attending. */
     headcount: cohorts.reduce((total, cohort) => total + cohort.size, 0),
@@ -199,6 +228,17 @@ function toScheduleDto(row: ScheduleRow) {
 }
 
 export type ScheduleDto = ReturnType<typeof toScheduleDto>;
+
+/**
+ * The most sittings one schedule answer will carry.
+ *
+ * The window is the real bound — a month grid is at most 42 days — and this is
+ * the backstop under it, for the cohort whose month is genuinely enormous.
+ * Deliberately not the `pageInput`/`toPage` envelope the list endpoints use:
+ * paging a calendar by row count cuts a Wednesday in half, and there is no page
+ * two a month grid could draw. When it bites, the screen says so.
+ */
+const MAX_SCHEDULE_OCCURRENCES = 500;
 
 /** What somebody is, for the purposes of having a day: enrolled, teaching, or both. */
 async function profilesOf(db: Db, userId: string) {
@@ -235,6 +275,17 @@ function ownershipTest(profiles: Awaited<ReturnType<typeof profilesOf>>) {
   return (occurrence: { groupId: string | null; facultyId: string | null }) =>
     (occurrence.groupId !== null && groupIds.has(occurrence.groupId)) ||
     (facultyId !== null && occurrence.facultyId === facultyId);
+}
+
+/**
+ * Whether this caller may be told that a register has been taken.
+ *
+ * `MarkAttendance` implies `ViewAttendance` (see PERMISSION_IMPLIES), so the
+ * lecturer about to take one is covered by the same test as the coordinator
+ * reading it back.
+ */
+function readsAttendance(bits: { has: (flag: bigint) => boolean }): boolean {
+  return bits.has(PermissionFlags.ViewAttendance);
 }
 
 async function orgTimezone(db: Db, orgId: string): Promise<string> {
@@ -303,6 +354,10 @@ export const timetableRouter = createTRPCRouter({
         ]);
 
       const isMine = ownershipTest(profiles);
+      // Asked once for the whole grid rather than per row: it is a BigInt test
+      // with an implication closure behind it, and a campus day is hundreds of
+      // sittings.
+      const marks = readsAttendance(ctx.bits);
 
       return {
         timeZone,
@@ -311,7 +366,7 @@ export const timetableRouter = createTRPCRouter({
         rooms,
         buildings,
         occurrences: (occurrences as OccurrenceRow[]).map((row) => {
-          const dto = toDto(row);
+          const dto = toDto(row, marks);
           /** Drawn in gold on the grid — see `ownershipTest`. */
           return { ...dto, isMine: isMine(dto) };
         }),
@@ -344,7 +399,8 @@ export const timetableRouter = createTRPCRouter({
         select: selectOccurrence,
         orderBy: { start: "asc" },
       });
-      return (occurrences as OccurrenceRow[]).map(toDto);
+      const marks = readsAttendance(ctx.bits);
+      return (occurrences as OccurrenceRow[]).map((row) => toDto(row, marks));
     }),
 
   /**
@@ -380,7 +436,9 @@ export const timetableRouter = createTRPCRouter({
         from,
         to,
         scope,
-        occurrences: (occurrences as OccurrenceRow[]).map(toDto),
+        occurrences: (occurrences as OccurrenceRow[]).map((row) =>
+          toDto(row, readsAttendance(ctx.bits)),
+        ),
       };
     }),
 
@@ -614,6 +672,15 @@ export const timetableRouter = createTRPCRouter({
          * to ask for the day first would render today, then jump.
          */
         date: z.date().optional(),
+        /**
+         * How much of the calendar to answer with.
+         *
+         * The caller states a span and an anchor day, never a window of its
+         * own, so the widest thing this procedure can be asked for is one
+         * month grid — 42 days. There is no input that reaches a term. It
+         * defaults to a day, so every existing caller keeps working untouched.
+         */
+        span: z.enum(SPANS).default("day"),
         viewAs: z.enum(PERSPECTIVES).optional(),
         /** Somebody else's day, for whoever is entitled to look at it. */
         asUserId: z.string().cuid().optional(),
@@ -704,17 +771,39 @@ export const timetableRouter = createTRPCRouter({
         }
       }
 
-      const anchor =
+      /**
+       * The moment the window is cut around, and the day the client selects.
+       *
+       * `nextClassMoment` is asked the same question whatever the span, and the
+       * span decides how much of the calendar around its answer to return — so
+       * on a Friday evening the day opens on Monday, the week opens on next
+       * week, and the month opens on the month that Monday falls in. One
+       * pleasant consequence of `belongs` being the *subject's*: "view as Dr
+       * Rao" plus Week opens on the week of Dr Rao's next class, not yours.
+       */
+      const moment =
         input.date ?? (await nextClassMoment(ctx.db, ctx.orgId, belongs));
-      const from = startOfLocalDay(anchor, timeZone);
-      const to = endOfLocalDay(anchor, timeZone);
+      const anchor = startOfLocalDay(moment, timeZone);
+      const { from, to } = spanWindow(moment, input.span, timeZone);
 
-      const base = { timeZone, from, to, views, viewAs, viewingAs, detail };
+      const base = {
+        timeZone,
+        span: input.span,
+        /** The day on screen. For a week or a month, the one inside the window. */
+        anchor,
+        from,
+        to,
+        views,
+        viewAs,
+        viewingAs,
+        detail,
+      };
       // No detail means no perspective, which means nothing is theirs to see.
-      if (belongs.length === 0)
-        return { ...base, occurrences: [] as ScheduleDto[] };
+      if (belongs.length === 0) {
+        return { ...base, truncated: false, occurrences: [] as ScheduleDto[] };
+      }
 
-      const occurrences = await ctx.db.eventOccurrence.findMany({
+      const rows = await ctx.db.eventOccurrence.findMany({
         where: {
           orgId: ctx.orgId,
           status: { in: [...OCCUPYING_STATUSES] },
@@ -723,12 +812,22 @@ export const timetableRouter = createTRPCRouter({
           OR: belongs,
         },
         select: selectSchedule,
-        orderBy: { start: "asc" },
+        // A total order, not tidiness: without the tie-break, *which* rows a
+        // truncation drops is undetermined and the same month would draw
+        // differently on two loads.
+        orderBy: [{ start: "asc" }, { id: "asc" }],
+        take: MAX_SCHEDULE_OCCURRENCES + 1,
       });
+
+      const truncated = rows.length > MAX_SCHEDULE_OCCURRENCES;
+      const marks = readsAttendance(ctx.bits);
 
       return {
         ...base,
-        occurrences: (occurrences as ScheduleRow[]).map(toScheduleDto),
+        truncated,
+        occurrences: (rows as ScheduleRow[])
+          .slice(0, MAX_SCHEDULE_OCCURRENCES)
+          .map((row) => toScheduleDto(row, marks)),
       };
     }),
 
@@ -752,7 +851,8 @@ export const timetableRouter = createTRPCRouter({
         select: selectOccurrence,
         orderBy: { start: "asc" },
       });
-      return (occurrences as OccurrenceRow[]).map(toDto);
+      const marks = readsAttendance(ctx.bits);
+      return (occurrences as OccurrenceRow[]).map((row) => toDto(row, marks));
     }),
 });
 
