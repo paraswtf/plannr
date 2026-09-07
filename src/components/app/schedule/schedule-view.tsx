@@ -12,7 +12,14 @@ import type { GridEvent } from "~/components/app/timetable/timetable-grid";
 import { useNow } from "~/components/app/timetable/use-now";
 import { Card } from "~/components/ui/card";
 import { Segmented } from "~/components/ui/segmented";
-import { addDays, isSameLocalDay, startOfLocalDay } from "~/lib/dates";
+import {
+  addDays,
+  formatFullDate,
+  formatMonthLabel,
+  isSameLocalDay,
+  startOfLocalDay,
+  toWallTime,
+} from "~/lib/dates";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import {
   spanHolds,
@@ -20,6 +27,7 @@ import {
   SPAN_NOUNS,
   SPANS,
   startOfLocalWeek,
+  stepSpan,
   type ScheduleSpan,
 } from "~/lib/schedule-spans";
 import {
@@ -35,6 +43,7 @@ import { DaySkeleton } from "./day-skeleton";
 import { MonthGrid } from "./month-grid";
 import { monthLayout } from "./month-layout";
 import { MonthSkeleton } from "./month-skeleton";
+import { SwipeSpan } from "./swipe-span";
 import { WeekCalendar } from "./week-calendar";
 import { ViewAs, type ViewAsSubject } from "./view-as";
 import { WeekSkeleton } from "./week-skeleton";
@@ -313,6 +322,33 @@ export function ScheduleView({
   };
 
   const noun = SPAN_NOUNS[span];
+
+  /**
+   * A sideways flick steps whatever unit is on screen.
+   *
+   * Not in the week span: its columns already pan sideways inside their own
+   * scroller, and a gesture that means two things depending on where the finger
+   * landed is a gesture nobody trusts. Undefined there, which is what makes
+   * `SwipeSpan` render its children and nothing else.
+   *
+   * It goes through `goTo`, so a flick counts as moving the screen by hand
+   * exactly as the arrows do — the caption explaining why the screen opened
+   * away from today drops away, and asking for today clears the latch that
+   * stops the calendar scrolling to the present.
+   */
+  const swipeStep =
+    span === "week"
+      ? undefined
+      : (by: -1 | 1) => goTo(stepSpan(date, span, by, timeZone));
+
+  /** What a screen reader is told after a flick has moved the screen. */
+  const announceSpan =
+    span === "day"
+      ? formatFullDate(date, timeZone)
+      : formatMonthLabel(
+          toWallTime(date, timeZone).year,
+          toWallTime(date, timeZone).month,
+        );
   const busyDays = new Set(
     blocks.map((b) => startOfLocalDay(b.start, timeZone).getTime()),
   ).size;
@@ -443,98 +479,104 @@ export function ScheduleView({
             />
           </div>
 
-          {stale ? (
-            // Sized from the window the last answer left behind, so the page
-            // does not change height underneath whoever is reading it.
-            span === "day" ? (
-              <DaySkeleton
-                startHour={frame.startHour}
-                endHour={frame.endHour}
+          {/*
+           * The flick lives outside the branch, so a run of quick swipes is
+           * not blocked by the half second each new day spends as a skeleton.
+           */}
+          <SwipeSpan onStep={swipeStep} announce={announceSpan} noun={noun}>
+            {stale ? (
+              // Sized from the window the last answer left behind, so the page
+              // does not change height underneath whoever is reading it.
+              span === "day" ? (
+                <DaySkeleton
+                  startHour={frame.startHour}
+                  endHour={frame.endHour}
+                />
+              ) : span === "week" ? (
+                <WeekSkeleton
+                  days={weekDays}
+                  timeZone={timeZone}
+                  now={now}
+                  startHour={frame.startHour}
+                  endHour={frame.endHour}
+                />
+              ) : (
+                <MonthSkeleton weeks={month.weeks} timeZone={timeZone} />
+              )
+            ) : isError && !data ? (
+              /*
+                A failed request is not an empty week. Without this branch the
+                screen falls through to the card below and says "You have no
+                classes of your own", which is the same untruth the skeleton was
+                added to stop — stated with more confidence, because it reads as
+                an answer rather than a wait.
+
+                Not folded into `stale`: a skeleton that spins for ever is worse
+                than either. An error has to say it is an error.
+              */
+              <Card>
+                <p className="text-title m-0 text-[14px] font-semibold">
+                  This {noun} could not be loaded.
+                </p>
+                <p className="text-muted mt-1 mb-3 text-[13px]">
+                  Nothing is wrong with your timetable — the request did not get
+                  through. It will try again on its own in a minute.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
+                  style={{
+                    background: "rgba(68,88,121,0.07)",
+                    color: "var(--slate)",
+                  }}
+                >
+                  Try again now
+                </button>
+              </Card>
+            ) : span === "month" ? (
+              // The month draws its own empty days, so it stands whether or not
+              // anything is on it — an empty month grid is a true and useful
+              // answer, where an empty day column is just a blank.
+              <MonthGrid
+                weeks={month.weeks}
+                timeZone={timeZone}
+                now={now}
+                onDayClick={dropIntoDay}
+                onEventClick={onEventClick}
+                onEventPress={onEventPress}
               />
             ) : span === "week" ? (
-              <WeekSkeleton
+              <WeekCalendar
+                events={blocks}
                 days={weekDays}
                 timeZone={timeZone}
                 now={now}
-                startHour={frame.startHour}
-                endHour={frame.endHour}
+                onEventClick={onEventClick}
+                onEventPress={onEventPress}
+                onDayClick={dropIntoDay}
+              />
+            ) : blocks.length > 0 ? (
+              <DayCalendar
+                events={blocks}
+                timeZone={timeZone}
+                now={now}
+                isToday={isSameLocalDay(date, now, timeZone)}
+                centreOnNow={!centred.current}
+                onCentred={() => (centred.current = true)}
+                onEventClick={onEventClick}
+                onEventPress={onEventPress}
               />
             ) : (
-              <MonthSkeleton weeks={month.weeks} timeZone={timeZone} />
-            )
-          ) : isError && !data ? (
-            /*
-              A failed request is not an empty week. Without this branch the
-              screen falls through to the card below and says "You have no
-              classes of your own", which is the same untruth the skeleton was
-              added to stop — stated with more confidence, because it reads as
-              an answer rather than a wait.
-
-              Not folded into `stale`: a skeleton that spins for ever is worse
-              than either. An error has to say it is an error.
-            */
-            <Card>
-              <p className="text-title m-0 text-[14px] font-semibold">
-                This {noun} could not be loaded.
-              </p>
-              <p className="text-muted mt-1 mb-3 text-[13px]">
-                Nothing is wrong with your timetable — the request did not get
-                through. It will try again on its own in a minute.
-              </p>
-              <button
-                type="button"
-                onClick={() => void refetch()}
-                className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
-                style={{
-                  background: "rgba(68,88,121,0.07)",
-                  color: "var(--slate)",
-                }}
-              >
-                Try again now
-              </button>
-            </Card>
-          ) : span === "month" ? (
-            // The month draws its own empty days, so it stands whether or not
-            // anything is on it — an empty month grid is a true and useful
-            // answer, where an empty day column is just a blank.
-            <MonthGrid
-              weeks={month.weeks}
-              timeZone={timeZone}
-              now={now}
-              onDayClick={dropIntoDay}
-              onEventClick={onEventClick}
-              onEventPress={onEventPress}
-            />
-          ) : span === "week" ? (
-            <WeekCalendar
-              events={blocks}
-              days={weekDays}
-              timeZone={timeZone}
-              now={now}
-              onEventClick={onEventClick}
-              onEventPress={onEventPress}
-              onDayClick={dropIntoDay}
-            />
-          ) : blocks.length > 0 ? (
-            <DayCalendar
-              events={blocks}
-              timeZone={timeZone}
-              now={now}
-              isToday={isSameLocalDay(date, now, timeZone)}
-              centreOnNow={!centred.current}
-              onCentred={() => (centred.current = true)}
-              onEventClick={onEventClick}
-              onEventPress={onEventPress}
-            />
-          ) : (
-            <Card>
-              <p className="text-muted m-0 text-[14px]">
-                {views.length === 0
-                  ? "You have no classes of your own — the full timetable is on the Timetable screen."
-                  : "Nothing scheduled for this day."}
-              </p>
-            </Card>
-          )}
+              <Card>
+                <p className="text-muted m-0 text-[14px]">
+                  {views.length === 0
+                    ? "You have no classes of your own — the full timetable is on the Timetable screen."
+                    : "Nothing scheduled for this day."}
+                </p>
+              </Card>
+            )}
+          </SwipeSpan>
         </div>
       </div>
 

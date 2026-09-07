@@ -36,19 +36,37 @@ import type { RouterOutputs } from "~/trpc/react";
 
 type GridData = RouterOutputs["timetable"]["grid"];
 
+/** Name of the cookie the compact choice lives in. Read in the page above. */
+export const COMPACT_COOKIE = "plannr-timetable-compact";
+
 export function TimetableView({
   initialDate,
   initial,
   permissions,
+  defaultCompact = false,
 }: {
   initialDate: string;
   initial: GridData;
   permissions: string;
+  /** What the cookie was holding when the page was rendered. */
+  defaultCompact?: boolean;
 }) {
   const router = useRouter();
   const utils = api.useUtils();
   const [date, setDate] = useState(() => new Date(initialDate));
   const [buildingId, setBuildingId] = useState<string | undefined>();
+  /**
+   * Remembered, the way the sidebar's fold is and for the same reason: it is a
+   * choice about how this screen is drawn, and being asked it again on every
+   * visit is what makes a preference not worth setting. Read on the server so
+   * the grid is rendered the shape it is about to be — discovered after paint,
+   * a compact grid would draw full size and visibly collapse.
+   */
+  const [compact, setCompactState] = useState(defaultCompact);
+  const setCompact = (next: boolean) => {
+    setCompactState(next);
+    document.cookie = `${COMPACT_COOKIE}=${next ? "on" : "off"}; path=/; max-age=31536000; samesite=lax`;
+  };
   // The span dragged out of the grid, held here so the grid can keep drawing it
   // while the drawer nudges it around.
   const [span, setSpan] = useState<BookingSpan | null>(null);
@@ -329,22 +347,25 @@ export function TimetableView({
         <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <DayNavigator date={date} timeZone={timeZone} onChange={goToDay} />
-            <Select
-              ariaLabel="Building"
-              // On its own line under the day controls it may as well be the
-              // width of that line; a 120px stub floating at the left reads as
-              // something that came loose.
-              className="w-full sm:w-auto"
-              value={buildingId ?? ""}
-              options={[
-                { value: "", label: "All buildings" },
-                ...buildings.map((b) => ({ value: b.id, label: b.name })),
-              ]}
-              onChange={(id) => {
-                setBuildingId(id || undefined);
-                setSpan(null);
-              }}
-            />
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Select
+                ariaLabel="Building"
+                // It shared its line with nothing and could be the width of it.
+                // The compact toggle sits beside it now, so it takes what that
+                // leaves rather than the whole width.
+                className="min-w-0 flex-1 sm:w-auto"
+                value={buildingId ?? ""}
+                options={[
+                  { value: "", label: "All buildings" },
+                  ...buildings.map((b) => ({ value: b.id, label: b.name })),
+                ]}
+                onChange={(id) => {
+                  setBuildingId(id || undefined);
+                  setSpan(null);
+                }}
+              />
+              <CompactToggle on={compact} onChange={setCompact} />
+            </div>
           </div>
 
           {data && data.rooms.length > 0 ? (
@@ -365,6 +386,7 @@ export function TimetableView({
               onEventPress={pressEvent}
               selection={selection}
               unavailableRoomIds={unavailableRooms}
+              compact={compact}
             />
           ) : (
             <div
@@ -541,5 +563,50 @@ export function TimetableView({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Whether the whole timetable is fitted to the screen.
+ *
+ * Not a `Segmented`, though the shape is tempting: there is already a segmented
+ * strip of dated tabs on this row, and a second pill group beside it reads as
+ * one control with two halves that disagree. This is a single binary, so it
+ * takes the shape the row's other binary already has — the Today button's, with
+ * the sidebar fold's `aria-pressed` — and borrows the chosen pill's treatment
+ * when it is on, so on and off cannot be confused.
+ */
+function CompactToggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      title="Fit the whole timetable on screen"
+      onClick={() => onChange(!on)}
+      className="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
+      style={
+        on
+          ? {
+              background: "var(--slate)",
+              color: "#fff",
+              boxShadow: "0 2px 8px rgba(68,88,121,0.28)",
+            }
+          : { background: "rgba(68,88,121,0.07)", color: "var(--slate)" }
+      }
+    >
+      <Icon
+        name="grid"
+        size={14}
+        color={on ? "#fff" : "var(--slate)"}
+        stroke={2.2}
+      />
+      Compact
+    </button>
   );
 }
