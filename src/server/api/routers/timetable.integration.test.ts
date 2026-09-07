@@ -899,12 +899,18 @@ describe("view-as favourites", () => {
     ).rejects.toThrow(/no such person/i);
   });
 
-  it("drops a favourite whose subject has stopped being reachable", async () => {
+  it("keeps somebody who has not signed in yet", async () => {
     /*
-     * Two ways that happens, and both are silent: somebody leaves, and a role
-     * is taken away. Filtering here rather than on the screen means there is
-     * one answer to "may I look through those eyes" — the same `perspectivesFor`
-     * the chooser itself runs — instead of two that can disagree.
+     * The regression this whole procedure got wrong once. `isActive` is false
+     * on every imported record until that person first arrives through Google
+     * and is linked to it — `import-sicsr.ts` says so where it sets the flag —
+     * so on the live database a third of the college reads as inactive. It is
+     * not a liveness test, and treating it as one meant the picker offered
+     * somebody, the star wrote a row, and this read silently threw it away.
+     *
+     * What the read must honour is the population the *write* accepts, which is
+     * the population the picker offers: somebody with a timetable who is not a
+     * machine. Nothing else.
      */
     const caller = callerFor(coordinator);
     await caller.timetable.toggleFavourite({
@@ -912,27 +918,34 @@ describe("view-as favourites", () => {
       subject: lecturer.id,
       on: true,
     });
-    await caller.timetable.toggleFavourite({
-      kind: "perspective",
-      subject: "coordinator",
-      on: true,
-    });
-    expect(await caller.timetable.favourites()).toHaveLength(2);
-
     await db.user.update({
       where: { id: lecturer.id },
       data: { isActive: false },
     });
-    // The coordinator perspective comes from ManageAllEvents; without it the
-    // angle is no longer theirs to take.
-    const stripped = callerFor({ ...coordinator, permissions: 0n });
 
     expect(await caller.timetable.favourites()).toHaveLength(1);
-    expect(await stripped.timetable.favourites()).toEqual([]);
 
     await db.user.update({
       where: { id: lecturer.id },
       data: { isActive: true },
     });
+  });
+
+  it("drops a perspective the viewer may no longer take", async () => {
+    // Filtering here rather than on the screen means there is one answer to
+    // "may I look through those eyes" — the same `perspectivesFor` the chooser
+    // itself runs — instead of two that can disagree.
+    const caller = callerFor(coordinator);
+    await caller.timetable.toggleFavourite({
+      kind: "perspective",
+      subject: "coordinator",
+      on: true,
+    });
+    expect(await caller.timetable.favourites()).toHaveLength(1);
+
+    // The coordinator angle comes from ManageAllEvents; without it, it is no
+    // longer theirs to take.
+    const stripped = callerFor({ ...coordinator, permissions: 0n });
+    expect(await stripped.timetable.favourites()).toEqual([]);
   });
 });

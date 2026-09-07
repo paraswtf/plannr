@@ -725,8 +725,13 @@ export const timetableRouter = createTRPCRouter({
               id: true,
               name: true,
               email: true,
-              isActive: true,
               isServiceAccount: true,
+              // Whether they have a timetable at all, which is the same half of
+              // the test `searchPeople` applies. Selected rather than filtered
+              // in the query, because a `where` on this relation would throw
+              // away the perspective rows too — they have no person.
+              studentProfile: { select: { userId: true } },
+              facultyProfile: { select: { userId: true } },
             },
           },
         },
@@ -758,9 +763,23 @@ export const timetableRouter = createTRPCRouter({
           : [];
       }
       const person = row.person;
-      // A machine has no schedule, and a deactivated account is not one to
-      // hand somebody a shortcut to.
-      if (!person || !person.isActive || person.isServiceAccount) return [];
+      /*
+       * Exactly the population `searchPeople` offers: not a machine, and
+       * somebody with a timetable of their own.
+       *
+       * Deliberately *not* `isActive`, which was the first guess and was wrong
+       * about what the flag means. It is false on every imported record —
+       * `import-sicsr.ts` says so where it sets it: nobody signs in as one
+       * until they first arrive through Google and are linked to it. Two thirds
+       * of the college is active and a third is not, so filtering on it here
+       * meant the picker cheerfully offered somebody, the star wrote a row, and
+       * the read silently threw it away. The write already used this rule; the
+       * two have to agree or starring appears to do nothing at all.
+       */
+      const hasTimetable =
+        person !== null &&
+        (person.studentProfile !== null || person.facultyProfile !== null);
+      if (!person || !hasTimetable || person.isServiceAccount) return [];
       return [
         {
           kind: "person" as const,
