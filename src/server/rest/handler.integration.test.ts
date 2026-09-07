@@ -69,6 +69,7 @@ function callerFor(user: {
         permissions: user.permissions.toString(),
         isActive: true,
         isServiceAccount: false,
+        viaApiKey: false,
       },
     },
   });

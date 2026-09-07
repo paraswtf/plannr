@@ -18,6 +18,7 @@ sooner. Delete them and the API would be exactly as safe.
 - [Base URL](#base-url)
 - [Authentication](#authentication)
 - [A key is a service principal](#a-key-is-a-service-principal)
+- [Personal keys](#personal-keys)
 - [Scopes](#scopes)
 - [Requests and responses](#requests-and-responses)
 - [Errors](#errors)
@@ -177,6 +178,11 @@ not hold yourself, and `Administrator` cannot be granted to a key at all.
 
 ## A key is a service principal
 
+Everything in this section is about the keys an administrator mints from
+`/api-keys`. There is a second kind — a *personal* key, which does act as a
+person — described in [Personal keys](#personal-keys) below. Where the two
+differ is stated there rather than qualified everywhere here.
+
 Your key does not act as the administrator who created it. It acts as **itself**.
 
 Behind every key is a hidden `User` row — its _principal_ — flagged
@@ -213,6 +219,56 @@ and has no linked Google Calendar. Endpoints whose answer is defined relative to
 whoever is asking therefore have no truthful answer to give it. Rather than
 return a confidently empty one — a correct answer to a question nobody asked, and
 a very slow bug to find — they refuse with `403 requires_user`.
+
+## Personal keys
+
+A personal key is the exception to everything above: it **is** a person. It
+carries its owner's id, so "my next class" has an answer, and it appears in the
+audit trail as them rather than as a machine — because they are the one who is
+answerable for it.
+
+It is minted by its owner, from **Settings → Siri** in the app, and needs no
+administrator. That is safe for one reason, and it is worth stating precisely:
+
+> A personal key's authority is the **intersection** of the scopes it was
+> granted with the permissions its owner holds at the moment of the request.
+
+Both halves are live. It can never reach anything its owner could not reach by
+signing in; losing a role narrows every key that person holds on the very next
+request, with nothing to revoke and nothing to migrate; and being deactivated
+switches all of them off. Granting one a scope its owner lacks grants nothing.
+An administrator's personal key does **not** carry `Administrator`, so it cannot
+quietly acquire whatever a future release adds.
+
+Today a personal key holds exactly one scope, `ViewOwnEvents`, which is what the
+[Siri endpoints](#endpoint-reference) need and the narrowest thing that answers
+them. A leaked one reads its owner's own timetable — the thing the college posts
+on a noticeboard — and can do nothing else at all.
+
+Three rules follow, and none of them is a formality.
+
+**No credential may manage credentials.** A personal key is refused by every
+`/api-keys` endpoint, including `POST /me/api-keys`, exactly as a service key is.
+A token that can mint a token survives its own revocation, under a name nobody
+in the building recognises.
+
+**Personal keys are not part of the institution's estate.** They do not appear in
+`GET /api-keys`, and an administrator cannot read, roll, revoke or delete one by
+id. Rolling in particular would hand them a working credential that acts as
+somebody else. The emergency stop is the honest one: deactivate the person, and
+every key they hold stops on the next request with the audit trail intact.
+
+**Endpoints marked `person` accept one; endpoints marked `session` do not.** The
+Siri endpoints are the former. The `/timetable/my-*`, `/me`-shaped and
+`/api-keys` endpoints remain browser-only, and widening any of them is a
+deliberate decision rather than a consequence of this feature.
+
+| Endpoint                            | Who                        |
+| ----------------------------------- | -------------------------- |
+| `GET /me/api-keys`                  | browser only               |
+| `POST /me/api-keys`                 | browser only               |
+| `POST /me/api-keys/{id}/revoke`     | browser only               |
+| `GET /siri/*`                       | browser or a personal key  |
 
 ### The endpoints that refuse a key, and what to call instead
 
@@ -1291,6 +1347,47 @@ needed one.
 | `POST /api-keys/{id}/revoke` | Revoke an API key                    | `ManageRoles` | person only, read twice |
 | `DELETE /api-keys/{id}`      | Delete a revoked API key             | `ManageRoles` | person only, read twice |
 | `GET /api-keys/{id}/usage`   | Read an API key's usage              | `ManageRoles` | person only             |
+
+The three personal-key routes are person-only for a stronger reason than the
+rest: a personal key carries its owner's id, so a check asking "is there a human
+behind this?" would wave it through, and a credential that can mint a credential
+outlives its own revocation. They need no scope, because a personal key grants
+nothing its owner does not already hold.
+
+| Endpoint                        | What it does                             | Scopes | Notes                   |
+| ------------------------------- | ---------------------------------------- | ------ | ----------------------- |
+| `GET /me/api-keys`              | List the caller's own personal keys       | —      | browser only            |
+| `POST /me/api-keys`             | Mint a personal key for the caller        | —      | browser only, read once |
+| `POST /me/api-keys/{id}/revoke` | Switch off one of the caller's own keys   | —      | browser only            |
+
+### Siri
+
+Four answers written to be read out loud by a voice assistant. Each returns one
+field, `speech`, holding an English sentence and nothing else — a deliberately
+poor API shape and an excellent Apple Shortcut shape: Get Contents of URL, Get
+Dictionary Value, Speak Text, and there is nothing left to configure. Anything
+that wants the underlying data should read the timetable rather than parse
+English back apart.
+
+These are the only endpoints a [personal key](#personal-keys) may call. That is
+enforced the safe way round — a personal key is refused everywhere by default
+and admitted here by name — because a good deal of the app is gated on identity
+rather than on a permission bit, and narrow scopes would not have protected
+those routes from a token on a lost phone.
+
+`day` is forgiving because it is typed on a phone: `today`, `tomorrow`, a
+weekday like `monday` or `tue` (meaning the next one, today included, where
+`next monday` means the one after), or a date as `YYYY-MM-DD`. Left out, it
+means today. A day word that cannot be read is answered with a **200 and a
+sentence saying so**, not a 400 — a Shortcut hears an HTTP error as silence, and
+the person has no idea what they got wrong.
+
+| Endpoint                | What it does                                             | Scopes           | Notes             |
+| ----------------------- | -------------------------------------------------------- | ---------------- | ----------------- |
+| `GET /siri/next-class`  | Say what is on next, out loud                             | `ViewOwnEvents`  | takes no day      |
+| `GET /siri/day-start`   | Say when the day starts, out loud                         | `ViewOwnEvents`  | takes `day`       |
+| `GET /siri/timings`     | Say the college hours for a day, with the breaks          | `ViewOwnEvents`  | takes `day`       |
+| `GET /siri/any-classes` | Say whether there is anything on, out loud                | `ViewOwnEvents`  | takes `day`       |
 
 ## How this is put together
 

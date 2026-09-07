@@ -156,7 +156,7 @@ export const protectedProcedure = t.procedure
       roles: user.roles,
       permissions,
       /**
-       * Whether a person or an app is on the other end.
+       * Whether a person or an app is on the other end, and how they arrived.
        *
        * Almost nothing should branch on this — the permission bits are the
        * authorisation story, and a key that holds the bit may do the thing.
@@ -164,8 +164,20 @@ export const protectedProcedure = t.procedure
        * human behind them: connecting somebody's Google Calendar, reading
        * "my" timetable. Those refuse a service principal outright rather than
        * quietly returning an empty answer.
+       *
+       * Three values, not two, because a personal key is both things at once.
+       * It *is* a person — it carries their id and their timetable, so "my
+       * classes" is a question it can answer — and it is also a credential
+       * somebody could leave in a Shortcut on a lost phone. So the operations
+       * that need a human behind them get one, and the operations that must
+       * never be reachable from a token still refuse it: see `refuseApiKey` in
+       * the API-keys router, which is why a key of any kind cannot mint a key.
        */
-      kind: user.isServiceAccount ? ("service" as const) : ("user" as const),
+      kind: user.isServiceAccount
+        ? ("service" as const)
+        : user.viaApiKey
+          ? ("personal" as const)
+          : ("user" as const),
     };
 
     return next({

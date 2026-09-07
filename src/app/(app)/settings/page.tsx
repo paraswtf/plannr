@@ -36,6 +36,19 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
+  // Siri first, and it is the only section here that is not about running the
+  // institution. It is about one person's own phone, it grants nothing they do
+  // not already have, and it is the reason this screen opens for a student at
+  // all — so putting it under the administrator's sections would bury the only
+  // thing most people who reach this page came for.
+  {
+    href: "/settings/siri",
+    title: "Siri",
+    blurb:
+      "Ask your phone when your next lecture is. Set up a key and a shortcut, once, and then just ask.",
+    icon: "sparkles",
+    requires: PermissionFlags.ViewOwnEvents,
+  },
   {
     href: "/settings/api-keys",
     title: "API keys",
@@ -60,7 +73,7 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="How the institution is run, rather than what is on its timetable"
+        subtitle="Your own devices, and — for whoever runs the place — how the institution is run"
       />
       <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
         {sections.length === 0 ? (

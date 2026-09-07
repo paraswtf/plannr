@@ -70,6 +70,10 @@ function callerFor(user: {
         permissions: user.permissions.toString(),
         isActive: true,
         isServiceAccount: user.isServiceAccount ?? false,
+        // Every caller in this suite is a browser. The one thing that arrives
+        // on a bearer token is built by `authenticateApiKey`, which is tested
+        // where it lives rather than faked here.
+        viaApiKey: false,
       },
     },
   });

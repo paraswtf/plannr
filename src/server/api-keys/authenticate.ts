@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Session } from "next-auth";
 
+import { intersectPermissions } from "~/lib/permissions";
 import { db } from "~/server/db";
 import { Prisma } from "../../../generated/prisma";
 import { bearerFrom, parseToken, verifySecret } from "./secret";
@@ -25,6 +26,8 @@ export interface ApiKeyIdentity {
   name: string;
   prefix: string;
   principalId: string;
+  /** The person a personal key speaks for; null for a service key. */
+  ownerId: string | null;
 }
 
 export type ApiAuthFailure =
@@ -83,6 +86,20 @@ export async function authenticateApiKey(
       principal: {
         select: { id: true, name: true, email: true, isActive: true },
       },
+      ownerId: true,
+      // A personal key's authority is its owner's, and it is read here rather
+      // than copied onto the key at mint time so that losing a role narrows
+      // every key that person holds on the very next request.
+      owner: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          permissions: true,
+          roles: { select: { role: { select: { permissions: true } } } },
+        },
+      },
     },
   });
 
@@ -103,6 +120,12 @@ export async function authenticateApiKey(
   if (!key.principal.isActive) {
     return { ok: false, failure: "PRINCIPAL_INACTIVE" };
   }
+  // And a personal key is only ever as live as the person it speaks for.
+  // Deactivating somebody has to switch off every credential they hold, or
+  // "remove their access" is a thing the console claims and does not do.
+  if (key.ownerId && !key.owner?.isActive) {
+    return { ok: false, failure: "PRINCIPAL_INACTIVE" };
+  }
 
   const rate = await recordUse(key.id, key.rateLimitPerMinute, ip);
   if (rate.remaining < 0) {
@@ -118,7 +141,36 @@ export async function authenticateApiKey(
     name: key.name,
     prefix: key.prefix,
     principalId: key.principalId,
+    ownerId: key.ownerId,
   };
+
+  /**
+   * Who the session is for, and what it may do.
+   *
+   * A service key is its own principal: a machine with no roles, whose entire
+   * authority is the `scopes` column. A personal key is the opposite — it *is*
+   * the person, so the session carries their id, and every procedure that asks
+   * "what is mine?" gets the right answer without knowing a key was involved.
+   *
+   * The authority of a personal key is the intersection of two live things:
+   * what the key was granted, and what its owner holds right now. Neither half
+   * can be widened by the other. Granting a key `ManageAllEvents` gives a
+   * student nothing, because the intersection is empty; and a lecturer who
+   * loses a role loses it from every key they hold on the next request, with no
+   * revocation and no migration. The owner's own bits are assembled here the
+   * same way the cookie path assembles them in the session callback — personal
+   * grants unioned with every role — because two answers to "what may this
+   * person do?" is one answer too many.
+   */
+  const owner = key.owner;
+  const personal = key.ownerId !== null && owner !== null;
+
+  const ownerBits = owner
+    ? owner.roles.reduce(
+        (bits, held) => bits | held.role.permissions,
+        owner.permissions,
+      )
+    : 0n;
 
   return {
     ok: true,
@@ -130,16 +182,30 @@ export async function authenticateApiKey(
       // `Session` requires it and a date in the past would read as expired.
       expires: new Date(Date.now() + WINDOW_SECONDS * 1000).toISOString(),
       user: {
-        id: key.principal.id,
+        // No non-null assertions: `personal` is a const whose definition
+        // includes `owner !== null`, so the narrowing carries through.
+        id: personal ? owner.id : key.principal.id,
         orgId: key.orgId,
-        name: key.principal.name ?? key.name,
-        email: key.principal.email,
-        // No roles, ever. The scopes column is the whole grant, which is what
-        // makes "what can this key do?" answerable by reading one row.
+        name: personal
+          ? (owner.name ?? key.name)
+          : (key.principal.name ?? key.name),
+        email: personal ? owner.email : key.principal.email,
+        // No roles on the session either way. A service key has none, and a
+        // personal key's are already folded into the bits below — listing them
+        // as well would invite somebody to check the list rather than the
+        // intersection, and the two disagree by design.
         roles: [],
-        permissions: key.scopes.toString(),
+        permissions: (personal
+          ? intersectPermissions(ownerBits, key.scopes)
+          : key.scopes
+        ).toString(),
         isActive: true,
-        isServiceAccount: true,
+        // A personal key is a person, and the endpoints that answer "my week"
+        // must treat it as one. What it is *not* is a session somebody is
+        // sitting behind, which is a different question and is answered by
+        // `viaApiKey` — see the note on it in the auth types.
+        isServiceAccount: !personal,
+        viaApiKey: true,
       },
     },
   };

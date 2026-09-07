@@ -7,6 +7,7 @@ import { groupRoutes } from "./routes/groups";
 import { peopleRoutes } from "./routes/people";
 import { planRoutes } from "./routes/plans";
 import { roomRoutes } from "./routes/rooms";
+import { siriRoutes } from "./routes/siri";
 import { timetableRoutes } from "./routes/timetable";
 
 /**
@@ -28,6 +29,7 @@ export const ROUTES: RouteDef[] = [
   ...planRoutes,
   ...peopleRoutes,
   ...apiKeyRoutes,
+  ...siriRoutes,
 ];
 
 /**

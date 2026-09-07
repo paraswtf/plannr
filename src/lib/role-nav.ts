@@ -121,11 +121,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "building",
     requires: ["ManageGroups", "ManageProgrammes"],
   },
+  // Two audiences behind one door, which the index screen sorts out for
+  // itself. Most of what is under here is the institution's business and is
+  // gated section by section on the bit each one actually needs — but Siri is
+  // a person setting up their own phone, and a student has to be able to reach
+  // it. The same widening the timetable and the rooms took, for the same
+  // reason: `requires` says who may open the screen, and nothing more.
   {
     href: "/settings",
     label: "Settings",
     icon: "settings",
-    requires: ["ManageSettings"],
+    requires: ["ViewOwnEvents", "ManageSettings"],
   },
 ];
 

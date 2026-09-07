@@ -433,6 +433,9 @@ function scopeSentence(scopes: readonly string[]): string {
 const SERVICE_PRINCIPAL_REFUSAL =
   "An API key cannot call this endpoint. Its answer is defined relative to whoever is asking, and a service principal has no timetable of its own, no bookings and no linked calendar — so rather than hand an app a confidently empty answer, it refuses with 403. Ask for the same data by explicit id instead.";
 
+const PERSONAL_KEY_ONLY =
+  "This endpoint answers a question about the person calling it, so a service principal — a key that is its own machine identity — is refused with 403: it has no timetable to report. A personal key is not, because it speaks for the person who minted it and holds no more authority than they do. They are made by their owner from Settings > Siri.";
+
 function operationDescription(route: RouteDef): string {
   const paragraphs: string[] = [];
   if (route.description) paragraphs.push(route.description);
@@ -443,6 +446,7 @@ function operationDescription(route: RouteDef): string {
   }
   paragraphs.push(scopeSentence(route.scopes));
   if (route.actor === "session") paragraphs.push(SERVICE_PRINCIPAL_REFUSAL);
+  if (route.actor === "person") paragraphs.push(PERSONAL_KEY_ONLY);
   return paragraphs.join("\n\n");
 }
 
@@ -867,6 +871,10 @@ export function buildOpenApiDocument(origin: string): Record<string, unknown> {
     operation["x-plannr-procedure"] = route.procedure;
     operation["x-plannr-scopes"] = [...route.scopes].sort();
     if (route.actor === "session") operation["x-plannr-session-only"] = true;
+    // A separate marker rather than a second meaning for the one above: a
+    // generator reading "session only" would rightly stop offering the endpoint
+    // to a bearer token, and for these that would be wrong.
+    if (route.actor === "person") operation["x-plannr-personal-only"] = true;
     if (route.dangerous) operation["x-plannr-dangerous"] = true;
 
     const item = (paths[route.path] as JsonSchema | undefined) ?? {};

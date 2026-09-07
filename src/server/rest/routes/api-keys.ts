@@ -29,6 +29,14 @@ import { type RouteDef } from "../types";
  * narrowing happens here, which `RouteDef.scopes` explicitly permits: this
  * layer may be stricter than the app, never looser.
  *
+ * The three personal-key routes at the foot of the file are the exception that
+ * proves the rule, and they are `actor: "session"` for a stronger reason than
+ * the rest. A personal key carries a person's own id, so a check asking "is
+ * there a human behind this?" would wave it through — and a credential that can
+ * mint a credential renews itself past its own revocation. `refuseApiKey` in
+ * the router refuses every kind of token for that reason; this layer says the
+ * same thing one round trip earlier.
+ *
  * Scopes: `ManageRoles` throughout, because that is the bit the procedures
  * check. `GET /api-keys/scopes` is declared `ViewUsers` instead — the
  * procedure behind it gates on nothing more than being signed in, since the
@@ -144,5 +152,40 @@ export const apiKeyRoutes: RouteDef[] = [
     tag: "API keys",
     scopes: ["ManageRoles"],
     actor: "session",
+  },
+  {
+    method: "GET",
+    path: "/me/api-keys",
+    procedure: "apiKeys.mine",
+    summary: "List the caller's own personal keys",
+    description:
+      "The keys this person holds for their own devices — the ones minted from Settings > Siri, not the institution's integrations, which are at `/api-keys` and need `ManageRoles`. A personal key grants nothing of its own: its authority is the intersection of what it was given and what its owner holds at that moment, so it can reach nothing they could not reach by signing in, and it narrows the instant they lose a role. Never discloses a token; a lost one is revoked and replaced, not looked up.",
+    tag: "API keys",
+    scopes: [],
+    actor: "session",
+  },
+  {
+    method: "POST",
+    path: "/me/api-keys",
+    procedure: "apiKeys.createMine",
+    summary: "Mint a personal key for the caller's own devices",
+    description:
+      "Returns the only copy of the token that will ever exist — the database keeps a SHA-256 digest and nothing else, so once this response is gone the credential cannot be recovered by anybody. The scopes are not the caller's to choose: a personal key holds `ViewOwnEvents` and nothing more, which is what the Siri answers need and is the narrowest thing that answers them. Open to anybody signed in, and deliberately so: it grants no authority its owner does not already have.",
+    tag: "API keys",
+    scopes: [],
+    actor: "session",
+    dangerous: true,
+  },
+  {
+    method: "POST",
+    path: "/me/api-keys/{id}/revoke",
+    procedure: "apiKeys.revokeMine",
+    summary: "Switch off one of the caller's own personal keys",
+    description:
+      "Immediate and permanent — the row is kept so the audit trail still names it, but the token stops authenticating on the next request. Only the caller's own keys; an id belonging to anybody else, or to one of the institution's integrations, answers 404 rather than admitting it exists.",
+    tag: "API keys",
+    scopes: [],
+    actor: "session",
+    dangerous: true,
   },
 ];

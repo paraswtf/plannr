@@ -60,8 +60,33 @@ import { mintKey, servicePrincipalEmail } from "~/server/api-keys/secret";
  * here — they disclose no secret — and are refused at the REST doorway
  * instead, for the reason set out in `src/server/rest/routes/api-keys.ts`.
  */
-function refuseServicePrincipal(kind: "user" | "service", verb: string): void {
-  if (kind !== "service") return;
+/**
+ * Why every lookup in this file is filtered to `ownerId: null`.
+ *
+ * The console administers the institution's credentials. A personal key is not
+ * one of those — it is somebody's phone, holding no more than they already
+ * hold — and the separation is not tidiness. `roll` returns a working token:
+ * an administrator who rolled a student's personal key would be handed a
+ * credential that acts as that student, which is a straightforward escalation
+ * and one nobody would think to look for. Filtering the lookup rather than the
+ * response is what makes that unreachable rather than merely unlikely.
+ *
+ * The emergency stop for a personal key is the one that already exists and is
+ * the honest one: deactivate the person. `authenticateApiKey` refuses a
+ * personal key whose owner is inactive, so switching somebody off switches off
+ * every credential they hold, in one write, with the audit trail intact.
+ */
+function refuseApiKey(
+  kind: "user" | "service" | "personal",
+  verb: string,
+): void {
+  // Every kind of credential, not merely a service principal. A personal key
+  // carries a person's id and their permissions, so a check that asked "is
+  // there a human behind this?" would answer yes and wave it through — and a
+  // key that can mint a key is a leaked token that renews itself for ever,
+  // which is the exact failure the paragraph above exists to prevent. What
+  // matters here is not who is asking but what they are asking *with*.
+  if (kind === "user") return;
   throw new TRPCError({
     code: "FORBIDDEN",
     message: `An API key cannot ${verb} API keys. Sign in to the console and do it as yourself.`,
@@ -171,6 +196,34 @@ const rateLimit = z.number().int().min(1).max(10_000);
 /** The display name carried by the machine identity, in every audit column. */
 const principalName = (name: string) => `${name} (API key)`;
 
+/**
+ * Everything a personal key may ever hold.
+ *
+ * One scope, and it is the one everybody already has: reading your own classes.
+ * That is the entire question the Siri answers ask, and keeping the list this
+ * short is what makes a personal key safe to hand out unaided — a leaked one
+ * reads its owner's own timetable, which is what the college puts on a
+ * noticeboard, and can do nothing else at all.
+ *
+ * The intersection in `authenticateApiKey` means this is a ceiling and not a
+ * grant: a student holds `ViewOwnEvents`, so their key does; somebody who
+ * somehow held none would get a key that could do nothing.
+ */
+export const PERSONAL_SCOPES = ["ViewOwnEvents"] as const;
+
+/**
+ * How many personal keys one person may hold at once.
+ *
+ * More than one because a phone and an iPad are two devices and sharing a token
+ * between them is the habit this would otherwise teach. Not many more, because
+ * a list nobody prunes is a list nobody reads, and the point of holding one per
+ * device is being able to switch off the device you lost.
+ */
+const MAX_PERSONAL_KEYS = 5;
+
+/** A phone asking a handful of questions a day, with room for a bad shortcut. */
+const PERSONAL_RATE_LIMIT = 60;
+
 export const apiKeysRouter = createTRPCRouter({
   /**
    * The scope vocabulary, for rendering the checkboxes.
@@ -189,11 +242,19 @@ export const apiKeysRouter = createTRPCRouter({
    * this screen would not be the place to discover. Revoked keys count towards
    * that — they are never deleted, because the audit trail names their
    * principals — so the default has to be comfortably past the live ones.
+   *
+   * Institutional keys only. A personal key is not part of the estate this
+   * console administers: it is one student's phone, it holds nothing but what
+   * that student already holds, and a college where everybody sets up Siri
+   * would otherwise turn this screen into a directory of handsets with empty
+   * scope lists — burying the dozen credentials that actually grant something.
+   * They are managed by the person who owns them, on their own settings
+   * screen, which is also the only place their token was ever shown.
    */
   list: permissionProcedure(PermissionFlags.ManageRoles)
     .input(z.object(pageInput({ defaultSize: 200, maxSize: 500 })).default({}))
     .query(async ({ ctx, input }) => {
-      const where = { orgId: ctx.orgId };
+      const where = { orgId: ctx.orgId, ownerId: null };
       const [keys, total] = await Promise.all([
         ctx.db.apiKey.findMany({
           where,
@@ -217,7 +278,10 @@ export const apiKeysRouter = createTRPCRouter({
     .input(z.object({ id: keyId }))
     .query(async ({ ctx, input }) => {
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        // `ownerId: null` for the reason `list` gives: a personal key is not
+        // part of this estate, and an id that reaches this endpoint must not
+        // be able to read one out of it by guessing.
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: keySelect,
       });
       if (!key) {
@@ -252,7 +316,7 @@ export const apiKeysRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      refuseServicePrincipal(ctx.actor.kind, "mint");
+      refuseApiKey(ctx.actor.kind, "mint");
 
       const denial = denyScopeGrant(input.scopes, ctx.actor.permissions);
       if (denial) {
@@ -332,10 +396,10 @@ export const apiKeysRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      refuseServicePrincipal(ctx.actor.kind, "edit");
+      refuseApiKey(ctx.actor.kind, "edit");
 
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: { id: true, name: true, principalId: true, revokedAt: true },
       });
       if (!key) {
@@ -416,10 +480,10 @@ export const apiKeysRouter = createTRPCRouter({
   roll: permissionProcedure(PermissionFlags.ManageRoles)
     .input(z.object({ id: keyId }))
     .mutation(async ({ ctx, input }) => {
-      refuseServicePrincipal(ctx.actor.kind, "roll");
+      refuseApiKey(ctx.actor.kind, "roll");
 
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: { id: true, name: true, principalId: true, revokedAt: true },
       });
       if (!key) {
@@ -480,10 +544,10 @@ export const apiKeysRouter = createTRPCRouter({
   revoke: permissionProcedure(PermissionFlags.ManageRoles)
     .input(z.object({ id: keyId }))
     .mutation(async ({ ctx, input }) => {
-      refuseServicePrincipal(ctx.actor.kind, "revoke");
+      refuseApiKey(ctx.actor.kind, "revoke");
 
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: keySelect,
       });
       if (!key) {
@@ -519,10 +583,10 @@ export const apiKeysRouter = createTRPCRouter({
   delete: permissionProcedure(PermissionFlags.ManageRoles)
     .input(z.object({ id: keyId }))
     .mutation(async ({ ctx, input }) => {
-      refuseServicePrincipal(ctx.actor.kind, "delete");
+      refuseApiKey(ctx.actor.kind, "delete");
 
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: { id: true, name: true, principalId: true, revokedAt: true },
       });
       if (!key) {
@@ -567,7 +631,7 @@ export const apiKeysRouter = createTRPCRouter({
     .input(z.object({ id: keyId }))
     .query(async ({ ctx, input }) => {
       const key = await ctx.db.apiKey.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
+        where: { id: input.id, orgId: ctx.orgId, ownerId: null },
         select: {
           id: true,
           principalId: true,
@@ -609,5 +673,171 @@ export const apiKeysRouter = createTRPCRouter({
         },
         eventsCreated,
       };
+    }),
+
+  // ─── Personal keys ────────────────────────────────────────────────────────
+
+  /**
+   * The keys somebody holds for their own devices.
+   *
+   * Everything above this line is the institution's credential estate, behind
+   * `ManageRoles`, because minting one is granting authority over the college.
+   * Everything below it is a different act with a different risk, and the
+   * distinction is the whole reason a student may do it unaided: a personal key
+   * grants nothing at all. Its authority is the intersection of what it was
+   * given and what its owner already holds, computed live on every request in
+   * `authenticateApiKey`, so it cannot reach a single thing the person could not
+   * reach by signing in — and the moment they lose a role, or are deactivated,
+   * it loses it too.
+   *
+   * That is what makes it safe to be self-service. Requiring an administrator
+   * would not make it safer; it would make it unused, and the feature it exists
+   * for is a student asking their phone when their next lecture is.
+   */
+  mine: protectedProcedure.query(async ({ ctx }) => {
+    const keys = await ctx.db.apiKey.findMany({
+      where: { orgId: ctx.orgId, ownerId: ctx.actor.id },
+      select: keySelect,
+      orderBy: { createdAt: "desc" },
+    });
+    return keys.map(serialise);
+  }),
+
+  /**
+   * Mints one for the caller, and returns the only copy of the token there will
+   * ever be. See `create` above for why that is shown once and never again.
+   *
+   * The scopes are not the caller's to choose. `PERSONAL_SCOPES` is what a
+   * personal key may ever hold, and it is deliberately the narrowest thing that
+   * answers the question the feature exists for — reading your own timetable.
+   * A general personal access token, scoped to everything its owner can do,
+   * was the obvious alternative and is a much larger promise: a lecturer's
+   * would be able to cancel lectures, and it would be sitting in a shortcut on
+   * a phone. If a second use ever wants a wider one, that is a deliberate
+   * addition here with its own name, not a parameter this endpoint accepts.
+   */
+  createMine: protectedProcedure
+    .input(z.object({ name: keyName }).default({ name: "Siri" }))
+    .mutation(async ({ ctx, input }) => {
+      refuseApiKey(ctx.actor.kind, "mint");
+
+      const minted = mintKey();
+
+      const key = await ctx.db.$transaction(async (tx) => {
+        /*
+         * Counted inside the transaction, and counting rows rather than live
+         * ones.
+         *
+         * Outside it, two tabs firing at once both read four and both write a
+         * fifth. Inside it the window is a great deal smaller, though read
+         * committed does not close it altogether — the honest description is a
+         * cap that holds against a person and not against a determined script.
+         * That is enough, because the thing being bounded is rows in a table
+         * and the worst case is a handful too many, and the alternative is a
+         * partial unique index expressing "at most five" that Postgres has no
+         * way to write.
+         *
+         * Every row counts, not just the unrevoked, because `revokeMine` below
+         * deletes rather than tombstones — so these are the same number, and
+         * saying so here is what stops somebody reintroducing the tombstone and
+         * quietly making the cap unbounded again.
+         */
+        const held = await tx.apiKey.count({
+          where: { orgId: ctx.orgId, ownerId: ctx.actor.id },
+        });
+        if (held >= MAX_PERSONAL_KEYS) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You already have ${MAX_PERSONAL_KEYS} personal keys. Switch one off before making another.`,
+          });
+        }
+
+        // A principal of its own, exactly as a service key gets, and for the
+        // same reason: `principalId` is unique, so a key whose principal was
+        // its owner would be the only one that person could ever hold. The
+        // principal is the credential's identity in the audit columns; the
+        // owner is whose timetable it may read.
+        const principal = await tx.user.create({
+          data: {
+            orgId: ctx.orgId,
+            name: principalName(input.name),
+            email: servicePrincipalEmail(minted.prefix),
+            isServiceAccount: true,
+            isActive: true,
+            permissions: 0n,
+          },
+          select: { id: true },
+        });
+
+        return tx.apiKey.create({
+          data: {
+            orgId: ctx.orgId,
+            name: input.name,
+            description: "Personal key, for this person's own devices.",
+            prefix: minted.prefix,
+            hash: minted.hash,
+            last4: minted.last4,
+            principalId: principal.id,
+            ownerId: ctx.actor.id,
+            scopes: scopesToBits(PERSONAL_SCOPES),
+            createdById: ctx.actor.id,
+            expiresAt: null,
+            // A phone asking a handful of questions a day. Low enough that a
+            // shortcut stuck in a loop stops being the college's problem,
+            // high enough that nobody meets it by using the thing.
+            rateLimitPerMinute: PERSONAL_RATE_LIMIT,
+          },
+          select: keySelect,
+        });
+      });
+
+      return {
+        ...serialise(key),
+        token: minted.token,
+        shownOnce: true as const,
+      };
+    }),
+
+  /**
+   * Switches off one of the caller's own keys. Never anybody else's.
+   *
+   * Deletes it, where the institution's keys are revoked and kept. That is not
+   * an inconsistency, it is the audit trail being honest about what there is to
+   * audit: a service key mints events and change requests, and its rows are
+   * what `Event.createdById` and the NOT NULL `EventChangeRequest.requestedById`
+   * point at, so destroying it would orphan history. A personal key holds
+   * `ViewOwnEvents` and can therefore never have written anything at all —
+   * there is no history to orphan, and keeping a tombstone for every phone
+   * anybody ever set up would grow two tables for ever with nothing in them
+   * that could be asked a question.
+   */
+  revokeMine: protectedProcedure
+    .input(z.object({ id: keyId }))
+    .mutation(async ({ ctx, input }) => {
+      refuseApiKey(ctx.actor.kind, "revoke");
+
+      const key = await ctx.db.apiKey.findFirst({
+        // The owner is in the filter rather than checked afterwards, so an id
+        // belonging to somebody else — or to one of the institution's own
+        // integrations — is indistinguishable from one that does not exist.
+        where: { id: input.id, orgId: ctx.orgId, ownerId: ctx.actor.id },
+        select: { id: true, principalId: true },
+      });
+      if (!key) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "You have no key with that id.",
+        });
+      }
+
+      // Both rows, in one transaction, because a principal without its key is a
+      // user nobody can sign in as, find, or explain. Key first: it holds the
+      // foreign key.
+      await ctx.db.$transaction(async (tx) => {
+        await tx.apiKey.delete({ where: { id: key.id } });
+        await tx.user.delete({ where: { id: key.principalId } });
+      });
+
+      return { revoked: true as const };
     }),
 });

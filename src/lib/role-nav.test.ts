@@ -29,6 +29,7 @@ describe("navFor", () => {
       "/attendance",
       "/rooms",
       "/book",
+      "/settings",
     ]);
   });
 
@@ -38,7 +39,6 @@ describe("navFor", () => {
     expect(nav).toContain("/timetable");
     expect(nav).toContain("/rooms");
     expect(nav).not.toContain("/people");
-    expect(nav).not.toContain("/settings");
   });
 
   it("shows a coordinator scheduling and people screens but not settings", () => {
@@ -46,7 +46,6 @@ describe("navFor", () => {
     expect(nav).toContain("/timetable");
     expect(nav).toContain("/groups");
     expect(nav).toContain("/people");
-    expect(nav).not.toContain("/settings");
   });
 
   it("shows an admin everything", () => {
@@ -101,11 +100,25 @@ describe("homeFor", () => {
 });
 
 describe("canOpen", () => {
-  it("keeps students out of the people and settings screens", () => {
+  it("keeps students out of the people screen", () => {
     const student = permsFor("student");
     expect(canOpen(student, "/schedule")).toBe(true);
     expect(canOpen(student, "/people")).toBe(false);
-    expect(canOpen(student, "/settings")).toBe(false);
+  });
+
+  it("lets anybody reach settings, and the index decides what is in it", () => {
+    /*
+     * `/settings` is one door onto two audiences. Most of what is behind it is
+     * the institution's business, but Siri is a person setting up their own
+     * phone and a student has to be able to get there — so the route opens for
+     * everyone and each section is gated on the bit it actually needs. The
+     * screen's own SECTIONS filter is what a student meets; this only says the
+     * door is not locked.
+     */
+    expect(canOpen(permsFor("student"), "/settings")).toBe(true);
+    expect(canOpen(permsFor("faculty"), "/settings")).toBe(true);
+    // Still shut to somebody with no roles at all.
+    expect(canOpen(0n, "/settings")).toBe(false);
   });
 
   it("lets any signed-in member read the timetable and the rooms", () => {

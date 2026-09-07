@@ -304,6 +304,30 @@ export function impliedPermissions(bits: bigint): bigint {
   return expandPermissions(bits) & ~bits;
 }
 
+/**
+ * The most either side allows: what a delegated credential may actually do.
+ *
+ * A personal API key is granted some scopes and belongs to somebody holding
+ * some permissions, and it may do what both of them allow and nothing else.
+ *
+ * Both sides are expanded *before* the intersection, and that is the whole
+ * subtlety rather than a flourish. A lecturer holds `ViewAllEvents`; their key
+ * is scoped `ViewOwnEvents`. Those are two different bits and share nothing at
+ * all, so a plain `a & b` is zero — the key would answer nothing, for the very
+ * person the feature is most obviously for. Expanded, `ViewAllEvents` reaches
+ * `ViewOwnEvents` through the implication table and the answer is the one
+ * anybody would expect.
+ *
+ * `Administrator` needs no special case and deliberately gets none. It expands
+ * to every flag this build knows about, so an administrator's key is bounded by
+ * its own scopes rather than inheriting "and everything added in future
+ * releases too" — which is exactly the promise `GRANTABLE_SCOPES` refuses to
+ * let anybody make.
+ */
+export function intersectPermissions(a: bigint, b: bigint): bigint {
+  return expandPermissions(a) & expandPermissions(b);
+}
+
 /** Does holding `flag` grant `candidate`, directly or through implication? */
 export function grants(flag: bigint, candidate: bigint): boolean {
   return (expandPermissions(flag) & candidate) === candidate;

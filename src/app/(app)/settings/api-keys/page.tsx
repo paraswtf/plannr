@@ -23,8 +23,10 @@ export default async function ApiKeysPage() {
   /**
    * Two gates, because they are two different questions.
    *
-   * `canOpen` answers the route's, and `/settings` is declared as
-   * `ManageSettings` — that is what puts the item in the sidebar. Every
+   * `canOpen` answers the route's, and `/settings` is deliberately the widest
+   * gate in `NAV_ITEMS` — `ViewOwnEvents` or `ManageSettings`, because the Siri
+   * screen under the same prefix is a person setting up their own phone and a
+   * student has to reach it. So passing it says almost nothing here. Every
    * procedure this screen calls is gated on `ManageRoles` instead, for the
    * reason set out at the top of `~/server/api/routers/api-keys`: minting a key
    * is granting authority, which is the same act as writing a role. The two

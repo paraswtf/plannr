@@ -25,13 +25,24 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
  * Who may call an endpoint.
  *
  * - `any` — a person or an app. The overwhelming majority.
- * - `session` — a person only. Endpoints whose answer is defined relative to
- *   the caller ("my week", "my bookings") or that touch a human's own linked
- *   account. A service principal has no week and no Google Calendar, so
- *   rather than handing an app a confidently empty answer, these refuse it and
- *   name the endpoint to use instead.
+ * - `session` — a browser only. Endpoints whose answer is defined relative to
+ *   the caller ("my week", "my bookings"), that touch a human's own linked
+ *   account, or that must never be reachable from a credential at all. A
+ *   service principal has no week and no Google Calendar, so rather than
+ *   handing an app a confidently empty answer, these refuse it and name the
+ *   endpoint to use instead; and `/api-keys` refuses every token, because a
+ *   credential that can mint a credential survives its own revocation.
+ * - `person` — a browser, or a personal API key, which is somebody rather than
+ *   something: it carries its owner's id and can do no more than they can. The
+ *   same "my week" questions are well-defined for one, so this is what an
+ *   endpoint declares when it wants a human's answer and does not mind whether
+ *   a phone asked for it. A service principal is still refused.
+ *
+ * The two are not interchangeable, and widening a `session` route to `person`
+ * is a deliberate decision each time: it makes that endpoint reachable from a
+ * token somebody could leave on a lost phone.
  */
-export type ActorRequirement = "any" | "session";
+export type ActorRequirement = "any" | "session" | "person";
 
 /** Where the procedure's input comes from, beyond the path parameters. */
 export type InputSource = "query" | "body" | "none";

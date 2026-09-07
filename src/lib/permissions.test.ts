@@ -4,6 +4,7 @@ import {
   ALL_PERMISSIONS,
   canActOn,
   expandPermissions,
+  intersectPermissions,
   grants,
   impliedPermissions,
   PermissionBitField,
@@ -247,5 +248,62 @@ describe("wouldLockSelfOut", () => {
 
   it("ignores changes to other people", () => {
     expect(wouldLockSelfOut("me", "someone-else", 0n)).toBe(false);
+  });
+});
+
+describe("intersectPermissions", () => {
+  /**
+   * What a personal API key may actually do. Every case here is one somebody
+   * could reach with a phone, and the first is the one a naive `a & b` gets
+   * wrong — which would have made the feature answer nothing at all for
+   * exactly the people most likely to use it.
+   */
+
+  it("lets a wider permission satisfy a narrower scope", () => {
+    // A lecturer holds ViewAllEvents; their Siri key is scoped ViewOwnEvents.
+    // Two different bits, sharing nothing, so an unexpanded intersection is 0n.
+    const held = intersectPermissions(F.ViewAllEvents, F.ViewOwnEvents);
+    expect(new PermissionBitField(held).has(F.ViewOwnEvents)).toBe(true);
+  });
+
+  it("never lets a key exceed the person holding it", () => {
+    // A key scoped to manage the whole timetable, held by a student, may read
+    // their own classes and do nothing else.
+    const held = intersectPermissions(
+      F.ViewOwnEvents | F.BookRoom,
+      F.ManageAllEvents,
+    );
+    const bits = new PermissionBitField(held);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageAllEvents)).toBe(false);
+    expect(bits.has(F.ViewAllEvents)).toBe(false);
+  });
+
+  it("never lets a person exceed the key they minted", () => {
+    // The other direction, which is what makes a narrow scope worth having: an
+    // administrator's Siri key reads their timetable and cannot cancel a class.
+    const held = intersectPermissions(F.Administrator, F.ViewOwnEvents);
+    const bits = new PermissionBitField(held);
+    expect(bits.has(F.ViewOwnEvents)).toBe(true);
+    expect(bits.has(F.ManageAllEvents)).toBe(false);
+    expect(bits.has(F.ManageUsers)).toBe(false);
+  });
+
+  it("does not hand an administrator's key the administrator bit", () => {
+    // Administrator means "and everything added in future releases too", which
+    // is not a promise anybody may make on behalf of a token in a shortcut.
+    const held = intersectPermissions(F.Administrator, F.ViewOwnEvents);
+    expect(held & F.Administrator).toBe(0n);
+  });
+
+  it("gives nothing to somebody who holds nothing", () => {
+    expect(intersectPermissions(0n, F.ViewOwnEvents)).toBe(0n);
+    expect(intersectPermissions(F.Administrator, 0n)).toBe(0n);
+  });
+
+  it("is symmetric, because neither side is privileged", () => {
+    const a = F.ManageAllEvents | F.BookRoom;
+    const b = F.ViewOwnEvents | F.ViewRooms;
+    expect(intersectPermissions(a, b)).toBe(intersectPermissions(b, a));
   });
 });

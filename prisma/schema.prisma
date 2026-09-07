@@ -242,6 +242,7 @@ model User {
   calendar        CalendarConnection?
   /// The key this row is the machine identity for, if it is one.
   apiKey          ApiKey?                @relation("ApiKeyPrincipal")
+  apiKeysOwned    ApiKey[]               @relation("ApiKeyOwner")
   apiKeysCreated  ApiKey[]               @relation("ApiKeyCreator")
   apiKeysRevoked  ApiKey[]               @relation("ApiKeyRevoker")
 
@@ -1246,6 +1247,20 @@ model ApiKey {
   principalId String @unique
   principal   User   @relation("ApiKeyPrincipal", fields: [principalId], references: [id], onDelete: Cascade)
 
+  /// The person this key speaks for, for a personal key; null for the service
+  /// keys an administrator mints.
+  ///
+  /// A personal key still gets a principal of its own, and that is deliberate
+  /// rather than redundant: `principalId` is unique, so a principal that *was*
+  /// the owner would cap every student at one key for ever, and the row is also
+  /// what the audit columns and the rate-limit window hang off. The principal
+  /// is the credential's identity; the owner is whose timetable it may read.
+  ///
+  /// Cascades, because a key that speaks for somebody who no longer exists is a
+  /// credential with no one to answer for it.
+  ownerId String?
+  owner   User?   @relation("ApiKeyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
   /// Permission bitfield, in exactly the vocabulary of src/lib/permissions.ts.
   /// Never widened by roles — a key holds these bits and no others.
   scopes BigInt @default(0)
@@ -1276,4 +1291,8 @@ model ApiKey {
 
   @@index([orgId, createdAt])
   @@index([orgId, revokedAt])
+  /// Every read of a personal key starts "whose is this?" — the owner's own
+  /// list, and the console's filter that keeps students' phones out of the
+  /// institution's credential register.
+  @@index([ownerId])
 }

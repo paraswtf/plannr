@@ -349,17 +349,29 @@ function describeCaller(caller: AuthenticatedCaller): unknown {
   const bits = new PermissionBitField(BigInt(user.permissions));
 
   if (caller.key) {
+    const personal = caller.key.ownerId !== null;
     return {
-      kind: "service",
+      // Two kinds, and the difference is the first thing somebody wiring a
+      // shortcut up needs to see: a personal key answers "my next class" and a
+      // service key cannot, so a caller getting an empty day should be able to
+      // tell which of the two they are holding without reading the source.
+      kind: personal ? "personal" : "service",
       key: {
         id: caller.key.id,
         name: caller.key.name,
         prefix: caller.key.prefix,
       },
+      // What it may do *now* — for a personal key, already narrowed to the
+      // intersection with what its owner currently holds, which is why this is
+      // read off the session rather than off the key's scopes column.
       scopes: bitsToScopes(bits.bits),
-      // The id every audit column will name for anything this key does. It is
-      // a real user row and it is not a person, which is exactly the point.
+      // The id every audit column will name for anything this key does. For a
+      // service key it is a real user row that is not a person, which is
+      // exactly the point; for a personal one the owner is named beside it.
       principalId: caller.key.principalId,
+      owner: personal
+        ? { id: user.id, name: user.name ?? null, email: user.email ?? null }
+        : null,
       rateLimit: caller.rate
         ? {
             limit: caller.rate.limit,
@@ -397,12 +409,53 @@ function refuseActor(
   route: CompiledRoute,
   caller: AuthenticatedCaller,
 ): Response | null {
-  if (route.actor !== "session" || !caller.key) return null;
+  // A browser is welcome everywhere; only a credential is ever turned away.
+  if (!caller.key) return null;
+
+  /**
+   * A personal key may reach the endpoints that opt in to it, and nothing else.
+   *
+   * Deny by default, and this is the one refusal in the file that is doing real
+   * work rather than turning an obscure failure into a legible one. A personal
+   * key carries its owner's id, and a good deal of the app is gated on identity
+   * rather than on a permission bit: `plans.delete` asks only whether you
+   * created the plan, and would cheerfully let a token in a shortcut on a lost
+   * phone delete its owner's drafts. Narrow scopes do not help there, because
+   * those procedures never consult a bit.
+   *
+   * So the safe default is the opposite one. An endpoint that wants to be
+   * reachable from somebody's phone says `actor: "person"` and is reviewed on
+   * the way in; everything else is shut, whatever bits the key happens to hold.
+   * That is what makes "a leaked Siri key reads its owner's timetable and can do
+   * nothing else at all" a true sentence rather than an aspiration.
+   */
+  if (caller.key.ownerId !== null) {
+    if (route.actor === "person") return null;
+    return fail(
+      403,
+      "requires_user",
+      `${route.method} ${MOUNT}${route.path} is not available to a personal key. A personal key exists so somebody's own phone can ask about their own timetable, so it reaches only the endpoints built for that — the ${MOUNT}/siri/* answers. Everything else needs a signed-in browser, or one of the institution's own API keys.`,
+      { headers: caller.headers },
+    );
+  }
+
+  if (route.actor === "person") {
+    // A service principal is its own machine identity: it teaches nothing and
+    // attends nothing, so the question this endpoint asks has no answer for it.
+    return fail(
+      403,
+      "requires_user",
+      `${route.method} ${MOUNT}${route.path} answers a question about the person calling it, and this key is its own principal rather than somebody's — it has no timetable of its own to report. A personal key, minted from Settings > Siri by the person whose answer you want, does have one.`,
+      { headers: caller.headers },
+    );
+  }
+
+  if (route.actor !== "session") return null;
 
   return fail(
     403,
     "requires_user",
-    `${route.method} ${MOUNT}${route.path} answers a question about the person calling it — their week, their bookings, their linked calendar — so it is only available to a signed-in user. An API key is its own principal and has none of those to report. Where the same question can be asked about somebody by name, ask it that way instead and say who you mean: ${MOUNT}/timetable/week?facultyId=… rather than the caller's own week.`,
+    `${route.method} ${MOUNT}${route.path} answers a question about the person calling it — their week, their bookings, their linked calendar — or grants authority, which no credential may do on its own behalf. Either way it is only available to a signed-in user. Where the same question can be asked about somebody by name, ask it that way instead and say who you mean: ${MOUNT}/timetable/week?facultyId=… rather than the caller's own week.`,
     { headers: caller.headers },
   );
 }
@@ -432,10 +485,18 @@ function refuseScopes(
   if (missing.length === 0) return null;
 
   const one = missing.length === 1;
+  // A personal key is not short of a scope an administrator can add: its
+  // authority is capped by what its owner holds, so the only way it can be
+  // missing something is that they lost it. Sending them to the wrong person
+  // is a whole afternoon.
+  const remedy =
+    caller.key.ownerId !== null
+      ? `A personal key can never hold more than the person it belongs to, so ${one ? "that permission has" : "those permissions have"} been taken off their account. Ask whoever manages roles to look at it.`
+      : `Ask an administrator to add ${one ? "that scope" : "those scopes"} to it, or call with a key that already has ${one ? "it" : "them"}.`;
   return fail(
     403,
     "insufficient_scope",
-    `This key does not hold ${missing.join(", ")}. Ask an administrator to add ${one ? "that scope" : "those scopes"} to it, or call with a key that already has ${one ? "it" : "them"}.`,
+    `This key does not hold ${missing.join(", ")}. ${remedy}`,
     {
       details: {
         required: route.scopes,

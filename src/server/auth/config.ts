@@ -30,8 +30,23 @@ declare module "next-auth" {
        * person. Set only by the bearer-token path — the cookie path can never
        * produce one, because a service account holds no OAuth account and its
        * address fails the Workspace-domain check above.
+       *
+       * A *personal* key is false here, deliberately: it speaks for a person
+       * who does have a timetable, and the endpoints that answer "my week" must
+       * treat it as one. Use `viaApiKey` for the different question.
        */
       isServiceAccount: boolean;
+      /**
+       * True when the session was established by a bearer token of any kind.
+       *
+       * Separate from `isServiceAccount` because the two ask different things.
+       * "Is there a person behind this?" decides whether "my week" is a
+       * meaningful question. "Did this arrive on a credential rather than a
+       * browser?" decides whether it may mint another credential — and it must
+       * not, personal or otherwise, or a leaked token becomes permanent by
+       * minting its own successor.
+       */
+      viaApiKey: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -155,6 +170,8 @@ export const authConfig = {
           // A cookie session is always a person: service principals never hold
           // an Account, so no OAuth flow can ever land on one.
           isServiceAccount: false,
+          // ...and it is always a browser, which is what may mint a key.
+          viaApiKey: false,
         },
       };
     },

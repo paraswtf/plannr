@@ -241,7 +241,7 @@ export type ScheduleDto = ReturnType<typeof toScheduleDto>;
 const MAX_SCHEDULE_OCCURRENCES = 500;
 
 /** What somebody is, for the purposes of having a day: enrolled, teaching, or both. */
-async function profilesOf(db: Db, userId: string) {
+export async function profilesOf(db: Db, userId: string) {
   const [student, faculty] = await Promise.all([
     db.studentProfile.findUnique({
       where: { userId },
@@ -250,6 +250,34 @@ async function profilesOf(db: Db, userId: string) {
     db.facultyProfile.findUnique({ where: { userId }, select: { id: true } }),
   ]);
   return { student, faculty };
+}
+
+/**
+ * The `OR` clauses that select somebody's own sittings, for a Prisma `where`.
+ *
+ * Empty when there is nothing of theirs to find — a coordinator who neither
+ * attends nor teaches — and callers are expected to treat that as "no
+ * timetable" rather than running the query and getting the whole college.
+ *
+ * Shared rather than rewritten because it is the same definition of "mine"
+ * that `ownershipTest` below insists must not drift: the occurrence's own
+ * `groupId`, which for a combined lecture is the primary section only, or the
+ * faculty who takes it. The schedule screen, the timetable's gold blocks, the
+ * calendar sync and the spoken answers all have to mean one thing by it.
+ */
+export function ownedOccurrenceClauses(
+  profiles: Awaited<ReturnType<typeof profilesOf>>,
+  scope: "attending" | "teaching" | "both" = "both",
+): object[] {
+  const clauses: object[] = [];
+  const groupIds = profiles.student?.memberships.map((m) => m.groupId) ?? [];
+  if (scope !== "teaching" && groupIds.length > 0) {
+    clauses.push({ groupId: { in: groupIds } });
+  }
+  if (scope !== "attending" && profiles.faculty) {
+    clauses.push({ facultyId: profiles.faculty.id });
+  }
+  return clauses;
 }
 
 /**
@@ -288,7 +316,7 @@ function readsAttendance(bits: { has: (flag: bigint) => boolean }): boolean {
   return bits.has(PermissionFlags.ViewAttendance);
 }
 
-async function orgTimezone(db: Db, orgId: string): Promise<string> {
+export async function orgTimezone(db: Db, orgId: string): Promise<string> {
   const org = await db.organization.findUnique({
     where: { id: orgId },
     select: { timezone: true },
@@ -759,17 +787,7 @@ export const timetableRouter = createTRPCRouter({
       // before the day is settled, because with no date asked for the day is
       // worked out *from* these — there is no "my next class" without knowing
       // first which classes are mine.
-      const belongs: object[] = [];
-      if (detail) {
-        const groupIds =
-          profiles.student?.memberships.map((m) => m.groupId) ?? [];
-        if (detail.scope !== "teaching" && groupIds.length > 0) {
-          belongs.push({ groupId: { in: groupIds } });
-        }
-        if (detail.scope !== "attending" && profiles.faculty) {
-          belongs.push({ facultyId: profiles.faculty.id });
-        }
-      }
+      const belongs = detail ? ownedOccurrenceClauses(profiles, detail.scope) : [];
 
       /**
        * The moment the window is cut around, and the day the client selects.

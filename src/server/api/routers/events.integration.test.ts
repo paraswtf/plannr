@@ -46,6 +46,7 @@ function callerFor(actor: Actor) {
         // A cookie session is always a person; the fixture says so explicitly
         // so that a machine identity can never sneak in through a caller.
         isServiceAccount: false,
+        viaApiKey: false,
       },
     },
     actor,
