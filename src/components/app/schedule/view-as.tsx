@@ -99,9 +99,21 @@ export function ViewAs({
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       <span className="text-faint shrink-0 font-mono text-[12px]">view as</span>
 
+      {/*
+       * A real width, and a floor under it on a phone.
+       *
+       * The panel is sized off this box, so `flex-none` with no width — which
+       * resolves to "as wide as the name currently in it" — made the list about
+       * a hundred pixels across. Inside that, the avatar and the star are
+       * `shrink-0` and the name is `min-w-0 flex-1`, so the name was the only
+       * thing that could give way: it truncated to nothing, and every row came
+       * out as an icon, a gap and a star. The floor does the same job where the
+       * row wraps rather than sizes, by pushing the favourites onto a line of
+       * their own instead of letting them squeeze this.
+       */}
       <div
         ref={boxRef}
-        className="min-w-0 flex-1 sm:max-w-[240px] sm:flex-none"
+        className="min-w-[200px] flex-1 sm:w-[264px] sm:flex-none"
       >
         <button
           ref={triggerRef}
@@ -125,7 +137,10 @@ export function ViewAs({
           open={open}
           anchorRef={boxRef}
           onClose={() => setOpen(false)}
-          match="width"
+          // `min-width` rather than `width`: the trigger sets the floor, and a
+          // long name in the list may make the panel wider than the control
+          // that opened it rather than being truncated to fit inside it.
+          match="min-width"
           className="bg-surface flex flex-col rounded-[10px] p-1.5"
           style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
         >
