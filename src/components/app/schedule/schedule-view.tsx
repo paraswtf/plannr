@@ -11,6 +11,7 @@ import { EventModal } from "~/components/app/timetable/event-modal";
 import type { GridEvent } from "~/components/app/timetable/timetable-grid";
 import { useNow } from "~/components/app/timetable/use-now";
 import { Card } from "~/components/ui/card";
+import { useCoarsePointer } from "~/components/ui/use-coarse-pointer";
 import { Segmented } from "~/components/ui/segmented";
 import {
   addDays,
@@ -37,13 +38,14 @@ import {
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CalendarSync } from "./calendar-sync";
+import { type Offset } from "./carousel-step";
 import { DayCalendar, type DayCalendarEvent } from "./day-calendar";
 import { dayWindow } from "./day-layout";
 import { DaySkeleton } from "./day-skeleton";
 import { MonthGrid } from "./month-grid";
 import { monthLayout } from "./month-layout";
 import { MonthSkeleton } from "./month-skeleton";
-import { SwipeSpan } from "./swipe-span";
+import { SpanCarousel } from "./span-carousel";
 import { WeekCalendar } from "./week-calendar";
 import { ViewAs, type ViewAsSubject } from "./view-as";
 import { WeekSkeleton } from "./week-skeleton";
@@ -80,6 +82,19 @@ export function ScheduleView({
   const utils = api.useUtils();
 
   const [span, setSpan] = useState<ScheduleSpan>("day");
+
+  /**
+   * Whether the calendar is on a rail this can be pushed along.
+   *
+   * Two conditions, and both are about whether the gesture would mean anything.
+   * A finger, because there is nothing to swipe with otherwise and a laptop
+   * should not be fetching two extra spans for a rail it will never touch. And
+   * not the week, whose columns already pan sideways inside their own scroller
+   * — a gesture that means two things depending on where the finger landed is a
+   * gesture nobody trusts.
+   */
+  const finger = useCoarsePointer();
+  const live = finger && span !== "week";
   const [date, setDate] = useState(() => new Date(initial.anchor));
   /**
    * Whether the stretch on screen was chosen by the person reading it.
@@ -159,16 +174,70 @@ export function ScheduleView({
   const detail = data?.detail ?? null;
   const classes = data?.occurrences ?? [];
 
-  const blocks: DayCalendarEvent[] = detail
-    ? classes.map((o) => ({
-        id: o.occurrenceId,
-        start: o.start,
-        end: o.end,
-        title: o.title,
-        roomCode: o.roomCode,
-        lines: describeClass(o, detail),
-      }))
-    : [];
+  /**
+   * What one answer draws as blocks on a calendar.
+   *
+   * A function rather than a value now, because there are three answers on
+   * screen at once and each has to be read through its own `detail` — the
+   * perspective is what decides the words on a class, and borrowing another
+   * day's would put the wrong ones there.
+   */
+  const blocksOf = (from: Schedule | undefined): DayCalendarEvent[] => {
+    const seen = from?.detail;
+    if (!from || !seen) return [];
+    return from.occurrences.map((o) => ({
+      id: o.occurrenceId,
+      start: o.start,
+      end: o.end,
+      title: o.title,
+      roomCode: o.roomCode,
+      lines: describeClass(o, seen),
+    }));
+  };
+
+  const blocks = blocksOf(data);
+
+  /*
+   * The span either side of the one being read, fetched ahead of being asked
+   * for.
+   *
+   * This is what makes the swipe a swipe rather than a wait. The rail puts
+   * tomorrow on screen as the finger drags, so tomorrow has to exist before the
+   * finger moves; and when the step lands, the main query's key becomes one of
+   * these two, finds it already answered, and hands it over without a
+   * placeholder — so `stale` never turns true and the skeleton never appears.
+   * The day arrives instead of loading.
+   *
+   * Only where there is a rail. On a laptop this would be two queries a page
+   * for a screen whose arrows nobody is going to press twice, and the week span
+   * has no rail of its own.
+   */
+  const beforeDate = stepSpan(date, span, -1, timeZone);
+  const afterDate = stepSpan(date, span, 1, timeZone);
+  const neighbour = {
+    enabled: live,
+    // Neither of these belongs on a span nobody is looking at. It becomes the
+    // main query the moment it is, and refetches then under its own options.
+    refetchOnWindowFocus: false,
+  };
+  const before = api.timetable.mySchedule.useQuery(
+    {
+      date: beforeDate,
+      span,
+      viewAs: viewAs ?? undefined,
+      asUserId: asUserId ?? undefined,
+    },
+    neighbour,
+  );
+  const after = api.timetable.mySchedule.useQuery(
+    {
+      date: afterDate,
+      span,
+      viewAs: viewAs ?? undefined,
+      asUserId: asUserId ?? undefined,
+    },
+    neighbour,
+  );
 
   // The columns a week is drawn in, and the cells a month is. Both are computed
   // from the date and the timezone rather than from the response, so the
@@ -176,7 +245,6 @@ export function ScheduleView({
   const weekDays = Array.from({ length: 7 }, (_, i) =>
     addDays(startOfLocalWeek(date, timeZone), i, timeZone),
   );
-  const month = monthLayout(date, blocks, now, timeZone);
 
   // The hours the calendar spans. Taken from whatever is in hand — the previous
   // window while the next loads — because the skeleton and the calendar have to
@@ -188,9 +256,26 @@ export function ScheduleView({
   // that asked only about the anchor day would stand a couple of hours shorter
   // than the thing replacing it.
   const showsNow = weekDays.some((day) => isSameLocalDay(day, now, timeZone));
+  /*
+   * On a rail, all three days are asked about at once and given one answer.
+   *
+   * Three days each working out their own window would put 09:00 at a different
+   * height in each of them, so the hour axis would shear as the finger dragged
+   * across it and the page would change height every time a swipe landed. The
+   * cost is a quiet hour or two drawn on a day whose neighbour starts earlier,
+   * which is what an hour axis that holds still is worth.
+   */
+  const onRail = live && span === "day";
+  const railDays = onRail ? [beforeDate, date, afterDate] : [date];
   const frame = dayWindow(
-    blocks,
-    (span === "day" ? isSameLocalDay(date, now, timeZone) : showsNow)
+    onRail
+      ? [...blocksOf(before.data), ...blocks, ...blocksOf(after.data)]
+      : blocks,
+    (
+      span === "day"
+        ? railDays.some((day) => isSameLocalDay(day, now, timeZone))
+        : showsNow
+    )
       ? now
       : null,
     timeZone,
@@ -324,22 +409,14 @@ export function ScheduleView({
   const noun = SPAN_NOUNS[span];
 
   /**
-   * A sideways flick steps whatever unit is on screen.
+   * A swipe steps whatever unit is on screen.
    *
-   * Not in the week span: its columns already pan sideways inside their own
-   * scroller, and a gesture that means two things depending on where the finger
-   * landed is a gesture nobody trusts. Undefined there, which is what makes
-   * `SwipeSpan` render its children and nothing else.
-   *
-   * It goes through `goTo`, so a flick counts as moving the screen by hand
+   * It goes through `goTo`, so a swipe counts as moving the screen by hand
    * exactly as the arrows do — the caption explaining why the screen opened
    * away from today drops away, and asking for today clears the latch that
    * stops the calendar scrolling to the present.
    */
-  const swipeStep =
-    span === "week"
-      ? undefined
-      : (by: -1 | 1) => goTo(stepSpan(date, span, by, timeZone));
+  const swipeStep = (by: -1 | 1) => goTo(stepSpan(date, span, by, timeZone));
 
   /** What a screen reader is told after a flick has moved the screen. */
   const announceSpan =
@@ -352,6 +429,175 @@ export function ScheduleView({
   const busyDays = new Set(
     blocks.map((b) => startOfLocalDay(b.start, timeZone).getTime()),
   ).size;
+
+  /** Which answer draws the span `offset` steps from the one being read. */
+  const paneFor = (offset: Offset) =>
+    offset === 0
+      ? { at: date, from: data, stale, failed: isError, retry: refetch }
+      : offset === -1
+        ? {
+            at: beforeDate,
+            from: before.data,
+            stale: before.isPending,
+            failed: before.isError,
+            retry: before.refetch,
+          }
+        : {
+            at: afterDate,
+            from: after.data,
+            stale: after.isPending,
+            failed: after.isError,
+            retry: after.refetch,
+          };
+
+  /**
+   * One pane of the rail: the span on screen at `offset`, drawn from its own
+   * answer.
+   *
+   * The same branches this screen has always had — waiting, failed, month,
+   * week, day, empty — asked once per pane instead of once. Off the rail there
+   * is only ever pane zero, so a laptop renders exactly what it rendered
+   * before.
+   */
+  const drawPane = (offset: Offset) => {
+    const it = paneFor(offset);
+    const current = offset === 0;
+    const paneBlocks = current ? blocks : blocksOf(it.from);
+    const weeks = monthLayout(it.at, paneBlocks, now, timeZone).weeks;
+
+    if (it.stale) {
+      // Sized from the window the last answer left behind, so the page does not
+      // change height underneath whoever is reading it.
+      return span === "day" ? (
+        <DaySkeleton startHour={frame.startHour} endHour={frame.endHour} />
+      ) : span === "week" ? (
+        <WeekSkeleton
+          days={weekDays}
+          timeZone={timeZone}
+          now={now}
+          startHour={frame.startHour}
+          endHour={frame.endHour}
+        />
+      ) : (
+        <MonthSkeleton weeks={weeks} timeZone={timeZone} />
+      );
+    }
+
+    /*
+      A failed request is not an empty week. Without this branch the screen
+      falls through to the card below and says "You have no classes of your
+      own", which is the same untruth the skeleton was added to stop — stated
+      with more confidence, because it reads as an answer rather than a wait.
+
+      Not folded into the waiting branch: a skeleton that spins for ever is
+      worse than either. An error has to say it is an error.
+    */
+    if (it.failed && !it.from) {
+      return (
+        <Card>
+          <p className="text-title m-0 text-[14px] font-semibold">
+            This {noun} could not be loaded.
+          </p>
+          <p className="text-muted mt-1 mb-3 text-[13px]">
+            Nothing is wrong with your timetable — the request did not get
+            through. It will try again on its own in a minute.
+          </p>
+          <button
+            type="button"
+            onClick={() => void it.retry()}
+            className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
+            style={{
+              background: "rgba(68,88,121,0.07)",
+              color: "var(--slate)",
+            }}
+          >
+            Try again now
+          </button>
+        </Card>
+      );
+    }
+
+    // The month draws its own empty days, so it stands whether or not anything
+    // is on it — an empty month grid is a true and useful answer, where an
+    // empty day column is just a blank.
+    if (span === "month") {
+      return (
+        <MonthGrid
+          weeks={weeks}
+          timeZone={timeZone}
+          now={now}
+          onDayClick={dropIntoDay}
+          onEventClick={onEventClick}
+          onEventPress={onEventPress}
+        />
+      );
+    }
+
+    if (span === "week") {
+      return (
+        <WeekCalendar
+          events={paneBlocks}
+          days={weekDays}
+          timeZone={timeZone}
+          now={now}
+          onEventClick={onEventClick}
+          onEventPress={onEventPress}
+          onDayClick={dropIntoDay}
+        />
+      );
+    }
+
+    const empty = paneBlocks.length === 0;
+    const nothing =
+      (it.from?.views ?? []).length === 0
+        ? "You have no classes of your own — the full timetable is on the Timetable screen."
+        : "Nothing scheduled for this day.";
+
+    /*
+     * A day with nothing on it is a sentence when it stands alone, and a grid
+     * when it is on the rail.
+     *
+     * Alone, ruled lines from eight to six saying nothing are worse than a
+     * sentence saying it. On the rail the grid is the point: the hour axis runs
+     * continuously under a finger dragging across all three days, and a
+     * Saturday that swapped it for a short card would collapse the page
+     * mid-swipe and then grow back — which is the jump this whole design is
+     * spent on not having. So the sentence is laid over the empty day instead.
+     */
+    if (empty && !onRail) {
+      return (
+        <Card>
+          <p className="text-muted m-0 text-[14px]">{nothing}</p>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="relative">
+        <DayCalendar
+          events={paneBlocks}
+          timeZone={timeZone}
+          now={now}
+          isToday={isSameLocalDay(it.at, now, timeZone)}
+          // One window for the whole rail, so the hour axis holds still under a
+          // finger dragging across it.
+          frame={onRail ? frame : undefined}
+          // Only the day being read may move the page. A neighbour scrolling
+          // the reader to its own now-line is the page jumping for a day that
+          // is not even on screen.
+          centreOnNow={current && !centred.current}
+          onCentred={current ? () => (centred.current = true) : undefined}
+          onEventClick={onEventClick}
+          onEventPress={onEventPress}
+        />
+        {empty && (
+          <p className="text-muted pointer-events-none absolute inset-x-0 top-1/2 m-0 -translate-y-1/2 px-6 text-center text-[14px]">
+            {nothing}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   return (
     // The drawer is a column beside the calendar from `lg`, and below it falls
@@ -479,104 +725,14 @@ export function ScheduleView({
             />
           </div>
 
-          {/*
-           * The flick lives outside the branch, so a run of quick swipes is
-           * not blocked by the half second each new day spends as a skeleton.
-           */}
-          <SwipeSpan onStep={swipeStep} announce={announceSpan} noun={noun}>
-            {stale ? (
-              // Sized from the window the last answer left behind, so the page
-              // does not change height underneath whoever is reading it.
-              span === "day" ? (
-                <DaySkeleton
-                  startHour={frame.startHour}
-                  endHour={frame.endHour}
-                />
-              ) : span === "week" ? (
-                <WeekSkeleton
-                  days={weekDays}
-                  timeZone={timeZone}
-                  now={now}
-                  startHour={frame.startHour}
-                  endHour={frame.endHour}
-                />
-              ) : (
-                <MonthSkeleton weeks={month.weeks} timeZone={timeZone} />
-              )
-            ) : isError && !data ? (
-              /*
-                A failed request is not an empty week. Without this branch the
-                screen falls through to the card below and says "You have no
-                classes of your own", which is the same untruth the skeleton was
-                added to stop — stated with more confidence, because it reads as
-                an answer rather than a wait.
-
-                Not folded into `stale`: a skeleton that spins for ever is worse
-                than either. An error has to say it is an error.
-              */
-              <Card>
-                <p className="text-title m-0 text-[14px] font-semibold">
-                  This {noun} could not be loaded.
-                </p>
-                <p className="text-muted mt-1 mb-3 text-[13px]">
-                  Nothing is wrong with your timetable — the request did not get
-                  through. It will try again on its own in a minute.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void refetch()}
-                  className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
-                  style={{
-                    background: "rgba(68,88,121,0.07)",
-                    color: "var(--slate)",
-                  }}
-                >
-                  Try again now
-                </button>
-              </Card>
-            ) : span === "month" ? (
-              // The month draws its own empty days, so it stands whether or not
-              // anything is on it — an empty month grid is a true and useful
-              // answer, where an empty day column is just a blank.
-              <MonthGrid
-                weeks={month.weeks}
-                timeZone={timeZone}
-                now={now}
-                onDayClick={dropIntoDay}
-                onEventClick={onEventClick}
-                onEventPress={onEventPress}
-              />
-            ) : span === "week" ? (
-              <WeekCalendar
-                events={blocks}
-                days={weekDays}
-                timeZone={timeZone}
-                now={now}
-                onEventClick={onEventClick}
-                onEventPress={onEventPress}
-                onDayClick={dropIntoDay}
-              />
-            ) : blocks.length > 0 ? (
-              <DayCalendar
-                events={blocks}
-                timeZone={timeZone}
-                now={now}
-                isToday={isSameLocalDay(date, now, timeZone)}
-                centreOnNow={!centred.current}
-                onCentred={() => (centred.current = true)}
-                onEventClick={onEventClick}
-                onEventPress={onEventPress}
-              />
-            ) : (
-              <Card>
-                <p className="text-muted m-0 text-[14px]">
-                  {views.length === 0
-                    ? "You have no classes of your own — the full timetable is on the Timetable screen."
-                    : "Nothing scheduled for this day."}
-                </p>
-              </Card>
-            )}
-          </SwipeSpan>
+          <SpanCarousel
+            live={live}
+            at={`${span}:${date.toISOString()}`}
+            onStep={swipeStep}
+            announce={announceSpan}
+            noun={noun}
+            pane={drawPane}
+          />
         </div>
       </div>
 

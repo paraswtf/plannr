@@ -45,6 +45,7 @@ export function DayCalendar({
   /** Whether the day on screen is the one the clock is in. */
   isToday = true,
   rowHeight = ROW_HEIGHT,
+  frame,
   centreOnNow = true,
   onCentred,
   onEventClick,
@@ -55,6 +56,18 @@ export function DayCalendar({
   now: Date;
   isToday?: boolean;
   rowHeight?: number;
+  /**
+   * The hours to draw, when the screen wants a say in them.
+   *
+   * Left alone, a day works out its own window from what is on it, which is
+   * right for a day standing on its own. It is wrong for a day on a rail: three
+   * days each choosing their own window put 09:00 at a different height in
+   * each, so the hour axis shears as the finger drags across it and the whole
+   * page changes height at the end. The screen hands all three the same window
+   * instead. Named `frame` rather than `window` because the effect below asks
+   * the real one how tall the screen is.
+   */
+  frame?: { startHour: number; endHour: number };
   /**
    * Whether to bring the present into view on mount.
    *
@@ -74,11 +87,8 @@ export function DayCalendar({
 }) {
   const nowRef = useRef<HTMLDivElement>(null);
 
-  const { startHour, endHour } = dayWindow(
-    events,
-    isToday ? now : null,
-    timeZone,
-  );
+  const { startHour, endHour } =
+    frame ?? dayWindow(events, isToday ? now : null, timeZone);
   const height = (endHour - startHour) * rowHeight;
 
   const nowHour = decimalHour(now, timeZone);
@@ -100,11 +110,16 @@ export function DayCalendar({
     if (box.top < 0 || box.bottom > window.innerHeight) {
       line.scrollIntoView({ block: "center" });
     }
-    // Only on arrival: re-running this every tick would fight the scrollbar,
-    // and the deps are deliberately empty rather than tracking the callbacks —
-    // this must fire once per mount and `centreOnNow` is read at that moment.
+    // Once per arrival, where an arrival is `centreOnNow` becoming true. It
+    // used to be once per *mount*, which was the same thing back when every
+    // change of day took the calendar down to a skeleton and built it again.
+    // On a rail it does not: stepping onto today from the day beside it reuses
+    // this component, so a mount-only effect would never run and `Today`,
+    // reached by swiping, would quietly stop finding the present. The callbacks
+    // are deliberately not tracked — a new `onCentred` identity every render is
+    // not a second arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [centreOnNow]);
 
   return (
     <div className="relative" style={{ height }}>

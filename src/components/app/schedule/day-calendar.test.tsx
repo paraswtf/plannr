@@ -75,6 +75,38 @@ describe("centring the present", () => {
     expect(onCentred).toHaveBeenCalledTimes(1);
   });
 
+  it("does it when the screen says an arrival has happened after all", () => {
+    // Swiping onto today from the day beside it. On a rail the calendar is
+    // reused rather than rebuilt, so there is no new mount to hang this on —
+    // the arrival is `centreOnNow` turning true, and nothing else.
+    const view = day({ centreOnNow: false });
+    expect(scrolled).toBe(0);
+    view.rerender(
+      <DayCalendar
+        events={EVENTS}
+        timeZone={TZ}
+        now={NOW}
+        isToday
+        centreOnNow
+      />,
+    );
+    expect(scrolled).toBe(1);
+  });
+
+  it("does not do it twice for one arrival", () => {
+    const view = day();
+    view.rerender(
+      <DayCalendar
+        events={EVENTS}
+        timeZone={TZ}
+        now={NOW}
+        isToday
+        centreOnNow
+      />,
+    );
+    expect(scrolled).toBe(1);
+  });
+
   it("does not report back when there was nothing to scroll to", () => {
     // A day that is not today draws no now-line. The arrival still happened,
     // and a screen that waited for a scroll that never came would scroll on

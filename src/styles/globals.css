@@ -228,6 +228,22 @@ body {
   background-clip: padding-box;
 }
 
+/*
+ * A rail the day is pushed along, with no scrollbar drawn on it.
+ *
+ * `plr-scroll` styles a scrollbar because those scrollers are meant to be
+ * scrolled by hand and have to say so. This one is a gesture surface: the
+ * position is always a whole pane, the thing it is scrolling is the screen
+ * itself, and a bar underneath the calendar would be reporting on the page
+ * rather than on anything in it.
+ */
+.plr-rail {
+  scrollbar-width: none;
+}
+.plr-rail::-webkit-scrollbar {
+  display: none;
+}
+
 .plr-clip {
   transition:
     transform 0.16s cubic-bezier(0.4, 0, 0.2, 1),
