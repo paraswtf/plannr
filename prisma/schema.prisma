@@ -145,26 +145,27 @@ model Organization {
   timezone  String   @default("Asia/Kolkata")
   createdAt DateTime @default(now())
 
-  settings        OrgSettings?
-  users           User[]
-  roles           Role[]
-  buildings       Building[]
-  rooms           Room[]
-  semesters       Semester[]
-  programmes      Programme[]
-  courses         Course[]
-  batches         Batch[]
-  groups          Group[]
-  events          Event[]
-  changeRequests  EventChangeRequest[]
-  occurrences     EventOccurrence[]
-  studentProfiles StudentProfile[]
-  facultyProfiles FacultyProfile[]
-  attendance      AttendanceSession[]
-  importBatches   ImportBatch[]
-  schedulePlans   SchedulePlan[]
-  calendarLinks   CalendarConnection[]
-  apiKeys         ApiKey[]
+  settings           OrgSettings?
+  users              User[]
+  roles              Role[]
+  buildings          Building[]
+  rooms              Room[]
+  semesters          Semester[]
+  programmes         Programme[]
+  courses            Course[]
+  batches            Batch[]
+  groups             Group[]
+  events             Event[]
+  changeRequests     EventChangeRequest[]
+  occurrences        EventOccurrence[]
+  studentProfiles    StudentProfile[]
+  facultyProfiles    FacultyProfile[]
+  attendance         AttendanceSession[]
+  importBatches      ImportBatch[]
+  schedulePlans      SchedulePlan[]
+  calendarLinks      CalendarConnection[]
+  apiKeys            ApiKey[]
+  scheduleFavourites ScheduleFavourite[]
 }
 
 model OrgSettings {
@@ -224,30 +225,81 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles           UserRole[]
-  accounts        Account[]
-  sessions        Session[]
-  studentProfile  StudentProfile?
-  facultyProfile  FacultyProfile?
-  createdEvents   Event[]                @relation("EventCreator")
-  decidedEvents   Event[]                @relation("EventDecider")
-  changeRequests  EventChangeRequest[]   @relation("ChangeRequester")
-  decidedChanges  EventChangeRequest[]   @relation("ChangeDecider")
-  importBatches   ImportBatch[]
-  outboxEntries   EmailOutbox[]
-  schedulePlans   SchedulePlan[]         @relation("PlanCreator")
-  planReviews     SchedulePlanReviewer[]
-  planComments    SchedulePlanComment[]  @relation("PlanCommenter")
-  attendanceTaken AttendanceSession[]    @relation("AttendanceMarker")
-  calendar        CalendarConnection?
+  roles              UserRole[]
+  accounts           Account[]
+  sessions           Session[]
+  studentProfile     StudentProfile?
+  facultyProfile     FacultyProfile?
+  createdEvents      Event[]                @relation("EventCreator")
+  decidedEvents      Event[]                @relation("EventDecider")
+  changeRequests     EventChangeRequest[]   @relation("ChangeRequester")
+  decidedChanges     EventChangeRequest[]   @relation("ChangeDecider")
+  importBatches      ImportBatch[]
+  outboxEntries      EmailOutbox[]
+  schedulePlans      SchedulePlan[]         @relation("PlanCreator")
+  planReviews        SchedulePlanReviewer[]
+  planComments       SchedulePlanComment[]  @relation("PlanCommenter")
+  attendanceTaken    AttendanceSession[]    @relation("AttendanceMarker")
+  calendar           CalendarConnection?
   /// The key this row is the machine identity for, if it is one.
-  apiKey          ApiKey?                @relation("ApiKeyPrincipal")
-  apiKeysOwned    ApiKey[]               @relation("ApiKeyOwner")
-  apiKeysCreated  ApiKey[]               @relation("ApiKeyCreator")
-  apiKeysRevoked  ApiKey[]               @relation("ApiKeyRevoker")
+  apiKey             ApiKey?                @relation("ApiKeyPrincipal")
+  apiKeysOwned       ApiKey[]               @relation("ApiKeyOwner")
+  apiKeysCreated     ApiKey[]               @relation("ApiKeyCreator")
+  apiKeysRevoked     ApiKey[]               @relation("ApiKeyRevoker")
+  /// Whose schedules this person keeps one tap away.
+  scheduleFavourites ScheduleFavourite[]    @relation("FavouriteHolder")
+  /// The people who keep *this* person one tap away.
+  favouritedBy       ScheduleFavourite[]    @relation("FavouritePerson")
 
   @@index([orgId, name])
   @@index([orgId, email])
+}
+
+/// Whether a favourite is one of the viewer's own angles or somebody else.
+enum ScheduleFavouriteKind {
+  PERSPECTIVE
+  PERSON
+}
+
+/// A schedule the "view as" control keeps one tap away.
+///
+/// Deliberately one table for two things that look different and behave
+/// identically. A coordinator flipping between "my own day", "the coordinator
+/// view" and the four lecturers they cover for is doing one thing — switching
+/// whose schedule is on screen — and giving perspectives and people separate
+/// rows would mean two lists, two orderings and two ways to star something, for
+/// no gain the person using it could name.
+model ScheduleFavourite {
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// Whose list this is.
+  userId String
+  user   User   @relation("FavouriteHolder", fields: [userId], references: [id], onDelete: Cascade)
+
+  kind ScheduleFavouriteKind
+
+  /// A perspective name for PERSPECTIVE — "student", "coordinator" — or the
+  /// favourited person's id for PERSON. Kept as one column because the two are
+  /// one choice to whoever made it, and because a row whose meaning depends on
+  /// its `kind` is easier to read than two nullable columns and a constraint
+  /// asserting exactly one of them is set.
+  subject String
+
+  /// Set only for a PERSON, and only so the database can clean up after a
+  /// leaver: `subject` carries the same id and is what the app reads. Without
+  /// it, deleting somebody would leave every colleague holding a favourite
+  /// pointing at nobody — harmless, since resolving one drops what it cannot
+  /// find, but it would accumulate for ever.
+  personId String?
+  person   User?   @relation("FavouritePerson", fields: [personId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, kind, subject])
+  @@index([userId, createdAt])
+  @@index([personId])
 }
 
 /// A named bundle of permissions. The four seeded roles (student, faculty,

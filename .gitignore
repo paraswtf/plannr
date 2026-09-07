@@ -41,10 +41,13 @@ yarn-error.log*
 # local env files
 # do not commit any .env files to git, except for the .env.example file. https://create.t3.gg/en/usage/env-variables#using-environment-variables
 # (.env.test is the exception: it is committed and points at the local container.)
-.env
-.env*.local
-.env.prod
-.env.production
+# Every .env, by pattern rather than by name: the list below used to be
+# whack-a-mole, and a file called `.env.loc` slipped past all four of them.
+# The two exceptions are already tracked, so the negations are documentation
+# as much as they are rules.
+.env*
+!.env.example
+!.env.test
 
 # vercel
 .vercel

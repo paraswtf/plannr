@@ -6,9 +6,11 @@ import { addressSearch, contactAddress, personName } from "~/lib/people";
 import { spanWindow, SPANS } from "~/lib/schedule-spans";
 import {
   detailFor,
+  PERSPECTIVE_LABELS,
   PERSPECTIVES,
   perspectivesFor,
   resolvePerspective,
+  type Perspective,
   type PerspectiveDetail,
 } from "~/lib/schedule-views";
 import { PermissionFlags } from "~/lib/permissions";
@@ -322,6 +324,19 @@ export async function orgTimezone(db: Db, orgId: string): Promise<string> {
     select: { timezone: true },
   });
   return org?.timezone ?? DEFAULT_TIMEZONE;
+}
+
+/**
+ * One entry in the "view as" favourites strip.
+ *
+ * `subject` is what to switch to: a perspective name for one of the viewer's
+ * own angles, or a user id for somebody else. The screen does not need to know
+ * which beyond choosing an icon, which is why they share a shape.
+ */
+export interface FavouriteDto {
+  kind: "perspective" | "person";
+  subject: string;
+  name: string;
 }
 
 export const timetableRouter = createTRPCRouter({
@@ -682,6 +697,169 @@ export const timetableRouter = createTRPCRouter({
    * each. Whichever is asked for, only the perspectives this person is entitled
    * to are honoured, so the dropdown cannot be used to see somebody else's day.
    */
+  /**
+   * The schedules this person keeps one tap away, resolved for drawing.
+   *
+   * Perspectives and people in one list, in the order they were starred,
+   * because to whoever made it they are one kind of thing: a way of getting to
+   * a schedule that is not the one on screen.
+   *
+   * A favourite naming somebody who has since left, or a perspective this
+   * person is no longer entitled to take, is dropped here rather than returned
+   * for the screen to filter. Two reasons: a stale avatar that logs somebody
+   * out of their own view when tapped is worse than one that quietly went
+   * away, and the entitlement is the same `perspectivesFor` the chooser itself
+   * runs, so there is one answer to "may I look through those eyes" rather
+   * than two that can disagree.
+   */
+  favourites: protectedProcedure.query(async ({ ctx }) => {
+    const [rows, mine] = await Promise.all([
+      ctx.db.scheduleFavourite.findMany({
+        where: { userId: ctx.actor.id, orgId: ctx.orgId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          kind: true,
+          subject: true,
+          person: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              isActive: true,
+              isServiceAccount: true,
+            },
+          },
+        },
+      }),
+      profilesOf(ctx.db, ctx.actor.id),
+    ]);
+
+    const allowed = new Set(
+      perspectivesFor({
+        hasStudentProfile: mine.student !== null,
+        hasFacultyProfile: mine.faculty !== null,
+        permissions: ctx.actor.permissions,
+      }),
+    );
+
+    // Annotated, because the two branches below return arrays of different
+    // literal types and the inference would otherwise settle on a union of
+    // arrays rather than an array of the union.
+    return rows.flatMap<FavouriteDto>((row) => {
+      if (row.kind === "PERSPECTIVE") {
+        return allowed.has(row.subject as Perspective)
+          ? [
+              {
+                kind: "perspective" as const,
+                subject: row.subject,
+                name: PERSPECTIVE_LABELS[row.subject as Perspective],
+              },
+            ]
+          : [];
+      }
+      const person = row.person;
+      // A machine has no schedule, and a deactivated account is not one to
+      // hand somebody a shortcut to.
+      if (!person || !person.isActive || person.isServiceAccount) return [];
+      return [
+        {
+          kind: "person" as const,
+          subject: person.id,
+          name: personName(person),
+        },
+      ];
+    });
+  }),
+
+  /**
+   * Stars a schedule, or unstars it. Idempotent in both directions.
+   *
+   * A person is checked before being stored, against the same population
+   * `searchPeople` offers — somebody who attends or teaches and is not a
+   * machine — so a favourite can never be a handle on a row the picker would
+   * not have shown in the first place. A perspective is checked against the
+   * ones this person may actually take.
+   */
+  toggleFavourite: protectedProcedure
+    .input(
+      z.object({
+        kind: z.enum(["perspective", "person"]),
+        subject: z.string().min(1).max(64),
+        /** True to star, false to unstar. */
+        on: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const kind = input.kind === "person" ? "PERSON" : "PERSPECTIVE";
+
+      if (!input.on) {
+        await ctx.db.scheduleFavourite.deleteMany({
+          where: {
+            userId: ctx.actor.id,
+            orgId: ctx.orgId,
+            kind,
+            subject: input.subject,
+          },
+        });
+        return { on: false as const };
+      }
+
+      if (input.kind === "perspective") {
+        const mine = await profilesOf(ctx.db, ctx.actor.id);
+        const allowed = perspectivesFor({
+          hasStudentProfile: mine.student !== null,
+          hasFacultyProfile: mine.faculty !== null,
+          permissions: ctx.actor.permissions,
+        });
+        if (!allowed.includes(input.subject as Perspective)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "That is not one of your own perspectives.",
+          });
+        }
+      } else {
+        const person = await ctx.db.user.findFirst({
+          where: {
+            id: input.subject,
+            orgId: ctx.orgId,
+            isServiceAccount: false,
+            OR: [
+              { studentProfile: { isNot: null } },
+              { facultyProfile: { isNot: null } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!person) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "No such person.",
+          });
+        }
+      }
+
+      // Upsert rather than create, so a double tap on a slow connection is the
+      // same as a single one.
+      await ctx.db.scheduleFavourite.upsert({
+        where: {
+          userId_kind_subject: {
+            userId: ctx.actor.id,
+            kind,
+            subject: input.subject,
+          },
+        },
+        update: {},
+        create: {
+          orgId: ctx.orgId,
+          userId: ctx.actor.id,
+          kind,
+          subject: input.subject,
+          personId: input.kind === "person" ? input.subject : null,
+        },
+      });
+      return { on: true as const };
+    }),
+
   mySchedule: protectedProcedure
     .input(
       z.object({
@@ -787,7 +965,9 @@ export const timetableRouter = createTRPCRouter({
       // before the day is settled, because with no date asked for the day is
       // worked out *from* these — there is no "my next class" without knowing
       // first which classes are mine.
-      const belongs = detail ? ownedOccurrenceClauses(profiles, detail.scope) : [];
+      const belongs = detail
+        ? ownedOccurrenceClauses(profiles, detail.scope)
+        : [];
 
       /**
        * The moment the window is cut around, and the day the client selects.

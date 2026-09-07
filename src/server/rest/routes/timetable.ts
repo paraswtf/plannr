@@ -91,6 +91,28 @@ export const timetableRoutes: RouteDef[] = [
   },
   {
     method: "GET",
+    path: "/timetable/favourites",
+    procedure: "timetable.favourites",
+    summary: "List the schedules the caller keeps one tap away",
+    description:
+      "The \"view as\" favourites strip: the caller's own perspectives and other people's schedules in one list, in the order they were starred, because to whoever made it they are one kind of thing — a way to reach a schedule that is not the one on screen. A favourite naming somebody who has left, or a perspective the caller may no longer take, is dropped here rather than returned to be filtered: an entry that logs you out of your own view when tapped is worse than one that quietly went away.",
+    tag: "Timetable",
+    scopes: [],
+    actor: "session",
+  },
+  {
+    method: "POST",
+    path: "/timetable/favourites",
+    procedure: "timetable.toggleFavourite",
+    summary: "Star or unstar a schedule",
+    description:
+      'Idempotent in both directions: `on: true` twice is one favourite, `on: false` on something never starred is a no-op. `kind` is `"perspective"` with a name like `coordinator`, or `"person"` with a user id. A perspective is checked against the ones the caller may actually take, and a person against the same population the picker offers — somebody who attends or teaches and is not a machine — so a favourite can never be a handle on a row that would not have been shown.',
+    tag: "Timetable",
+    scopes: [],
+    actor: "session",
+  },
+  {
+    method: "GET",
     path: "/timetable/people",
     procedure: "timetable.searchPeople",
     summary: "Search the people whose day can be looked at",

@@ -101,6 +101,7 @@ beforeEach(async () => {
     create: { orgId },
   });
 
+  await db.scheduleFavourite.deleteMany({ where: { orgId } });
   await db.event.deleteMany({ where: { orgId } });
   await db.group.deleteMany({ where: { orgId } });
   await db.batch.deleteMany({ where: { orgId } });
@@ -803,5 +804,135 @@ describe("a schedule over a week and a month", () => {
       expect(answer.views).toContain("faculty");
       expect(answer.occurrences[0]?.attendanceMarked).toBe(false);
     }
+  });
+});
+
+/**
+ * The schedules somebody keeps one tap away.
+ *
+ * The list is a convenience; the checks around it are not. A favourite is a
+ * shortcut into somebody else's day, so what is worth holding here is that it
+ * can only ever be a handle on something the picker would have offered in the
+ * first place — a real person with a timetable, or an angle this viewer is
+ * actually entitled to take — and that it stops working the moment either of
+ * those stops being true, rather than becoming a stale avatar that logs
+ * somebody out of their own view when tapped.
+ */
+describe("view-as favourites", () => {
+  it("keeps perspectives and people in one list, in the order they were starred", async () => {
+    const caller = callerFor(coordinator);
+    await caller.timetable.toggleFavourite({
+      kind: "perspective",
+      subject: "coordinator",
+      on: true,
+    });
+    await caller.timetable.toggleFavourite({
+      kind: "person",
+      subject: lecturer.id,
+      on: true,
+    });
+
+    const rows = await caller.timetable.favourites();
+    expect(rows.map((r) => [r.kind, r.subject])).toEqual([
+      ["perspective", "coordinator"],
+      ["person", lecturer.id],
+    ]);
+    // Resolved for drawing, so the strip needs no second query for names.
+    expect(rows[1]?.name).toBeTruthy();
+  });
+
+  it("is idempotent in both directions", async () => {
+    const caller = callerFor(coordinator);
+    const star = () =>
+      caller.timetable.toggleFavourite({
+        kind: "person",
+        subject: lecturer.id,
+        on: true,
+      });
+
+    await star();
+    await star();
+    expect(await caller.timetable.favourites()).toHaveLength(1);
+
+    await caller.timetable.toggleFavourite({
+      kind: "person",
+      subject: lecturer.id,
+      on: false,
+    });
+    await caller.timetable.toggleFavourite({
+      kind: "person",
+      subject: lecturer.id,
+      on: false,
+    });
+    expect(await caller.timetable.favourites()).toEqual([]);
+  });
+
+  it("is one person's own list and nobody else's", async () => {
+    await callerFor(coordinator).timetable.toggleFavourite({
+      kind: "person",
+      subject: lecturer.id,
+      on: true,
+    });
+    expect(await callerFor(learner).timetable.favourites()).toEqual([]);
+  });
+
+  it("refuses a perspective the viewer may not take", async () => {
+    // A student has no coordinator view, so a favourite pointing at one would
+    // be an avatar that answers "forbidden" — or worse, quietly shows them
+    // something.
+    await expect(
+      callerFor(learner).timetable.toggleFavourite({
+        kind: "perspective",
+        subject: "coordinator",
+        on: true,
+      }),
+    ).rejects.toThrow(/not one of your own/i);
+  });
+
+  it("refuses somebody the picker would never have offered", async () => {
+    await expect(
+      callerFor(coordinator).timetable.toggleFavourite({
+        kind: "person",
+        subject: "not-a-real-id",
+        on: true,
+      }),
+    ).rejects.toThrow(/no such person/i);
+  });
+
+  it("drops a favourite whose subject has stopped being reachable", async () => {
+    /*
+     * Two ways that happens, and both are silent: somebody leaves, and a role
+     * is taken away. Filtering here rather than on the screen means there is
+     * one answer to "may I look through those eyes" — the same `perspectivesFor`
+     * the chooser itself runs — instead of two that can disagree.
+     */
+    const caller = callerFor(coordinator);
+    await caller.timetable.toggleFavourite({
+      kind: "person",
+      subject: lecturer.id,
+      on: true,
+    });
+    await caller.timetable.toggleFavourite({
+      kind: "perspective",
+      subject: "coordinator",
+      on: true,
+    });
+    expect(await caller.timetable.favourites()).toHaveLength(2);
+
+    await db.user.update({
+      where: { id: lecturer.id },
+      data: { isActive: false },
+    });
+    // The coordinator perspective comes from ManageAllEvents; without it the
+    // angle is no longer theirs to take.
+    const stripped = callerFor({ ...coordinator, permissions: 0n });
+
+    expect(await caller.timetable.favourites()).toHaveLength(1);
+    expect(await stripped.timetable.favourites()).toEqual([]);
+
+    await db.user.update({
+      where: { id: lecturer.id },
+      data: { isActive: true },
+    });
   });
 });

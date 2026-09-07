@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { PageHeader } from "~/components/app/shell/page-header";
 import { DayNavigator } from "~/components/app/timetable/day-navigator";
@@ -10,9 +11,7 @@ import { EventModal } from "~/components/app/timetable/event-modal";
 import type { GridEvent } from "~/components/app/timetable/timetable-grid";
 import { useNow } from "~/components/app/timetable/use-now";
 import { Card } from "~/components/ui/card";
-import { SearchSelect } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
-import { Select } from "~/components/ui/select";
 import { addDays, isSameLocalDay, startOfLocalDay } from "~/lib/dates";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import {
@@ -37,12 +36,10 @@ import { MonthGrid } from "./month-grid";
 import { monthLayout } from "./month-layout";
 import { MonthSkeleton } from "./month-skeleton";
 import { WeekCalendar } from "./week-calendar";
+import { ViewAs, type ViewAsSubject } from "./view-as";
 import { WeekSkeleton } from "./week-skeleton";
 
 type Schedule = RouterOutputs["timetable"]["mySchedule"];
-
-/** The chooser's own entry for "not one of my own angles". */
-const SOMEONE_ELSE = "__someone";
 
 const SPAN_ITEMS = SPANS.map((span) => ({
   value: span,
@@ -91,7 +88,6 @@ export function ScheduleView({
   };
   /** Whose schedule is on screen, when it is not your own. */
   const [asUserId, setAsUserId] = useState<string | null>(null);
-  const [pickingPerson, setPickingPerson] = useState(false);
   const [personQuery, setPersonQuery] = useState("");
   // Null means "however the server chose", which is what the page was rendered
   // with; picking from the dropdown is what makes it explicit.
@@ -193,13 +189,86 @@ export function ScheduleView({
   // alone. What each perspective *says* about a class is still decided server
   // side, and editing and attendance keep their own permissions.
 
-  // Live for as long as the picker is on screen. Switching it off once
-  // somebody is chosen is exactly when it is needed: to choose somebody else.
-  const { data: people } = api.timetable.searchPeople.useQuery(
-    { query: personQuery || undefined },
-    { enabled: pickingPerson || asUserId !== null },
-  );
+  /**
+   * Held back until somebody opens the picker, or is already looking at
+   * somebody else's schedule.
+   *
+   * The perspectives and the people share one list now, and the list is behind
+   * a button — so the names are not needed to draw the screen, and every
+   * student loading their own timetable would otherwise pay for a directory
+   * query they were never going to read. Once open it stays live: the point of
+   * the control is switching, and switching again is the next thing it is for.
+   */
+  const [pickerUsed, setPickerUsed] = useState(false);
+  const { data: people, isFetching: peopleLoading } =
+    api.timetable.searchPeople.useQuery(
+      { query: personQuery || undefined },
+      { enabled: pickerUsed || asUserId !== null },
+    );
+
+  const { data: favourites } = api.timetable.favourites.useQuery();
+
+  const toggleFavourite = api.timetable.toggleFavourite.useMutation({
+    onSuccess: () => utils.timetable.favourites.invalidate(),
+    onError: (error) => toast.error(error.message),
+  });
   const viewingAs = data?.viewingAs ?? null;
+
+  /**
+   * The one list the picker offers, and what is currently pointed at.
+   *
+   * Perspectives and people share a shape because they are one choice: "whose
+   * schedule am I looking at". The server still keeps them apart — a
+   * perspective is a `viewAs` and a person is an `asUserId` — and this is the
+   * seam where the two become one control and back again.
+   */
+  const perspectiveOptions: ViewAsSubject[] = views.map((view) => ({
+    kind: "perspective",
+    subject: view,
+    name: PERSPECTIVE_LABELS[view],
+  }));
+
+  const peopleOptions: ViewAsSubject[] = (people?.rows ?? []).map((person) => ({
+    kind: "person",
+    subject: person.id,
+    name: person.name,
+    hint: [person.kind === "faculty" ? "Faculty" : "Student", person.detail]
+      .filter(Boolean)
+      .join(" · "),
+  }));
+
+  const favouriteOptions: ViewAsSubject[] = (favourites ?? []).map((row) => ({
+    kind: row.kind,
+    subject: row.subject,
+    name: row.name,
+  }));
+
+  const currentSubject: ViewAsSubject = viewingAs
+    ? { kind: "person", subject: viewingAs.id, name: viewingAs.name }
+    : {
+        kind: "perspective",
+        // `viewAs` is what was asked for and `data.viewAs` is what the server
+        // settled on; before the first answer lands there is neither, and the
+        // first perspective is what it will choose.
+        subject: viewAs ?? data?.viewAs ?? views[0] ?? "student",
+        name: PERSPECTIVE_LABELS[
+          viewAs ?? data?.viewAs ?? views[0] ?? "student"
+        ],
+      };
+
+  /** Points the screen at one of them, whichever kind it is. */
+  const pickSubject = (subject: ViewAsSubject) => {
+    if (subject.kind === "person") {
+      // Somebody else's schedule is described by what *they* are, so the
+      // perspective goes with it rather than being carried across.
+      setViewAs(null);
+      setAsUserId(subject.subject);
+      return;
+    }
+    setAsUserId(null);
+    setViewAs(subject.subject as Perspective);
+  };
+
   const canEdit =
     (detail?.modify ?? false) &&
     bits.hasAny(
@@ -279,9 +348,10 @@ export function ScheduleView({
         />
         <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
           {/*
-           * `ml-auto` on the right-hand cluster rather than `justify-between`
-           * on the row: with four wrapping children, space-between decides
-           * where the third one lands, and it is never where you wanted it.
+           * `ml-auto` on the calendar-sync button rather than
+           * `justify-between` on the row: with three wrapping children,
+           * space-between decides where the middle one lands, and it is never
+           * where you wanted it.
            */}
           <div className="mb-4 flex flex-wrap items-center gap-3">
             {/*
@@ -315,87 +385,45 @@ export function ScheduleView({
               onChange={goTo}
             />
 
-            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-              {/*
-                Only on your own schedule. Somebody else's classes are not yours
-                to put in your calendar, and the control would be claiming to
-                sync whatever is currently on screen.
-              */}
-              {!viewingAs && <CalendarSync />}
-              <span className="text-faint font-mono text-[12px]">view as</span>
-              <Select
-                value={
-                  viewingAs || pickingPerson
-                    ? SOMEONE_ELSE
-                    : (viewAs ?? data?.viewAs ?? views[0] ?? SOMEONE_ELSE)
-                }
-                options={[
-                  ...views.map((view) => ({
-                    value: view,
-                    label: PERSPECTIVE_LABELS[view],
-                  })),
-                  { value: SOMEONE_ELSE, label: "Someone else…" },
-                ]}
-                onChange={(value) => {
-                  if (value === SOMEONE_ELSE) {
-                    setPickingPerson(true);
-                    return;
-                  }
-                  setPickingPerson(false);
-                  setAsUserId(null);
-                  // Narrowed already: the SOMEONE_ELSE branch returned above.
-                  setViewAs(value);
-                }}
-                size="sm"
-                ariaLabel="View this schedule as"
-              />
-            </div>
-
             {/*
-             * A sibling of the cluster above rather than a member of it, so
-             * below `lg` it takes a full line of its own instead of being
-             * wedged into an already-wrapped row at 260px.
-             */}
-            {(pickingPerson || viewingAs) && (
-              <div className="w-full lg:ml-auto lg:w-[260px]">
-                <SearchSelect
-                  value={
-                    viewingAs
-                      ? { id: viewingAs.id, label: viewingAs.name }
-                      : null
-                  }
-                  onChange={(id) => {
-                    setAsUserId(id);
-                    // Stay in person mode either way: clearing goes back to an
-                    // open picker, not out of it.
-                    setPickingPerson(true);
-                    setPersonQuery("");
-                  }}
-                  page={{
-                    rows: (people?.rows ?? []).map((person) => ({
-                      id: person.id,
-                      label: person.name,
-                      hint: [
-                        person.kind === "faculty" ? "Faculty" : "Student",
-                        person.detail,
-                      ]
-                        .filter(Boolean)
-                        .join(" · "),
-                    })),
-                    // Everybody the search matched, which is not the same as
-                    // the number of names on the list — a full page used to be
-                    // the only clue that there were more, and it could not say
-                    // how many more.
-                    total: people?.total ?? 0,
-                    hasMore: (people?.page ?? 1) < (people?.pageCount ?? 1),
-                  }}
-                  query={personQuery}
-                  onQueryChange={setPersonQuery}
-                  placeholder="Search students and staff…"
-                  emptyOption="Back to my own schedule"
-                />
+              Only on your own schedule. Somebody else's classes are not yours
+              to put in your calendar, and the control would be claiming to
+              sync whatever is currently on screen.
+            */}
+            {!viewingAs && (
+              <div className="sm:ml-auto">
+                <CalendarSync />
               </div>
             )}
+          </div>
+
+          {/*
+           * A line of its own, and not because it would not fit — though at
+           * four controls it would not. "View as" changes whose schedule the
+           * whole screen is about, which is a different order of thing from
+           * stepping a day, and the favourites beside it need room to be
+           * tapped rather than a gap at the end of a row.
+           */}
+          <div className="mb-4">
+            <ViewAs
+              current={currentSubject}
+              perspectives={perspectiveOptions}
+              people={peopleOptions}
+              favourites={favouriteOptions}
+              total={people?.total ?? 0}
+              query={personQuery}
+              onQueryChange={setPersonQuery}
+              onOpen={() => setPickerUsed(true)}
+              onPick={pickSubject}
+              onToggleFavourite={(subject, on) =>
+                toggleFavourite.mutate({
+                  kind: subject.kind,
+                  subject: subject.subject,
+                  on,
+                })
+              }
+              loading={peopleLoading}
+            />
           </div>
 
           {stale ? (
