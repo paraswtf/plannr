@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "~/components/app/shell/page-header";
@@ -85,6 +85,11 @@ export function ScheduleView({
   const goTo = (day: Date) => {
     setMoved(true);
     setDate(day);
+    // Asking for today is asking to see now, so the calendar is allowed to
+    // centre the present again. Without this the latch below is written once
+    // on arrival and never cleared, and `Today` quietly stopped scrolling to
+    // the now-line at all — which is most of what the button is for.
+    if (isSameLocalDay(day, new Date(), timeZone)) centred.current = false;
   };
   /** Whose schedule is on screen, when it is not your own. */
   const [asUserId, setAsUserId] = useState<string | null>(null);
@@ -200,6 +205,18 @@ export function ScheduleView({
    * the control is switching, and switching again is the next thing it is for.
    */
   const [pickerUsed, setPickerUsed] = useState(false);
+
+  /**
+   * Whether the present has already been scrolled to on this screen.
+   *
+   * `DayCalendar` centres the now-line when it mounts, and it mounts again
+   * every time the answer changes: switching to a colleague's schedule takes
+   * the calendar down to a skeleton and brings it back, so the page jumped
+   * under anybody who tapped a favourite. Arriving is the thing worth
+   * scrolling for, and it happens once — a ref rather than state, because
+   * recording it must not itself cause a render.
+   */
+  const centred = useRef(false);
   const { data: people, isFetching: peopleLoading } =
     api.timetable.searchPeople.useQuery(
       { query: personQuery || undefined },
@@ -504,6 +521,8 @@ export function ScheduleView({
               timeZone={timeZone}
               now={now}
               isToday={isSameLocalDay(date, now, timeZone)}
+              centreOnNow={!centred.current}
+              onCentred={() => (centred.current = true)}
               onEventClick={onEventClick}
               onEventPress={onEventPress}
             />

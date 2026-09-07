@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ViewAs, type ViewAsSubject } from "./view-as";
+import { toneFor, ViewAs, type ViewAsSubject } from "./view-as";
 
 /**
  * The one control that answers "whose schedule am I looking at".
@@ -230,5 +230,49 @@ describe("the people search", () => {
 
     openList();
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("avatar colours", () => {
+  /**
+   * The point of a colour is that somebody learns it. "Rao is the green one"
+   * is only worth anything if Rao stays green — across a reload, across another
+   * device, and across starring a sixth colleague — so the tone is hashed from
+   * the subject rather than handed out by position in the strip.
+   */
+
+  it("gives a subject the same tone every time", () => {
+    const rao = { kind: "person" as const, subject: "user-rao" };
+    expect(toneFor(rao)).toEqual(toneFor({ ...rao }));
+  });
+
+  it("does not repaint the strip when its order changes", () => {
+    // The failure a colour-by-index strip has: unstar somebody near the front
+    // and everybody behind them changes colour.
+    const before = [PEOPLE[0]!, PEOPLE[1]!, PERSPECTIVES[0]!].map(toneFor);
+    const after = [PEOPLE[1]!, PERSPECTIVES[0]!].map(toneFor);
+    expect(after).toEqual([before[1], before[2]]);
+  });
+
+  it("spreads a realistic strip across more than one colour", () => {
+    // Six tones and five or so favourites: they will not all differ, but a hash
+    // that put a whole strip on one colour would be no better than none.
+    const strip = [
+      { kind: "perspective" as const, subject: "student" },
+      { kind: "perspective" as const, subject: "coordinator" },
+      { kind: "person" as const, subject: "cmsua1yeaaaaaaaaaaaaaaaaa" },
+      { kind: "person" as const, subject: "cmsub2zfbbbbbbbbbbbbbbbbb" },
+      { kind: "person" as const, subject: "cmsuc3agccccccccccccccccc" },
+    ];
+    const inks = new Set(strip.map((s) => toneFor(s).ink));
+    expect(inks.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("always pairs a fill with an ink that is not the fill", () => {
+    for (const option of [...PERSPECTIVES, ...PEOPLE]) {
+      const tone = toneFor(option);
+      expect(tone.fill).toMatch(/^rgba\(/);
+      expect(tone.ink).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 });

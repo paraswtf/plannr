@@ -27,7 +27,12 @@ export interface EntityCard {
 
 /** Initials for a person or a code, with any honorific stripped. */
 export function initialsOf(name: string): string {
-  const cleaned = name.replace(/^(Dr|Prof|Ms|Mr|Mrs)\.?\s*/i, "").trim();
+  // The separator is required, not optional. `\s*` made this a prefix match on
+  // the letters alone, so Drishti became "ishti" and Mrinal became "inal" —
+  // names this college has plenty of, initialled as somebody else entirely. A
+  // title is a word, so it is followed by a space or a full stop or it was
+  // never a title.
+  const cleaned = name.replace(/^(Dr|Prof|Ms|Mr|Mrs)(\.\s*|\s+)/i, "").trim();
   const parts = cleaned.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();

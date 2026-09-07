@@ -45,6 +45,8 @@ export function DayCalendar({
   /** Whether the day on screen is the one the clock is in. */
   isToday = true,
   rowHeight = ROW_HEIGHT,
+  centreOnNow = true,
+  onCentred,
   onEventClick,
   onEventPress,
 }: {
@@ -53,6 +55,19 @@ export function DayCalendar({
   now: Date;
   isToday?: boolean;
   rowHeight?: number;
+  /**
+   * Whether to bring the present into view on mount.
+   *
+   * Owned by the screen rather than decided here, because this component is
+   * mounted again every time the answer it is drawing changes — switching to a
+   * colleague's day takes the calendar down to a skeleton and brings it back —
+   * and a scroll on each of those is the page jumping under somebody who only
+   * tapped an avatar. The screen knows which mount is an arrival; this one
+   * cannot.
+   */
+  centreOnNow?: boolean;
+  /** Called once the present has been centred, so it is not done twice. */
+  onCentred?: () => void;
   onEventClick?: (event: DayCalendarEvent) => void;
   /** A press-and-hold or a right-click on a block. */
   onEventPress?: (event: DayCalendarEvent) => void;
@@ -72,13 +87,23 @@ export function DayCalendar({
   // Bring the present into view on arrival, but only when it is not already
   // there — nobody wants the page to jump under them for no reason.
   useEffect(() => {
+    if (!centreOnNow) return;
     const line = nowRef.current;
+    // No now-line means the day on screen is not today, and there is nothing
+    // to centre on. Deliberately *not* reported: the arrival has not happened
+    // yet, so the screen keeps asking, and the first mount that does draw the
+    // present — pressing Today from a day the screen opened on ahead of itself
+    // — is the one that gets the scroll.
     if (!line) return;
+    onCentred?.();
     const box = line.getBoundingClientRect();
     if (box.top < 0 || box.bottom > window.innerHeight) {
       line.scrollIntoView({ block: "center" });
     }
-    // Only on arrival: re-running this every tick would fight the scrollbar.
+    // Only on arrival: re-running this every tick would fight the scrollbar,
+    // and the deps are deliberately empty rather than tracking the callbacks —
+    // this must fire once per mount and `centreOnNow` is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

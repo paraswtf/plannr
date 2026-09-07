@@ -97,134 +97,154 @@ export function ViewAs({
 
   return (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-      <span className="text-faint shrink-0 font-mono text-[12px]">view as</span>
-
       {/*
-       * A real width, and a floor under it on a phone.
+       * The label and the control are one item, full width until there is a
+       * row to share.
        *
-       * The panel is sized off this box, so `flex-none` with no width — which
-       * resolves to "as wide as the name currently in it" — made the list about
-       * a hundred pixels across. Inside that, the avatar and the star are
-       * `shrink-0` and the name is `min-w-0 flex-1`, so the name was the only
-       * thing that could give way: it truncated to nothing, and every row came
-       * out as an icon, a gap and a star. The floor does the same job where the
-       * row wraps rather than sizes, by pushing the favourites onto a line of
-       * their own instead of letting them squeeze this.
+       * They used to be two, with the trigger `flex-1` — which meant the
+       * favourites strip competed with it for the same line and the panel,
+       * sized off the trigger, narrowed as somebody starred people. A phone
+       * ended up with a list about two hundred pixels wide whose width moved
+       * while it was open. Now the strip wraps beneath instead, and the panel
+       * is as wide as the screen allows and stays there.
        */}
-      <div
-        ref={boxRef}
-        className="min-w-[200px] flex-1 sm:w-[264px] sm:flex-none"
-      >
-        <button
-          ref={triggerRef}
-          type="button"
-          onClick={() => {
-            if (!open) onOpen?.();
-            setOpen((v) => !v);
-          }}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          className="bg-surface flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0 lg:py-1.5"
-          style={{ boxShadow: "var(--ring)" }}
-        >
-          <span className="text-title min-w-0 truncate font-medium">
-            {current.name}
-          </span>
-          <Icon name="chevronDown" size={14} color="var(--muted)" />
-        </button>
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+        <span className="text-faint shrink-0 font-mono text-[12px]">
+          view as
+        </span>
 
-        <Popover
-          open={open}
-          anchorRef={boxRef}
-          onClose={() => setOpen(false)}
-          // `min-width` rather than `width`: the trigger sets the floor, and a
-          // long name in the list may make the panel wider than the control
-          // that opened it rather than being truncated to fit inside it.
-          match="min-width"
-          className="bg-surface flex flex-col rounded-[10px] p-1.5"
-          style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
-        >
-          <div className="relative mb-1.5 shrink-0">
-            <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
-              <Icon name="search" size={13} color="var(--faint)" />
-            </span>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                }
-                // Tab leaves the picker rather than walking its rows: the panel
-                // hangs off <body>, so the stop after it is the browser's own
-                // chrome rather than the next control in the toolbar.
-                if (e.key === "Tab") {
-                  triggerRef.current?.focus();
-                  setOpen(false);
-                }
-              }}
-              placeholder="Search perspectives, students and staff…"
-              // 16px on a phone: anything smaller and Safari zooms the page on
-              // focus, which on this toolbar throws the calendar off screen.
-              className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
-            />
-          </div>
-
-          <div
-            role="listbox"
-            className="plr-scroll max-h-[280px] min-h-0 overflow-y-auto"
+        {/*
+         * A real width. The panel is sized off this box, so `flex-none` with
+         * no width — which resolves to "as wide as the name currently in it" —
+         * made the list about a hundred pixels across, and inside that the
+         * avatar and the star are `shrink-0` while the name is `min-w-0
+         * flex-1`, so the name was the only thing that could give way: it
+         * truncated to nothing and every row came out as an icon, a gap and a
+         * star. On a phone it takes the rest of its own line instead, which is
+         * a good deal wider than a fixed 288 would be.
+         */}
+        <div ref={boxRef} className="min-w-0 flex-1 sm:w-[288px] sm:flex-none">
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => {
+              if (!open) onOpen?.();
+              setOpen((v) => !v);
+            }}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            className="bg-surface flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0 lg:py-1.5"
+            style={{ boxShadow: "var(--ring)" }}
           >
-            {shownPerspectives.map((option) => (
-              <Row
-                key={keyOf(option)}
-                option={option}
-                hint="you"
-                selected={keyOf(option) === keyOf(current)}
-                starred={starred.has(keyOf(option))}
-                onPick={pick}
-                onToggleFavourite={onToggleFavourite}
+            <span className="text-title min-w-0 truncate font-medium">
+              {current.name}
+            </span>
+            <Icon name="chevronDown" size={14} color="var(--muted)" />
+          </button>
+
+          <Popover
+            open={open}
+            anchorRef={boxRef}
+            onClose={() => setOpen(false)}
+            /*
+             * A fixed width, taken from the trigger, and deliberately not
+             * `min-width`.
+             *
+             * `min-width` lets the panel size itself off its own content — and
+             * `usePopoverPlacement` watches the panel with a ResizeObserver, so
+             * every keystroke that changed the results changed the width, which
+             * re-measured, which could cap the width against the viewport, which
+             * re-measured again. A long name is what made it visible: the list
+             * jittered as you typed. The trigger is a fixed width, so the panel
+             * is too, and a name longer than it truncates with the whole of it
+             * on the row's `title`.
+             */
+            match="width"
+            className="bg-surface flex flex-col rounded-[10px] p-1.5"
+            style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+          >
+            <div className="relative mb-1.5 shrink-0">
+              <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
+                <Icon name="search" size={13} color="var(--faint)" />
+              </span>
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => onQueryChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }
+                  // Tab leaves the picker rather than walking its rows: the panel
+                  // hangs off <body>, so the stop after it is the browser's own
+                  // chrome rather than the next control in the toolbar.
+                  if (e.key === "Tab") {
+                    triggerRef.current?.focus();
+                    setOpen(false);
+                  }
+                }}
+                placeholder="Search perspectives, students and staff…"
+                // 16px on a phone: anything smaller and Safari zooms the page on
+                // focus, which on this toolbar throws the calendar off screen.
+                className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
               />
-            ))}
+            </div>
 
-            {shownPerspectives.length > 0 && people.length > 0 && (
-              <div
-                className="mx-2.5 my-1"
-                style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
-              />
-            )}
+            <div
+              role="listbox"
+              className="plr-scroll max-h-[280px] min-h-0 overflow-y-auto"
+            >
+              {shownPerspectives.map((option) => (
+                <Row
+                  key={keyOf(option)}
+                  option={option}
+                  hint="you"
+                  selected={keyOf(option) === keyOf(current)}
+                  starred={starred.has(keyOf(option))}
+                  onPick={pick}
+                  onToggleFavourite={onToggleFavourite}
+                />
+              ))}
 
-            {people.map((option) => (
-              <Row
-                key={keyOf(option)}
-                option={option}
-                hint={option.hint}
-                selected={keyOf(option) === keyOf(current)}
-                starred={starred.has(keyOf(option))}
-                onPick={pick}
-                onToggleFavourite={onToggleFavourite}
-              />
-            ))}
+              {shownPerspectives.length > 0 && people.length > 0 && (
+                <div
+                  className="mx-2.5 my-1"
+                  style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
+                />
+              )}
 
-            {shownPerspectives.length === 0 && people.length === 0 && (
-              <p className="text-muted p-2 text-[12.5px]">
-                {loading ? "Searching…" : "Nobody matches that."}
-              </p>
-            )}
+              {people.map((option) => (
+                <Row
+                  key={keyOf(option)}
+                  option={option}
+                  hint={option.hint}
+                  selected={keyOf(option) === keyOf(current)}
+                  starred={starred.has(keyOf(option))}
+                  onPick={pick}
+                  onToggleFavourite={onToggleFavourite}
+                />
+              ))}
 
-            {/*
-             * How many matched, rather than how many are listed. A full page
-             * used to be the only clue that there were more, and it could not
-             * say how many more.
-             */}
-            {total > people.length && (
-              <p className="text-faint px-2.5 py-1.5 text-[11.5px]">
-                {total - people.length} more — keep typing to narrow it.
-              </p>
-            )}
-          </div>
-        </Popover>
+              {shownPerspectives.length === 0 && people.length === 0 && (
+                <p className="text-muted p-2 text-[12.5px]">
+                  {loading ? "Searching…" : "Nobody matches that."}
+                </p>
+              )}
+
+              {/*
+               * How many matched, rather than how many are listed. A full page
+               * used to be the only clue that there were more, and it could not
+               * say how many more.
+               */}
+              {total > people.length && (
+                <p className="text-faint px-2.5 py-1.5 text-[11.5px]">
+                  {total - people.length} more — keep typing to narrow it.
+                </p>
+              )}
+            </div>
+          </Popover>
+        </div>
       </div>
 
       {favourites.length > 0 && (
@@ -263,6 +283,9 @@ function Row({
       <button
         type="button"
         onClick={() => onPick(option)}
+        // The panel is a fixed width, so a long name truncates — and the title
+        // is where the whole of it stays reachable.
+        title={option.name}
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-2.5 py-2 text-left"
       >
         <Avatar option={option} size={22} />
@@ -309,7 +332,15 @@ function Favourites({
     // Scrolls inside itself rather than wrapping: a row that grows a second
     // line as somebody stars a fifth colleague would move the calendar down
     // the page for a control they are not looking at.
-    <div className="plr-scroll -my-1 flex max-w-full min-w-0 items-center gap-1.5 overflow-x-auto py-1">
+    /*
+     * The padding on both axes is what the selected ring lives in. It is a
+     * `box-shadow`, so it is drawn outside the avatar's own box, and a scroller
+     * clips both axes whichever one it was asked to scroll — without this the
+     * ring is shaved off the top and bottom of every avatar and off the sides
+     * of the first and last. The negative margin hands the space back, so
+     * nothing around it moves.
+     */
+    <div className="plr-scroll -m-1 flex max-w-full min-w-0 items-center gap-1.5 overflow-x-auto p-1">
       {favourites.map((option) => {
         const on = keyOf(option) === keyOf(current);
         return (
@@ -336,6 +367,59 @@ function Favourites({
 }
 
 /**
+ * The colours an avatar can take, as a fill and an ink that reads on it.
+ *
+ * Pairs rather than one tone with a tint computed from it, because the two
+ * things a tone has to do — sit behind two letters and be those two letters —
+ * are not the same brightness. `--orange` is the case that proves it: readable
+ * as a fill at 16%, and illegible as text on anything. These are the pairs
+ * `Badge` already settled, plus the two tones in the palette it had no use for.
+ */
+const TONES: ReadonlyArray<{ fill: string; ink: string }> = [
+  { fill: "rgba(68,88,121,0.12)", ink: "#324464" },
+  { fill: "rgba(122,46,143,0.12)", ink: "#6b2880" },
+  { fill: "rgba(78,125,58,0.14)", ink: "#3f6a2e" },
+  { fill: "rgba(220,56,72,0.10)", ink: "#b02636" },
+  // Darker than the `--orange` ink `Badge` uses. That one is 4.18:1 here and
+  // fails AA: a badge sets it at 11px semibold against a 16% tint, and these
+  // are two letters that have to be told apart at a glance. 5.60:1.
+  { fill: "rgba(246,167,59,0.18)", ink: "#8a5309" },
+  // Pink rather than the palette's `--magenta`, whose readable ink is #c02a44
+  // — twenty-one units from the red above it, which is to say the same colour.
+  // Six tones are only worth having if all six are distinguishable.
+  { fill: "rgba(168,37,138,0.12)", ink: "#a8258a" },
+];
+
+/**
+ * Which tone a subject gets. The same one every time, on every device.
+ *
+ * Hashed from the subject rather than handed out by position, because position
+ * changes: star somebody new, unstar somebody else, and a colour-by-index strip
+ * repaints itself — which is precisely the thing that stops a colour being
+ * worth anything. What a person learns is "Rao is the green one", and that has
+ * to survive them starring a sixth colleague.
+ *
+ * Six tones and no attempt at uniqueness: with a strip of five, two of them
+ * sharing a colour is ordinary and not worth the complexity of avoiding. The
+ * colour is a memory aid — something to aim a thumb at — and not an identifier;
+ * the name is on the tooltip and in the label for anybody who needs to be sure.
+ *
+ * Exported for the test, which cares about the stability rather than the hash.
+ */
+export function toneFor(subject: { kind: string; subject: string }): {
+  fill: string;
+  ink: string;
+} {
+  const key = keyOf(subject);
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    // djb2, near enough: cheap, stable, and spread well enough for six buckets.
+    hash = (hash * 33 + key.charCodeAt(i)) % 100_000_007;
+  }
+  return TONES[hash % TONES.length]!;
+}
+
+/**
  * Initials for a person, an icon for a perspective.
  *
  * Initials rather than a Google picture, deliberately: `searchPeople` answers
@@ -348,23 +432,28 @@ function Avatar({ option, size }: { option: ViewAsSubject; size: number }) {
     option.kind === "perspective"
       ? (PERSPECTIVE_ICONS[option.subject] ?? "users")
       : null;
+  const tone = toneFor(option);
 
   return (
     <span
-      className="text-title flex shrink-0 items-center justify-center rounded-full font-bold"
+      className="flex shrink-0 items-center justify-center rounded-full font-bold"
       style={{
         width: size,
         height: size,
         fontSize: size * 0.38,
-        background: "var(--card-soft)",
-        boxShadow: "inset 0 0 0 1px var(--hair)",
+        background: tone.fill,
+        color: tone.ink,
+        // The hairline is the ink at low opacity rather than the shared
+        // `--hair`, so an avatar reads as one colour rather than as a tinted
+        // disc somebody has drawn a grey ring around.
+        boxShadow: `inset 0 0 0 1px ${tone.ink}22`,
       }}
     >
       {icon ? (
         <Icon
           name={icon}
           size={Math.round(size * 0.5)}
-          color="var(--slate)"
+          color={tone.ink}
           stroke={1.9}
         />
       ) : (

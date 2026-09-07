@@ -147,7 +147,22 @@ export function usePopoverPlacement(
       // a classic scrollbar as usable space, and a panel that ends underneath
       // one has still widened the page.
       const viewport = document.documentElement.clientWidth;
-      const viewportHeight = document.documentElement.clientHeight;
+      /*
+       * The bottom of what can actually be seen, in layout coordinates.
+       *
+       * `clientHeight` is the layout viewport, which a software keyboard does
+       * not shrink — so a panel that autofocuses a search box, as the pickers
+       * do, was measured against a window half of which the keyboard was
+       * sitting on. The visual viewport is the one that knows, and its
+       * `offsetTop` is what converts its bottom edge back into the coordinates
+       * `getBoundingClientRect` reports in. The listeners for it were already
+       * here; nothing had ever read it.
+       */
+      const layoutHeight = document.documentElement.clientHeight;
+      const visual = window.visualViewport;
+      const viewportHeight = visual
+        ? Math.min(layoutHeight, visual.height + visual.offsetTop)
+        : layoutHeight;
 
       // What the panel measures now already carries the last frame's caps. That
       // is fine in one direction — a cap can only make it smaller — and the
