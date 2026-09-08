@@ -231,7 +231,7 @@ function DayBlock({
          * everybody else's, and on your own schedule they are all yours — or,
          * under "view as", all somebody else's, which gold would misname.
          */
-        background: live ? "rgba(220,56,72,0.10)" : tone.fill,
+        background: live ? "var(--live-fill)" : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
           : `inset 0 0 0 1px ${tone.ring}`,

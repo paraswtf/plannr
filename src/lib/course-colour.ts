@@ -2,12 +2,11 @@
  * A colour per subject, so a week of blocks reads as a pattern rather than a
  * wall of identical tiles.
  *
- * The same shape the app already uses for every tinted surface — a pale fill
- * with a saturated hairline over it, the pair documented on `--mine-fill` /
- * `--mine-ring` in `globals.css`. Pale is not a stylistic preference here: the
- * title on a block is `--app-ink`, so the fill has to stay light enough that
- * the text on top of it is the same contrast it was on `--card-soft`. All the
- * distinguishing work is done by the ring.
+ * A fill and a hairline over it, the pair `--mine-fill` / `--mine-ring` set the
+ * shape of. The fill is opaque and carries the colour; the ring is the same hue
+ * taken much darker, which is what keeps a block's edge legible against the one
+ * beside it. Both are light enough that the title and subtitle drawn on top
+ * stay readable, which the test measures rather than assumes.
  *
  * Two colours are deliberately missing from the palette. Amber, because gold
  * already means "one of yours" on the campus timetable, and red, because red
@@ -40,38 +39,47 @@ export const NO_COURSE: CourseTone = {
 /**
  * The palette, as fill-and-ring pairs.
  *
- * Six rather than as many as there are courses, for the reason the avatar tones
- * give one file over: a colour is a memory aid, not an identifier. What
- * somebody learns is "Design Thinking is the green one", and that only has to
- * hold among the handful of subjects on screen at once. The name is on the
- * block and in the key for anybody who needs to be sure.
+ * The first version of this was six low-alpha tints, and it was rejected for
+ * not being distinct enough — correctly, and the reason was not the hues. A
+ * fill of `rgba(22,90,25,0.14)` over a white surface composites to #dee8df:
+ * eighty-six per cent background, a pale grey with a rumour of green in it. All
+ * six came out between #de and #e9 in every channel. The hue was chosen with
+ * care and then almost entirely thrown away by the alpha. So these are opaque,
+ * and the difference is not subtle.
  *
- * Chosen under simulated colour blindness, not by eye, and that changed the
- * answer completely. The first version of this palette picked six hues evenly
- * around the wheel with the reserved wedges cut out, which looked fine and was
- * nearly useless: run through a dichromat simulation, its green landed 2.4 ΔE
- * from the live red and 3.6 from the "yours" gold — under a just-noticeable
- * difference of about 2.3. For roughly one man in fifty, every green block on
- * the timetable was the class happening right now, or one of their own.
+ * Eight of them, spread over the arc from yellow-green round to pink. Two
+ * stretches of the wheel are missing on purpose: amber, because gold means "one
+ * of your own classes", and red, because red means "happening right now". Those
+ * two are the only colours on the grid whose meaning cannot be recovered from
+ * anywhere else on the screen, so nothing else may come near them.
  *
- * So the separation is measured with the deficiency applied, over normal
- * vision, protanopia and deuteranopia at once, and the worst case across all
- * three is what was maximised. That is why the lightnesses are spread from L*20
- * to L*57 rather than sitting in one band: red-green deficiency collapses the
- * wheel towards a single blue-yellow axis, so hue alone cannot carry six
- * categories, and lightness is what is left. It is also why there is no true
- * red and no amber here — those are spoken for by "happening now" and "one of
- * yours", and a course wearing either would be answering a question it was not
- * asked. The worst pair now sits at 15.8 ΔE2000, about seven times the
- * threshold. `course-colour.test.ts` holds all of that.
+ * Chosen by search rather than by eye, maximising the worst pair under normal
+ * vision subject to three floors that are checked, not assumed: every pair
+ * stays apart for a dichromat too, every colour stays clear of the two reserved
+ * ones under every kind of vision, and the block's own ink stays readable on
+ * top. The numbers that came out — worst pair 15.6 ΔE2000 normally and 5.1
+ * under simulated protanopia and deuteranopia, 12.1 from gold, 14.1 from red,
+ * text between 4.7:1 and 9.8:1 — are all held by the test.
+ *
+ * That 5.1 is the honest trade in this design. Six colours *fully* separated
+ * for a dichromat exist, and this app shipped them, and they were the washed
+ * out ones: red-green deficiency folds the wheel onto a single blue-yellow
+ * axis, so demanding full separation between courses forces every tone into a
+ * narrow, muted band. The line drawn instead is about what a colour is being
+ * asked to carry. Which subject a block teaches is written on the block and
+ * listed in the key, so a colour that is merely similar costs a reader a glance
+ * at the label. "Yours" and "happening now" are written nowhere else, so those
+ * keep the full separation and the courses take the looser floor.
  */
 const TONES: readonly CourseTone[] = [
-  { fill: "rgba(43, 41, 101, 0.14)", ring: "#2b2965" }, // indigo
-  { fill: "rgba(74, 38, 51, 0.14)", ring: "#4a2633" }, // plum
-  { fill: "rgba(22, 90, 25, 0.14)", ring: "#165a19" }, // green
-  { fill: "rgba(59, 84, 206, 0.14)", ring: "#3b54ce" }, // blue
-  { fill: "rgba(41, 122, 163, 0.14)", ring: "#297aa3" }, // sky
-  { fill: "rgba(49, 155, 116, 0.14)", ring: "#319b74" }, // sea
+  { fill: "#8da524", ring: "#333d02" }, // moss
+  { fill: "#40f8d4", ring: "#13816c" }, // mint
+  { fill: "#63effc", ring: "#137d86" }, // ice
+  { fill: "#29abb7", ring: "#034045" }, // teal
+  { fill: "#7dc7fa", ring: "#0b5e8a" }, // sky
+  { fill: "#8e9cf8", ring: "#3026a4" }, // periwinkle
+  { fill: "#d77ce0", ring: "#6b0774" }, // orchid
+  { fill: "#fbafdb", ring: "#a6207d" }, // blossom
 ];
 
 /** Exported for the test, which cares that they stay far apart. */
@@ -109,10 +117,26 @@ export function courseTone(title: string | null | undefined): CourseTone {
   const key = courseKey(title);
   if (key === "") return NO_COURSE;
 
-  let hash = 0;
+  /*
+   * FNV-1a with a final avalanche, rather than the djb2 that was here.
+   *
+   * djb2 taken modulo a prime on every iteration keeps the number small and
+   * leaves most of its entropy in the high bits — and the bucket is chosen from
+   * the low ones. On a corpus of plausible course titles it clumped. This
+   * spreads, and the avalanche is what makes two titles differing by one letter
+   * land in unrelated places, which is the case a college's course list is full
+   * of: "Data Structures I" and "Data Structures II".
+   */
+  let hash = 0x811c9dc5;
   for (let i = 0; i < key.length; i++) {
-    // djb2, near enough: cheap, stable, and spread well enough for eight buckets.
-    hash = (hash * 33 + key.charCodeAt(i)) % 100_000_007;
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
   }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d) >>> 0;
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b) >>> 0;
+  hash = (hash ^ (hash >>> 16)) >>> 0;
+
   return TONES[hash % TONES.length]!;
 }

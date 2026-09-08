@@ -48,14 +48,28 @@
 
   /*
    * Your own classes, picked out of everybody else's on the campus timetable.
-   * The same fill-plus-ring pair as a card, in gold rather than slate: gold is
-   * the warm end of the brand gradient and is nothing else's colour on that
-   * grid, where red already means "happening now". The ring is deepened past
-   * --orange on purpose — a 1px hairline in a pale amber reads as a glow rather
-   * than a line.
+   * Gold, because it is the warm end of the brand gradient and is nothing
+   * else's colour on that grid — the course palette leaves the whole amber
+   * stretch of the wheel alone for it, and red alone for "happening now".
+   *
+   * Opaque, since the course colours became opaque. As a sixteen-per-cent tint
+   * this was a pale cream, which was the most prominent thing on a grid of
+   * paler creams and the least prominent thing on a grid of real colours —
+   * and "one of yours" is the thing somebody is scanning for. The ring stays
+   * deepened past --orange: a 1px hairline in a pale amber reads as a glow
+   * rather than a line.
    */
-  --mine-fill: rgba(246, 167, 59, 0.16);
+  --mine-fill: #ffc667;
   --mine-ring: #d99425;
+
+  /*
+   * A class running right now. The ring was always `--red`; the fill used to be
+   * a ten-per-cent tint of it, which was fine while every other block was a
+   * tint too. Beside an opaque course colour a tint reads as nothing at all —
+   * and these two are the signals that must never be the quiet ones on the
+   * grid, so both went opaque with everything else.
+   */
+  --live-fill: #ffa7a4;
 
   /*
    * How tall the timetable may stand before compact mode scales it down.

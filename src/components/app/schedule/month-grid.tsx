@@ -197,7 +197,7 @@ function Chip({
       title={`${formatHourLabel(event.start, timeZone)} · ${event.title}`}
       className="pointer-events-auto flex h-5 shrink-0 items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left select-none"
       style={{
-        background: live ? "rgba(220,56,72,0.10)" : tone.fill,
+        background: live ? "var(--live-fill)" : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
           : `inset 0 0 0 1px ${tone.ring}`,

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -65,11 +67,32 @@ const XYZ_LMS = [
   [-0.15514, 0.45684, 0.03286],
   [0, 0, 0.01608],
 ];
-const LMS_XYZ = [
-  [2.944812, -2.298974, 3.230135],
-  [1, 0, 0],
-  [0, 0, 62.18806],
-];
+/**
+ * Inverted here rather than transcribed, and that is not tidiness.
+ *
+ * This constant was originally pasted from a reference and was not the inverse
+ * of the matrix above it. Nothing caught it: the simulation still returned
+ * plausible-looking colours, an independent reviewer using the same published
+ * constant computed the same numbers, and two implementations agreeing on a
+ * shared bad input is not agreement about anything. Under it, white simulated
+ * to magenta. Derived from `XYZ_LMS`, the pair cannot drift apart again, and
+ * the achromatic test below is the one line that would have caught it.
+ */
+function invert(m: number[][]): number[][] {
+  const [[a, b, c], [d, e, f], [g, h, i]] = m as [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  return [
+    [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+    [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+    [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det],
+  ];
+}
+
+const LMS_XYZ = invert(XYZ_LMS);
 
 const xyzOf = (hex: string) =>
   apply(
@@ -161,9 +184,41 @@ const apart = (one: string, two: string) =>
 
 const VISIONS: Vision[] = ["normal", "protanopia", "deuteranopia"];
 
-/** What each of the two reserved colours means, and must go on meaning. */
-const GOLD = "#d99425"; // --mine-ring: one of yours
-const RED = "#dc3848"; // --red: happening now
+/** Every unordered pair, which is what most of the assertions below walk. */
+function pairs<T>(list: readonly T[]): Array<[T, T]> {
+  const out: Array<[T, T]> = [];
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) out.push([list[i]!, list[j]!]);
+  }
+  return out;
+}
+
+/**
+ * The two colours a course may never come near, as they are actually drawn.
+ *
+ * The fills, not the rings, because the fill is what a block is: a course tone
+ * has to be unmistakable against the gold a class of your own is filled with,
+ * and against the red one that is running now. Kept in step with `globals.css`
+ * by the test below that reads them back out of it.
+ */
+const GOLD_FILL = "#ffc667"; // --mine-fill: one of yours
+const LIVE_FILL = "#ffa7a4"; // --live-fill: happening now
+const GOLD_RING = "#d99425"; // --mine-ring
+
+/** Relative luminance, for the contrast the block's own text has to keep. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((at) => toLinear(channel(hex, at))) as [
+    number,
+    number,
+    number,
+  ];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const contrast = (one: string, two: string) => {
+  const a = luminance(one);
+  const b = luminance(two);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
 
 describe("the same colour every time", () => {
   it("gives a subject the same tone on every screen it is drawn on", () => {
@@ -202,52 +257,100 @@ describe("a class with no subject", () => {
   });
 });
 
-describe("telling them apart, including for the readers who cannot", () => {
-  /*
-   * Every threshold below is measured with the deficiency applied — normal
-   * vision, protanopia and deuteranopia, worst case wins — because the first
-   * version of this palette passed a normal-vision check comfortably and was
-   * still broken. Its green sat 2.4 from the live red for a deuteranope and 3.6
-   * from the "yours" gold for a protanope, against a just-noticeable difference
-   * of 2.3. A test that only looks at colour the way most people see it will
-   * certify exactly that palette again.
-   */
-
-  it("keeps every pair of rings apart for everybody", () => {
-    for (let i = 0; i < COURSE_TONES.length; i++) {
-      for (let j = i + 1; j < COURSE_TONES.length; j++) {
-        const a = COURSE_TONES[i]!.ring;
-        const b = COURSE_TONES[j]!.ring;
-        // Five times the threshold, at the worst pair for the worst reader.
-        expect(apart(a, b), `${a} vs ${b}`).toBeGreaterThan(12);
+describe("the simulator itself", () => {
+  it("leaves grey alone, which is the whole of the sanity check", () => {
+    /*
+     * A dichromat sees no colour on the grey axis to lose, so a correct
+     * simulation returns it untouched. This test exists because the matrix
+     * below the fold was once not the inverse of the one above it, and under it
+     * white came back as magenta — which silently invalidated every
+     * accessibility number this file produced, and got a perfectly safe palette
+     * rejected. It costs three lines and it is the only thing standing between
+     * a plausible-looking simulation and a fictional one.
+     */
+    // True greys only. `--app-ink` looks neutral and is not — it is faintly
+    // blue, and a correct simulation moves it a little, which is the point.
+    for (const grey of [
+      "#ffffff",
+      "#cccccc",
+      "#808080",
+      "#333333",
+      "#000000",
+    ]) {
+      for (const vision of ["protanopia", "deuteranopia"] as const) {
+        const seen = seenAs(grey, vision);
+        expect(deltaE(grey, seen), `${grey} under ${vision}`).toBeLessThan(1.5);
       }
     }
   });
 
-  it("leaves gold and red alone, because both already mean something", () => {
-    // Gold is "one of yours" and red is "happening now" — the two signals a
-    // block is allowed to carry that are not about which subject it teaches.
-    for (const tone of COURSE_TONES) {
-      expect(apart(tone.ring, GOLD), `${tone.ring} vs gold`).toBeGreaterThan(
-        15,
-      );
-      expect(apart(tone.ring, RED), `${tone.ring} vs red`).toBeGreaterThan(11);
+  it("does lose the colour it is supposed to lose", () => {
+    // The other half: a simulation that changed nothing would also pass the
+    // test above. Red and green are what red-green deficiency confuses.
+    expect(
+      deltaE("#dc3848", seenAs("#dc3848", "deuteranopia")),
+    ).toBeGreaterThan(20);
+  });
+});
+
+describe("telling them apart", () => {
+  const fills = COURSE_TONES.map((tone) => tone.fill);
+
+  it("makes any two courses obviously different colours", () => {
+    // The bar the first attempt failed. Twelve is a long way past the ~2.3 a
+    // difference has to clear to be noticeable at all — these are meant to be
+    // told apart across a room, not squinted at.
+    for (const [a, b] of pairs(fills)) {
+      expect(deltaE(a, b), `${a} vs ${b}`).toBeGreaterThan(12);
     }
   });
 
-  it("does not lean on hue alone, which is the thing that fails", () => {
-    // Red-green deficiency folds the wheel onto roughly one blue-yellow axis,
-    // so six categories cannot be carried by hue however evenly it is spread.
-    // What is left is lightness, and these have to actually use it.
-    const lightness = COURSE_TONES.map((tone) => labOf(tone.ring)[0]);
-    const spread = Math.max(...lightness) - Math.min(...lightness);
-    expect(spread).toBeGreaterThan(30);
+  it("keeps them apart for a dichromat too, if not as far", () => {
+    /*
+     * The honest floor, and lower than the one above on purpose. Red-green
+     * deficiency folds the wheel onto roughly one blue-yellow axis, so eight
+     * colours cannot all stay far apart in it; demanding they did is what
+     * produced the washed-out palette this replaced. Which subject a block
+     * teaches is written on the block and in the key, so a colour that is only
+     * similar costs a glance. The two below cost nothing less than the meaning.
+     */
+    for (const [a, b] of pairs(fills)) {
+      for (const vision of ["protanopia", "deuteranopia"] as const) {
+        expect(
+          deltaE(seenAs(a, vision), seenAs(b, vision)),
+          `${a} vs ${b} under ${vision}`,
+        ).toBeGreaterThan(4.5);
+      }
+    }
+  });
+
+  it("never goes near gold or red, for anybody", () => {
+    // Gold is "one of yours" and red is "happening now" — the only two things
+    // on the grid that are said in colour and nowhere else. Checked with the
+    // deficiency applied, because that is where the last palette broke.
+    for (const tone of COURSE_TONES) {
+      for (const reserved of [GOLD_FILL, LIVE_FILL]) {
+        expect(
+          apart(tone.fill, reserved),
+          `${tone.fill} vs ${reserved}`,
+        ).toBeGreaterThan(10);
+      }
+      expect(
+        apart(tone.ring, GOLD_RING),
+        `${tone.ring} vs the gold ring`,
+      ).toBeGreaterThan(10);
+    }
+  });
+
+  it("gives every tone its own ring, not just its own fill", () => {
+    // Two slots share a hue and are told apart by weight; their rings have to
+    // follow, or the key draws the same swatch twice.
+    for (const [a, b] of pairs(COURSE_TONES.map((tone) => tone.ring))) {
+      expect(deltaE(a, b), `${a} vs ${b}`).toBeGreaterThan(8);
+    }
   });
 
   it("spreads a real timetable across most of the palette", () => {
-    // A semester's worth of subjects. Some sharing a tone is expected and fine
-    // — the name is on the block — but a palette that collapsed to two would
-    // not be worth drawing.
     const term = [
       "Design Thinking",
       "Data Structures",
@@ -260,21 +363,60 @@ describe("telling them apart, including for the readers who cannot", () => {
       "Web Technologies",
       "Statistics for Computing",
     ];
-    const used = new Set(term.map((t) => courseTone(t).ring));
-    expect(used.size).toBeGreaterThanOrEqual(4);
+    expect(
+      new Set(term.map((t) => courseTone(t).fill)).size,
+    ).toBeGreaterThanOrEqual(5);
+  });
+
+  it("does not put near-identical titles in the same place", () => {
+    // A course list is full of these, and a hash without an avalanche step
+    // sends them to neighbouring buckets.
+    expect(courseTone("Data Structures I").fill).not.toBe(
+      courseTone("Data Structures II").fill,
+    );
   });
 });
 
 describe("staying out of the way of the words", () => {
-  it("keeps every fill pale enough to leave the block's ink alone", () => {
-    // The title on a block is `--app-ink` and stays there. The fill is a tint
-    // under it, not a colour it has to be read against, so the contrast is the
-    // surface's and nothing here can quietly break it.
+  it("leaves the block's own text readable on every fill", () => {
+    // The fills are opaque now, so this is a real question rather than a
+    // formality: the title and the subtitle are drawn straight onto them.
     for (const tone of COURSE_TONES) {
-      const alpha = Number(/([\d.]+)\)$/.exec(tone.fill)?.[1]);
-      expect(alpha, tone.fill).toBeGreaterThan(0);
-      expect(alpha, tone.fill).toBeLessThanOrEqual(0.16);
+      expect(
+        contrast(tone.fill, "#2c3135"),
+        `ink on ${tone.fill}`,
+      ).toBeGreaterThan(4.5);
+      expect(
+        contrast(tone.fill, "#0d1117"),
+        `title on ${tone.fill}`,
+      ).toBeGreaterThan(4.5);
     }
+  });
+
+  it("keeps the reserved fills readable too, now they are opaque as well", () => {
+    for (const fill of [GOLD_FILL, LIVE_FILL]) {
+      expect(contrast(fill, "#2c3135"), `ink on ${fill}`).toBeGreaterThan(4.5);
+    }
+  });
+});
+
+describe("the reserved colours this file measures against", () => {
+  it("are the ones the stylesheet actually draws", () => {
+    /*
+     * Everything above is only as true as these two constants. They are the
+     * gold a class of your own is filled with and the red a running one is, and
+     * if the stylesheet moves and this file does not, every distance in this
+     * suite quietly starts describing colours nobody is looking at. The last
+     * time a constant in here drifted from its source it invalidated the whole
+     * file and nothing noticed for two commits.
+     */
+    const css = readFileSync("src/styles/globals.css", "utf8");
+    const token = (name: string) =>
+      new RegExp(`--${name}:\\s*([^;]+);`).exec(css)?.[1]?.trim();
+
+    expect(token("mine-fill")).toBe(GOLD_FILL);
+    expect(token("live-fill")).toBe(LIVE_FILL);
+    expect(token("mine-ring")).toBe(GOLD_RING);
   });
 });
 

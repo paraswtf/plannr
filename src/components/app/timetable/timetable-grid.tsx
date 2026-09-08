@@ -1057,7 +1057,7 @@ function EventBlock({
         background: event.isMine
           ? "var(--mine-fill)"
           : live
-            ? "rgba(220,56,72,0.10)"
+            ? "var(--live-fill)"
             : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
