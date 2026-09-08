@@ -2,9 +2,27 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  wideActions = false,
 }: {
   title: string;
-  subtitle?: string;
+  /**
+   * A node rather than a string, so a screen can put something in the line that
+   * is not words — the course page draws its own colour here, beside the code
+   * and the programme that already identify it.
+   */
+  subtitle?: React.ReactNode;
+  /**
+   * Give the actions a definite width below `sm`, for a screen whose controls
+   * ask for one.
+   *
+   * Opt-in, and it has to be: a `w-full` actions row can never share the
+   * title's line again, so a screen passing one short button would have that
+   * button drop to a row of its own and the sticky header would grow by about
+   * fifty pixels on every screenful. Only the two calendars want it, because
+   * only they hand `actions` a control — the date picker — that sizes itself
+   * against the line it is given.
+   */
+  wideActions?: boolean;
   actions?: React.ReactNode;
 }) {
   return (
@@ -29,7 +47,16 @@ export function PageHeader({
         )}
       </div>
       {actions && (
-        <div className="flex flex-wrap items-center gap-2.5">{actions}</div>
+        // A definite width below sm where it is asked for, so a control sizing
+        // itself against the line — the day controls, whose date picker takes
+        // whatever the arrows leave — has a line to size against rather than a
+        // box being sized by its own contents. Above sm both shapes are the
+        // same: take what you need, on the title's right.
+        <div
+          className={`flex flex-wrap items-center gap-2.5 ${wideActions ? "w-full sm:w-auto" : ""}`}
+        >
+          {actions}
+        </div>
       )}
     </header>
   );

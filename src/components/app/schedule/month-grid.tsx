@@ -1,6 +1,7 @@
 "use client";
 
 import { useLongPress } from "~/components/ui/use-long-press";
+import { courseTone } from "~/lib/course-colour";
 import { formatDayLabel, formatHourLabel, toWallTime } from "~/lib/dates";
 import type { DayCalendarEvent } from "./day-calendar";
 import { MONTH_ROW_HEIGHT, type MonthCell } from "./month-layout";
@@ -186,6 +187,7 @@ function Chip({
   const press = useLongPress(onPress ? () => onPress(event) : undefined);
   const live = event.start <= now && now < event.end;
   const past = event.end <= now;
+  const tone = courseTone(event.courseTitle);
 
   return (
     <button
@@ -195,10 +197,10 @@ function Chip({
       title={`${formatHourLabel(event.start, timeZone)} · ${event.title}`}
       className="pointer-events-auto flex h-5 shrink-0 items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left select-none"
       style={{
-        background: live ? "rgba(220,56,72,0.10)" : "var(--card-soft)",
+        background: live ? "rgba(220,56,72,0.10)" : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
-          : "inset 0 0 0 1px var(--card-ring)",
+          : `inset 0 0 0 1px ${tone.ring}`,
         opacity: past && !live ? 0.62 : 1,
         cursor: onClick ? "pointer" : "default",
         WebkitTouchCallout: "none",

@@ -40,10 +40,12 @@ export const MIN_COLUMN = 40;
 export const HEADER_HEIGHT = 42;
 
 /**
- * The grid's vertical budget. Written once, read both by the scroller's own
- * ceiling and by the probe that turns it into a number.
+ * The grid's vertical budget. Written once — in `globals.css`, where it can
+ * differ between a phone and a laptop, because the page header above it does —
+ * and read both by the scroller's own ceiling and by the probe that turns it
+ * into a number.
  */
-export const CEILING = "max(420px, calc(100svh - var(--topbar-h) - 96px))";
+export const CEILING = "var(--tt-ceiling)";
 
 export interface Fit {
   /** Layout width of one room column, in px. */

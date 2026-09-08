@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
+import { CourseSwatch } from "~/components/ui/course-swatch";
 import { Card } from "~/components/ui/card";
 import { type RouterOutputs } from "~/trpc/react";
 
@@ -62,8 +63,11 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
                     : "var(--ring), var(--shadow-card)",
                 }}
               >
-                <span className="font-display text-title block truncate text-[15px] font-bold">
-                  {report.course.title}
+                <span className="font-display text-title flex items-center gap-2 text-[15px] font-bold">
+                  <CourseSwatch title={report.course.title} />
+                  <span className="min-w-0 truncate">
+                    {report.course.title}
+                  </span>
                 </span>
                 <span className="text-faint mt-0.5 block font-mono text-[11.5px]">
                   {report.course.code ?? "no paper code"}
@@ -125,7 +129,8 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
         ) : (
           open.students.map((student) => {
             const short =
-              student.percentage !== null && student.percentage < open.threshold;
+              student.percentage !== null &&
+              student.percentage < open.threshold;
             return (
               <div
                 key={student.studentId}
@@ -178,8 +183,8 @@ export function CourseAttendance({ reports }: { reports: Report[] }) {
           style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
         >
           Percentages are over the registers taken, not over the{" "}
-          {open.scheduled} lectures a group sits this semester. A student showing
-          “—” has never appeared on a register for this course.
+          {open.scheduled} lectures a group sits this semester. A student
+          showing “—” has never appeared on a register for this course.
         </p>
       </Card>
     </>

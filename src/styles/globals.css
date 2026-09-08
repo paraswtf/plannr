@@ -57,6 +57,22 @@
   --mine-fill: rgba(246, 167, 59, 0.16);
   --mine-ring: #d99425;
 
+  /*
+   * How tall the timetable may stand before compact mode scales it down.
+   *
+   * One screen, less the phone's top bar and everything drawn above the grid:
+   * the page header — which carries the day controls, the building filter and
+   * the compact toggle — and the strip of dated tabs under it. A constant
+   * rather than a measurement, and the number is different at the two widths
+   * because the header is: on a laptop the controls sit on the title's line, and
+   * on a phone they wrap under it and cost a couple of rows.
+   *
+   * `svh` rather than `dvh` so a phone collapsing its URL bar mid-scroll does
+   * not resize the grid under the reader's finger. The floor is what stops the
+   * ceiling becoming the problem on a short landscape screen.
+   */
+  --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 216px));
+
   /* Elevation is a drawn hairline plus a soft shadow, never a border */
   --ring: inset 0 0 0 1px var(--card-ring);
   --shadow-card: 0 2px 10px rgba(13, 17, 23, 0.05);
@@ -202,6 +218,12 @@ body {
 .plr-fade {
   animation: plrFade 0.18s ease;
 }
+@media (min-width: 1024px) {
+  :root {
+    --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 152px));
+  }
+}
+
 .plr-toast {
   animation: plrToast 0.28s cubic-bezier(0.34, 1.4, 0.5, 1);
 }

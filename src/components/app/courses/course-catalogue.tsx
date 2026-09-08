@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { PageHeader } from "~/components/app/shell/page-header";
+import { CourseSwatch } from "~/components/ui/course-swatch";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Icon } from "~/components/ui/icon";
@@ -241,6 +242,7 @@ export function CourseCatalogue({
                         }
                       >
                         <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                          <CourseSwatch title={course.title} />
                           <span className="text-faint w-[72px] shrink-0 truncate font-mono text-[12px]">
                             {course.code ?? "—"}
                           </span>

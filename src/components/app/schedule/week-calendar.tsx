@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { useLongPress } from "~/components/ui/use-long-press";
+import { courseTone } from "~/lib/course-colour";
 import {
   decimalHour,
   formatHourLabel,
@@ -328,6 +329,7 @@ function WeekBlock({
   const to = decimalHour(event.end, timeZone) || 24;
   const live = event.start <= now && now < event.end;
   const past = event.end <= now;
+  const tone = courseTone(event.courseTitle);
   const span = to - from;
   const lines = fitLines(span, rowHeight, event.lines ?? []);
 
@@ -345,10 +347,10 @@ function WeekBlock({
         // the day view's arithmetic for subtracting a gutter it sits inside.
         left: `calc(2px + ${(column / columns) * 100}%)`,
         width: `calc(${(1 / columns) * 100}% - 4px)`,
-        background: live ? "rgba(220,56,72,0.10)" : "var(--card-soft)",
+        background: live ? "rgba(220,56,72,0.10)" : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
-          : "inset 0 0 0 1px var(--card-ring)",
+          : `inset 0 0 0 1px ${tone.ring}`,
         opacity: past && !live ? 0.62 : 1,
         cursor: onClick ? "pointer" : "default",
         WebkitTouchCallout: "none",

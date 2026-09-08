@@ -38,19 +38,25 @@ import {
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function DayNavigator({
+/**
+ * The three controls that move the window: back, the date itself, forward, and
+ * the way home.
+ *
+ * Split out from the navigator so the schedule and the timetable can put them
+ * up beside the page's title, where the question "which day am I looking at" is
+ * asked, while the strip of dated tabs stays down with the calendar it indexes.
+ * The booking screen still takes the pair together as `DayNavigator`.
+ */
+export function DayControls({
   date,
   timeZone,
   onChange,
   span = "day",
-  /** How much of the week the day strip shows, from Monday. */
-  daysInStrip = 7,
 }: {
   date: Date;
   timeZone: string;
   onChange: (day: Date) => void;
   span?: ScheduleSpan;
-  daysInStrip?: number;
 }) {
   const day = startOfLocalDay(date, timeZone);
   const now = new Date();
@@ -60,72 +66,129 @@ export function DayNavigator({
 
   return (
     // `min-w-0` on every box down this chain, because a flex item's automatic
-    // minimum size is its content: without it the row below cannot be made
-    // narrower than the date it holds, so on a 360px phone this whole navigator
-    // is wider than the screen — and the strip, sized to the navigator rather
-    // than the window, is the part seen hanging off the edge. The strip scrolls
-    // perfectly well; it was being handed the wrong width to scroll in.
-    // `w-full` only while it is the whole line anyway. Left on at every width it
-    // would take a line of its own on a laptop too, pushing the controls that
-    // used to sit beside it — "view as", the building filter — down a row.
-    <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto">
-      <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
-        <Step
-          icon="chevronLeft"
-          label={`Previous ${span}`}
-          onClick={() => onChange(stepSpan(day, span, -1, timeZone))}
-        />
-        {/*
-          The one part of the row that gives: the arrows and Today are fixed
-          shapes, so the date is what shortens when there is not enough room,
-          and it has a month grid and a strip of tabs either side of it saying
-          the same thing.
-        */}
-        <DatePicker
-          className="min-w-0 flex-1 sm:flex-none"
-          value={day}
-          timeZone={timeZone}
-          onChange={onChange}
-          ariaLabel="Date"
-          label={spanLabel(day, span, timeZone)}
-        />
-        <Step
-          icon="chevronRight"
-          label={`Next ${span}`}
-          onClick={() => onChange(stepSpan(day, span, 1, timeZone))}
-        />
-        <button
-          type="button"
-          disabled={atNow}
-          onClick={() => onChange(startOfLocalDay(now, timeZone))}
-          className="h-10 shrink-0 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
-          style={{
-            background: "rgba(68,88,121,0.07)",
-            color: "var(--slate)",
-            opacity: atNow ? 0.4 : 1,
-            cursor: atNow ? "default" : "pointer",
-          }}
-        >
-          Today
-        </button>
-      </div>
-
+    // minimum size is its content: without it this row cannot be made narrower
+    // than the date it holds, so on a 360px phone it is wider than the screen.
+    <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto">
+      <Step
+        icon="chevronLeft"
+        label={`Previous ${span}`}
+        onClick={() => onChange(stepSpan(day, span, -1, timeZone))}
+      />
       {/*
-       * A week of dated tabs is wider than a phone, and already scrolls inside
-       * itself. All this wrapper does is give it a line of its own below sm —
-       * sharing one with the day controls would leave it a couple of
-       * centimetres to scroll in. Wrapping it in a second scroller would only
-       * clip the chosen pill's shadow, which is what the strip's own vertical
-       * padding is there to protect.
-       */}
-      <div className="w-full min-w-0 sm:w-auto">
-        <Segmented
-          items={stripFor(day, span, timeZone, daysInStrip)}
-          value={stripValue(day, span, timeZone)}
-          onChange={(value) => onChange(new Date(value))}
-          size="sm"
-        />
-      </div>
+        The one part of the row that gives: the arrows and Today are fixed
+        shapes, so the date is what shortens when there is not enough room, and
+        it has a month grid and a strip of tabs elsewhere saying the same thing.
+      */}
+      <DatePicker
+        className="min-w-0 flex-1 sm:flex-none"
+        value={day}
+        timeZone={timeZone}
+        onChange={onChange}
+        ariaLabel="Date"
+        label={spanLabel(day, span, timeZone)}
+      />
+      <Step
+        icon="chevronRight"
+        label={`Next ${span}`}
+        onClick={() => onChange(stepSpan(day, span, 1, timeZone))}
+      />
+      <button
+        type="button"
+        disabled={atNow}
+        onClick={() => onChange(startOfLocalDay(now, timeZone))}
+        className="h-10 shrink-0 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
+        style={{
+          background: "rgba(68,88,121,0.07)",
+          color: "var(--slate)",
+          opacity: atNow ? 0.4 : 1,
+          cursor: atNow ? "default" : "pointer",
+        }}
+      >
+        Today
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The labelled tabs one unit below the one on screen.
+ *
+ * Stays with the calendar rather than going up to the header with the controls:
+ * a week of dated tabs is wider than a phone and scrolls inside itself, and a
+ * sticky header is the last place to put something that needs room and moves.
+ */
+export function DayStrip({
+  date,
+  timeZone,
+  onChange,
+  span = "day",
+  /** How much of the week the day strip shows, from Monday. */
+  daysInStrip = 7,
+  /**
+   * The box the strip is measured in. The default is the page's own width,
+   * which is what a screen keeping the strip below its header wants.
+   *
+   * A prop rather than a wrapper the caller adds, because a second box around
+   * this one is exactly the bug the comment below is about: `w-full` inside a
+   * `sm:w-auto` parent is a percentage resolved against a box being sized by
+   * its own contents, and the strip goes back to being handed a width nobody
+   * chose.
+   */
+  className = "w-full min-w-0",
+}: {
+  date: Date;
+  timeZone: string;
+  onChange: (day: Date) => void;
+  span?: ScheduleSpan;
+  daysInStrip?: number;
+  className?: string;
+}) {
+  const day = startOfLocalDay(date, timeZone);
+  return (
+    // The strip is sized by this box rather than by the row it used to share,
+    // which is the whole reason it scrolls in the right width: handed the
+    // navigator's width instead of the page's, it hung off the edge of a phone.
+    <div className={className}>
+      <Segmented
+        items={stripFor(day, span, timeZone, daysInStrip)}
+        value={stripValue(day, span, timeZone)}
+        onChange={(value) => onChange(new Date(value))}
+        size="sm"
+      />
+    </div>
+  );
+}
+
+/** Both halves together, for a screen that keeps them in one place. */
+export function DayNavigator({
+  date,
+  timeZone,
+  onChange,
+  span = "day",
+  daysInStrip = 7,
+}: {
+  date: Date;
+  timeZone: string;
+  onChange: (day: Date) => void;
+  span?: ScheduleSpan;
+  daysInStrip?: number;
+}) {
+  return (
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto">
+      <DayControls
+        date={date}
+        timeZone={timeZone}
+        onChange={onChange}
+        span={span}
+      />
+      <DayStrip
+        date={date}
+        timeZone={timeZone}
+        onChange={onChange}
+        span={span}
+        daysInStrip={daysInStrip}
+        className="w-full min-w-0 sm:w-auto"
+      />
     </div>
   );
 }

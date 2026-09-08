@@ -12,16 +12,16 @@ import { useBookingDraft } from "~/components/app/booking/use-booking-draft";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
+import { courseKey, courseTone, NO_COURSE } from "~/lib/course-colour";
 import { Select } from "~/components/ui/select";
 import {
   decimalHour,
-  formatFullDate,
   formatHourLabel,
   isSameLocalDay,
   localTimeOnDay,
   startOfLocalDay,
 } from "~/lib/dates";
-import { DayNavigator } from "./day-navigator";
+import { DayControls, DayStrip } from "./day-navigator";
 import { EventDrawer } from "./event-drawer";
 import { EventModal } from "./event-modal";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
@@ -204,6 +204,7 @@ export function TimetableView({
     roomCode: o.roomCode,
     facultyName: o.facultyName,
     groupNames: o.groupNames,
+    courseTitle: o.courseTitle,
     isMine: o.isMine,
     attendanceMarked: o.attendanceMarked,
   }));
@@ -212,6 +213,50 @@ export function TimetableView({
   // whether the gold is worth explaining. An admin with no classes of their own
   // would otherwise be told about a colour that never appears.
   const hasMine = events.some((e) => e.isMine);
+
+  /**
+   * The subjects actually on screen, in the order they first appear.
+   *
+   * Built from the day being drawn rather than from the course catalogue, and
+   * not only to save a request: `courses.list` is behind `ViewGroups`, which a
+   * student deliberately does not hold — a key that fetched it would be a key
+   * that 403s for most of the people reading this screen. What is drawn is what
+   * is explained, which is the same rule the gold line below already follows.
+   */
+  const drawnRooms = new Set((data?.rooms ?? []).map((room) => room.id));
+  const subjects: Array<{ title: string; count: number }> = [];
+  const seenSubjects = new Map<string, number>();
+  let uncoursed = 0;
+  for (const event of events) {
+    // Only what is drawn. An occurrence in an archived room comes back in the
+    // response but has no column on the grid, and a key counting it describes
+    // a colour nobody can find.
+    if (!drawnRooms.has(event.roomId)) continue;
+    /*
+     * And only in the colour it is actually drawn in. One of the viewer's own
+     * classes is gold whatever it teaches, so naming its subject here would put
+     * a swatch in the key that is on no block — and counting it as "no subject"
+     * would be worse, since the neutral is not what it is wearing either.
+     *
+     * Live blocks are deliberately not excluded, even though red outranks the
+     * tone for the hour they are running: that is a colour this screen holds
+     * for forty minutes, and a key that dropped a subject at 11:05 and put it
+     * back at 11:50 would be reporting on the clock rather than on the day.
+     */
+    if (event.isMine) continue;
+    if (!event.courseTitle) {
+      uncoursed += 1;
+      continue;
+    }
+    const key = courseKey(event.courseTitle);
+    const at = seenSubjects.get(key);
+    if (at === undefined) {
+      seenSubjects.set(key, subjects.length);
+      subjects.push({ title: event.courseTitle, count: 1 });
+    } else {
+      subjects[at]!.count += 1;
+    }
+  }
 
   /**
    * Every block opens, for everybody.
@@ -342,30 +387,46 @@ export function TimetableView({
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Timetable"
-          subtitle={`${formatFullDate(date, timeZone)} · ${data?.rooms.length ?? 0} rooms · ${events.length} scheduled`}
+          wideActions
+          /*
+           * No date here any more. The picker beside the title carries it, and
+           * a header that said it twice would be spending two lines of a screen
+           * this control now sits at the top of.
+           */
+          subtitle={`${data?.rooms.length ?? 0} rooms · ${events.length} scheduled`}
+          actions={
+            <>
+              <DayControls date={date} timeZone={timeZone} onChange={goToDay} />
+              {/*
+               * What the grid is *of*, rather than what day it is — kept
+               * together on one line so the pair reads as a unit when the
+               * header wraps.
+               */}
+              <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+                <Select
+                  ariaLabel="Building"
+                  // The compact toggle sits beside it, so it takes what that
+                  // leaves rather than the whole width.
+                  className="min-w-0 flex-1 sm:w-auto"
+                  value={buildingId ?? ""}
+                  options={[
+                    { value: "", label: "All buildings" },
+                    ...buildings.map((b) => ({ value: b.id, label: b.name })),
+                  ]}
+                  onChange={(id) => {
+                    setBuildingId(id || undefined);
+                    setSpan(null);
+                  }}
+                />
+                <CompactToggle on={compact} onChange={setCompact} />
+              </div>
+            </>
+          }
         />
         <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <DayNavigator date={date} timeZone={timeZone} onChange={goToDay} />
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <Select
-                ariaLabel="Building"
-                // It shared its line with nothing and could be the width of it.
-                // The compact toggle sits beside it now, so it takes what that
-                // leaves rather than the whole width.
-                className="min-w-0 flex-1 sm:w-auto"
-                value={buildingId ?? ""}
-                options={[
-                  { value: "", label: "All buildings" },
-                  ...buildings.map((b) => ({ value: b.id, label: b.name })),
-                ]}
-                onChange={(id) => {
-                  setBuildingId(id || undefined);
-                  setSpan(null);
-                }}
-              />
-              <CompactToggle on={compact} onChange={setCompact} />
-            </div>
+          {/* The tabs stay with the grid they index. */}
+          <div className="mb-4">
+            <DayStrip date={date} timeZone={timeZone} onChange={goToDay} />
           </div>
 
           {data && data.rooms.length > 0 ? (
@@ -398,23 +459,59 @@ export function TimetableView({
           )}
 
           {/*
-           * The gold is the only thing telling one block from another, so it is
-           * named wherever it is actually on screen — and only there. A swatch
-           * rather than the word "gold" alone, because the reader matching a
-           * colour to a sentence should not have to take the sentence's word for
-           * which colour it means.
+           * The key: every colour on screen, and nothing that is not.
+           *
+           * Swatches rather than sentences, because the reader matching a
+           * colour to a word should not have to take the word's account of
+           * which colour it means — and because a paragraph explaining six
+           * tints would be longer than the thing it explains. Named only where
+           * it is actually drawn: an admin whose day holds none of their own
+           * classes is not told about gold, and a day of unattached bookings is
+           * not given a list of subjects it does not contain.
            */}
-          {hasMine && (
-            <p className="text-faint mt-3 flex items-center gap-2 text-[12.5px]">
-              <span
-                className="h-[13px] w-[21px] shrink-0 rounded-[5px]"
-                style={{
-                  background: "var(--mine-fill)",
-                  boxShadow: "inset 0 0 0 1px var(--mine-ring)",
-                }}
-              />
-              Blocks in gold are your own — the classes you attend or teach.
-            </p>
+          {(hasMine || subjects.length > 0 || uncoursed > 0) && (
+            <div className="text-faint mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12.5px]">
+              {hasMine && (
+                <Swatch fill="var(--mine-fill)" ring="var(--mine-ring)">
+                  Yours
+                </Swatch>
+              )}
+              {subjects.slice(0, KEY_LIMIT).map((subject) => {
+                const tone = courseTone(subject.title);
+                return (
+                  <Swatch
+                    key={subject.title}
+                    fill={tone.fill}
+                    ring={tone.ring}
+                    title={subject.title}
+                  >
+                    {subject.title}
+                  </Swatch>
+                );
+              })}
+              {/*
+               * Never a silent cut: a campus day can hold more subjects than a
+               * key has room for, and a list that quietly stopped would read as
+               * the rest having no colour at all.
+               */}
+              {subjects.length > KEY_LIMIT && (
+                <span>
+                  and {subjects.length - KEY_LIMIT} more{" "}
+                  {subjects.length - KEY_LIMIT === 1 ? "subject" : "subjects"}
+                </span>
+              )}
+              {/*
+               * The honest half. Most classes on this deployment have no course
+               * attached — the sync does not set one — so without this line the
+               * grey is read as a colour that failed rather than a fact about
+               * the data.
+               */}
+              {uncoursed > 0 && (
+                <Swatch fill={NO_COURSE.fill} ring={NO_COURSE.ring}>
+                  {uncoursed} with no subject
+                </Swatch>
+              )}
+            </div>
           )}
 
           {/*
@@ -576,6 +673,37 @@ export function TimetableView({
  * the sidebar fold's `aria-pressed` — and borrows the chosen pill's treatment
  * when it is on, so on and off cannot be confused.
  */
+/**
+ * How many subjects the key names before it starts counting them instead.
+ *
+ * A whole campus day unfiltered can carry more courses than there are tones,
+ * and a key longer than the grid it explains has stopped being a key.
+ */
+const KEY_LIMIT = 14;
+
+/** One entry in the key: the colour, then what it means. */
+function Swatch({
+  fill,
+  ring,
+  title,
+  children,
+}: {
+  fill: string;
+  ring: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5" title={title}>
+      <span
+        className="h-[13px] w-[21px] shrink-0 rounded-[5px]"
+        style={{ background: fill, boxShadow: `inset 0 0 0 1px ${ring}` }}
+      />
+      <span className="min-w-0 truncate">{children}</span>
+    </span>
+  );
+}
+
 function CompactToggle({
   on,
   onChange,

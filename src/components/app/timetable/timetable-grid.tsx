@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useLongPress } from "~/components/ui/use-long-press";
+import { courseTone } from "~/lib/course-colour";
 import { decimalHour, formatHourLabel, SNAP_MINUTES } from "~/lib/dates";
 import { CEILING, HEADER_HEIGHT, legible } from "./compact-fit";
 import { useCompactFit } from "./use-compact-fit";
@@ -48,6 +49,8 @@ export interface GridEvent {
   facultyName?: string | null;
   /** Every group attending — more than one for a combined lecture. */
   groupNames?: string[];
+  /** The subject taught, which decides the block's colour. Null for a booking. */
+  courseTitle?: string | null;
   /** One of the viewer's own — a class they attend or teach. Drawn in gold. */
   isMine?: boolean;
   /**
@@ -983,6 +986,7 @@ function EventBlock({
   const from = decimalHour(event.start, timeZone);
   const to = decimalHour(event.end, timeZone);
   const live = event.start <= now && now < event.end;
+  const tone = courseTone(event.courseTitle);
 
   return (
     <button
@@ -1033,23 +1037,33 @@ function EventBlock({
         top: (from - startHour) * rowHeight + 2,
         height: Math.max(22, (to - from) * rowHeight - 4),
         /*
-         * Two separate questions, answered in two places, so a block that is
-         * both still says both: the fill is whose class it is — gold for the
-         * viewer's own — and the ring is whether it is running right now.
-         * Letting either one win outright would take the gold off the very
-         * block somebody is looking for, or drop the now-marker from the only
-         * class it matters most on.
+         * Three questions now, answered in two places, in a fixed order of
+         * precedence — so a block that is several of these things at once still
+         * says the most urgent one and does not lose the rest.
+         *
+         * The fill is whose class it is: gold for the viewer's own, above
+         * everything, because that is what somebody scanning a campus grid is
+         * looking for. Under that, the subject's own colour. The ring is
+         * whether it is running right now, which outranks both, because a class
+         * happening this minute is the one thing worth interrupting a pattern
+         * for.
+         *
+         * Red keeps both halves when it wins, rather than only the ring: a
+         * course tint left under a red hairline reads as a third state that
+         * does not exist. And a class with no subject attached — a room
+         * booking, or on this deployment anything the sync added — comes back
+         * from `courseTone` as exactly the neutral this grid always used.
          */
         background: event.isMine
           ? "var(--mine-fill)"
           : live
             ? "rgba(220,56,72,0.10)"
-            : "var(--card-soft)",
+            : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
           : event.isMine
             ? "inset 0 0 0 1px var(--mine-ring)"
-            : "inset 0 0 0 1px var(--card-ring)",
+            : `inset 0 0 0 1px ${tone.ring}`,
         opacity: beingMoved ? 0.35 : 1,
         cursor: onEventMove
           ? grabbing

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { KIND_LABEL, KIND_TONE } from "~/components/app/groups/group-vocab";
+import { CourseSwatch } from "~/components/ui/course-swatch";
 import { facultyCard, groupCard } from "~/components/app/people/entity-cards";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
@@ -55,9 +56,18 @@ export function CourseDetail({
     <>
       <PageHeader
         title={course.title}
-        subtitle={[course.code, course.programme?.name, course.semester.name]
-          .filter(Boolean)
-          .join(" · ")}
+        subtitle={
+          // The colour this course is drawn in everywhere else, at the one
+          // place its name is the heading rather than a row in a list.
+          <span className="flex items-center gap-2">
+            <CourseSwatch title={course.title} />
+            <span className="min-w-0 truncate">
+              {[course.code, course.programme?.name, course.semester.name]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </span>
+        }
         actions={
           <Link
             href="/courses"

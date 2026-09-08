@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { useLongPress } from "~/components/ui/use-long-press";
+import { courseTone } from "~/lib/course-colour";
 import { decimalHour, formatHourLabel } from "~/lib/dates";
 import {
   blockHeight,
@@ -29,6 +30,8 @@ export interface DayCalendarEvent {
   end: Date;
   title: string;
   roomCode?: string | null;
+  /** The subject taught, which decides the block's colour. Null for a booking. */
+  courseTitle?: string | null;
   /** Whatever the viewer's perspective wants said about it, most useful first. */
   lines?: string[];
 }
@@ -204,6 +207,7 @@ function DayBlock({
   const to = decimalHour(event.end, timeZone) || 24;
   const live = event.start <= now && now < event.end;
   const past = event.end <= now;
+  const tone = courseTone(event.courseTitle);
   const span = to - from;
 
   const when = `${formatHourLabel(event.start, timeZone)} – ${formatHourLabel(event.end, timeZone)}`;
@@ -221,10 +225,16 @@ function DayBlock({
         height: blockHeight(span, rowHeight),
         left: `calc(${GUTTER}px + ${(column / columns) * 100}% - ${(GUTTER * column) / columns}px)`,
         width: `calc(${(1 / columns) * 100}% - ${GUTTER / columns}px - 4px)`,
-        background: live ? "rgba(220,56,72,0.10)" : "var(--card-soft)",
+        /*
+         * The subject's own colour, with "happening now" over the top of it.
+         * No gold here: the campus timetable picks your classes out of
+         * everybody else's, and on your own schedule they are all yours — or,
+         * under "view as", all somebody else's, which gold would misname.
+         */
+        background: live ? "rgba(220,56,72,0.10)" : tone.fill,
         boxShadow: live
           ? "inset 0 0 0 1px var(--red)"
-          : "inset 0 0 0 1px var(--card-ring)",
+          : `inset 0 0 0 1px ${tone.ring}`,
         opacity: past && !live ? 0.62 : 1,
         cursor: onClick ? "pointer" : "default",
         // iOS answers a long press on its own, with a magnifier and a callout

@@ -1,6 +1,7 @@
 "use client";
 
 import { useNow } from "~/components/app/timetable/use-now";
+import { CourseSwatch } from "~/components/ui/course-swatch";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
 import { Icon } from "~/components/ui/icon";
@@ -130,8 +131,9 @@ function CourseCard({
         */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-2">
           <div className="min-w-0">
-            <h3 className="font-display text-title m-0 text-[17px] font-bold">
-              {course.title}
+            <h3 className="font-display text-title m-0 flex items-center gap-2 text-[17px] font-bold">
+              <CourseSwatch title={course.title} size={14} />
+              <span className="min-w-0 truncate">{course.title}</span>
             </h3>
             <p className="text-faint mt-0.5 mb-0 font-mono text-[12px]">
               {course.code ?? "no paper code"}
@@ -191,7 +193,7 @@ function CourseCard({
           page that has not hydrated yet.
         */}
           <summary
-            className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-4 py-2.5 [&::-webkit-details-marker]:hidden sm:px-5 lg:min-h-0"
+            className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-4 py-2.5 sm:px-5 lg:min-h-0 [&::-webkit-details-marker]:hidden"
             style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
           >
             <Icon

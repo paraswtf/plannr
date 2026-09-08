@@ -5,7 +5,10 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "~/components/app/shell/page-header";
-import { DayNavigator } from "~/components/app/timetable/day-navigator";
+import {
+  DayControls,
+  DayStrip,
+} from "~/components/app/timetable/day-navigator";
 import { EventDrawer } from "~/components/app/timetable/event-drawer";
 import { EventModal } from "~/components/app/timetable/event-modal";
 import type { GridEvent } from "~/components/app/timetable/timetable-grid";
@@ -190,6 +193,7 @@ export function ScheduleView({
       end: o.end,
       title: o.title,
       roomCode: o.roomCode,
+      courseTitle: o.courseTitle,
       lines: describeClass(o, seen),
     }));
   };
@@ -641,6 +645,7 @@ export function ScheduleView({
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Schedule"
+          wideActions
           subtitle={[
             viewingAs ? `${viewingAs.name}'s ${noun}` : null,
             // Why the screen is not on today. Drops away the moment the window
@@ -669,34 +674,45 @@ export function ScheduleView({
           ]
             .filter(Boolean)
             .join(" · ")}
+          actions={
+            <>
+              {/*
+               * First, because it changes what every other control beside it
+               * means, and a control that redefines its neighbours belongs
+               * upstream of them. A whole line to itself on a phone: three
+               * pills come to about 200px, which shares a line with nothing
+               * that also has to hold a date.
+               */}
+              <div className="w-full sm:w-auto">
+                {/*
+                 * Changing the span deliberately does not count as moving. The
+                 * anchor stays exactly where it was — only how much of the
+                 * calendar around it is drawn changes — so the caption
+                 * explaining why the screen opened away from today is still
+                 * owed. Consuming it here left the week and month strings below
+                 * unreachable, and the surprise they exist to explain
+                 * unexplained.
+                 */}
+                <Segmented
+                  items={SPAN_ITEMS}
+                  value={span}
+                  onChange={setSpan}
+                  size="sm"
+                />
+              </div>
+              <DayControls
+                date={date}
+                span={span}
+                timeZone={timeZone}
+                onChange={goTo}
+              />
+            </>
+          }
         />
         <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            {/*
-             * First, because it changes what every other control in the row
-             * means, and a control that redefines its neighbours belongs
-             * upstream of them. A whole line to itself on a phone: three pills
-             * come to about 200px, which shares a line with nothing that also
-             * has to hold a date.
-             */}
-            <div className="w-full sm:w-auto">
-              {/*
-               * Changing the span deliberately does not count as moving. The
-               * anchor stays exactly where it was — only how much of the
-               * calendar around it is drawn changes — so the caption explaining
-               * why the screen opened away from today is still owed. Consuming
-               * it here left the week and month strings below unreachable, and
-               * the surprise they exist to explain unexplained.
-               */}
-              <Segmented
-                items={SPAN_ITEMS}
-                value={span}
-                onChange={setSpan}
-                size="sm"
-              />
-            </div>
-
-            <DayNavigator
+          {/* The tabs stay with the calendar they index. */}
+          <div className="mb-4">
+            <DayStrip
               date={date}
               span={span}
               timeZone={timeZone}

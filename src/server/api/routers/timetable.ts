@@ -61,6 +61,10 @@ const selectOccurrence = {
       rrule: true,
       notes: true,
       createdById: true,
+      // The subject being taught, which the screens colour by. Nullable in the
+      // schema and null in practice for anything the sync added, so every
+      // reader has to have an answer for a class with no course.
+      course: { select: { title: true } },
       // Every group in the room, so a combined lecture says so on the grid.
       groups: { select: { group: { select: { id: true, name: true } } } },
     },
@@ -100,6 +104,7 @@ type OccurrenceRow = {
     rrule: string | null;
     notes: string | null;
     createdById: string | null;
+    course: { title: string } | null;
     groups: Array<{ group: { id: string; name: string } }>;
   };
   exception: { originalStart: Date } | null;
@@ -132,6 +137,21 @@ function toDto(row: OccurrenceRow, readsAttendance: boolean) {
     buildingId: row.room.buildingId,
     title: row.event.title,
     notes: row.event.notes,
+    /*
+     * The subject, for the colour every screen draws this in.
+     *
+     * Deliberately not called `course`: `describeClass` already reads
+     * `event.course` and pushes it as a line under every block on the schedule,
+     * and the schedule DTO supplies `programme` instead — so that branch has
+     * never fired. Naming this `course` would switch on a line nobody asked
+     * for, under every block, changing the height of all three calendars as a
+     * side effect of adding a colour.
+     *
+     * Null for a room booking, a block, or — on this deployment — any class the
+     * sync added, which is most of them. `course-colour.ts` owns what that
+     * looks like.
+     */
+    courseTitle: row.event.course?.title ?? null,
     kind: row.kind,
     status: row.status,
     groupId: row.group?.id ?? null,
