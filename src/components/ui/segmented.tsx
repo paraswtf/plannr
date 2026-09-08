@@ -18,11 +18,19 @@ export function Segmented<T extends string | number>({
   value,
   onChange,
   size = "md",
+  ariaLabel,
 }: {
   items: SegmentedItem<T>[];
   value: T;
   onChange: (value: T) => void;
   size?: "sm" | "md";
+  /**
+   * Names the group where nothing visible does. One strip on a screen needs no
+   * label — its pills say what it is. Two do: the rooms screen has a strip for
+   * which rooms and a strip for how they are drawn, and unnamed they are
+   * announced as two identical radio groups.
+   */
+  ariaLabel?: string;
 }) {
   const pad =
     size === "sm" ? "px-3 py-1.5 text-[12.5px]" : "px-4 py-2 text-[13.5px]";
@@ -102,6 +110,7 @@ export function Segmented<T extends string | number>({
         className="inline-flex gap-1 rounded-[11px] p-1"
         style={{ background: "rgba(68,88,121,0.07)" }}
         role="radiogroup"
+        aria-label={ariaLabel}
       >
         {items.map((item) => {
           const active = item.value === value;
