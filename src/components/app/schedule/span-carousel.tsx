@@ -2,46 +2,62 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { OFFSETS, restingAt, stepFrom, type Offset } from "./carousel-step";
+import {
+  intentOf,
+  landingOf,
+  OFFSETS,
+  travelOf,
+  type Offset,
+} from "./swipe-gesture";
 
 /**
  * The calendar on a rail, so a day can be pushed off the side of the screen.
  *
- * The first version of this followed the finger with pointer handlers and a
- * transform, and it was wrong in the way the user said it was: it damped the
- * travel to a fifth of the screen, sprang back, and then swapped the day in
- * place. Nothing ever went anywhere. The day appeared instead of arriving.
+ * Three panes — yesterday, today, tomorrow — in a row that is moved by a single
+ * `translate3d` on one element. One composited layer slides; the hundred
+ * absolutely positioned lectures inside it are not laid out again, not once,
+ * which is the whole reason this can be one-to-one with a finger at all.
  *
- * So none of the gesture is ours any more. Three panes on a scroll-snapping
- * rail — yesterday, today, tomorrow — and the browser does the following, the
- * momentum, the rubber band at the ends and the mid-flight interception, all of
- * it on the compositor thread. That last part is the whole argument: a day can
- * hold a hundred absolutely positioned lectures, and dragging that many nodes
- * from JavaScript at sixty frames a second is exactly the thing a phone cannot
- * do. Handing the axis to the scroller costs nothing per frame, because there
- * is no per-frame work left to cost anything.
- *
- * What is left for us is three lines of bookkeeping: put the middle pane on
- * screen, notice when the scrolling stops somewhere else, and put the middle
- * pane back once the date has moved to match. Done in a layout effect, the last
- * two happen in the same frame, so the swap is invisible — the pixels before
- * and after are the same pixels.
+ * The axis is split rather than handed over. `touch-action: pan-y` gives the
+ * browser the vertical outright, so reading the day is native and immediate and
+ * has nothing of ours in front of it; the horizontal, which the browser will now
+ * never claim, is ours, and `swipe-gesture.ts` decides what counts as meaning
+ * it. That split is the point. A scrolling rail cannot do it — a scroller's
+ * axis lock is the browser's to tune, it fires early, and once it has decided
+ * sideways the vertical half of the same drag is gone.
  */
 
-/**
- * How long after the last scroll event to look, where `scrollend` is missing.
- *
- * Only a fallback. Safari has had `scrollend` since 18 and every other engine
- * for longer, and where it exists it is the honest signal: it means the
- * scrolling has finished *and* the finger has gone. The timer has to reconstruct
- * both, which is what the pointer bookkeeping below is for.
- */
-const IDLE_MS = 140;
-
+/** How long the rail takes to settle once the finger has left it. */
+const SETTLE_MS = 190;
+/** Out quickly, then ease into place. Snappy rather than floaty. */
+const EASE = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+/** How stale the sample a flick's speed is measured from may get. */
+const SAMPLE_MS = 60;
+/** How long the click a swipe leaves behind is waited for. */
+const SUPPRESS_MS = 300;
 /** Long enough for a step to have re-rendered, if one was ever going to. */
 const JAM_MS = 600;
 
-const hasScrollEnd = typeof window !== "undefined" && "onscrollend" in window;
+interface Drag {
+  id: number;
+  startX: number;
+  startY: number;
+  /** Whether the travel has been judged sideways and taken. */
+  taken: boolean;
+  /** Where it was taken, so the rail moves from there rather than jumping. */
+  from: number;
+  /** Set when this gesture is over: a second finger, or a vertical read. */
+  dead: boolean;
+  /** A position from at least `SAMPLE_MS` ago, and one from just now. */
+  sampleX: number;
+  sampleAt: number;
+  lastX: number;
+  lastAt: number;
+}
+
+const stillness = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function SpanCarousel({
   live,
@@ -54,175 +70,245 @@ export function SpanCarousel({
   /**
    * Whether there is a rail at all.
    *
-   * False on a laptop and in the week span, and then this component renders the
-   * pane it was given and nothing else — no scroller, no neighbours, no
-   * negative margins. A screen that cannot be swiped should not pay for the
-   * machinery of swiping, and the week already pans its columns sideways inside
-   * its own scroller: two meanings for one gesture is how a control stops being
-   * trusted.
+   * False on a laptop and in the week span, and then this renders the pane it
+   * was given and nothing else — no track, no neighbours, no negative margins.
+   * The week already pans its columns sideways inside their own scroller, and
+   * two meanings for one gesture is how a control stops being trusted.
    */
   live: boolean;
-  /** Identity of the span on screen. Changing it re-centres the rail. */
+  /** Identity of the span on screen. Changing it puts the rail back. */
   at: string;
   onStep: (by: -1 | 1) => void;
-  /** What is now on screen, said once for a screen reader after a flick. */
+  /** What is now on screen, said once for a screen reader after a swipe. */
   announce: string;
   /** "day" or "month", for the sentence underneath. */
   noun: string;
   /** Draws the span `offset` steps away from the one being read. */
   pane: (offset: Offset) => React.ReactNode;
 }) {
-  const rail = useRef<HTMLDivElement>(null);
-  /** A finger is on the glass, so wherever the rail is, it is not resting. */
-  const held = useRef(false);
-  /** A step has been asked for and the re-centre is owed. */
-  const busy = useRef(false);
-  const idle = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const jam = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const view = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLDivElement>(null);
+  const drag = useRef<Drag | null>(null);
+  /** A step has been asked for and the rail is owed a reset. */
+  const settling = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [swiped, setSwiped] = useState(false);
 
-  // Read through a ref so the listeners never need rebinding, and so a settle
+  // Read through a ref so the handlers never change identity, and so a landing
   // always calls the newest closure: the caller writes this as an arrow over
-  // the date currently on screen, and two flicks must step from the second day
+  // the date currently on screen, and two swipes must step from the second day
   // rather than twice from the first.
   const step = useRef(onStep);
   useEffect(() => {
     step.current = onStep;
   });
 
-  /*
-   * Put the middle pane on screen, before the frame is painted.
+  /**
+   * Where the rail sits: `by` panes from the one being read, plus `dx` of hand.
    *
-   * This runs on arrival and again on every step, and the second case is the
-   * one that matters. By the time it runs React has already moved every pane
-   * along by one — what the rail is scrolled to showing has become the middle
-   * pane's content — so writing the scroll position back to the middle puts
-   * the same pixels under the same finger. The swap has no frame of its own to
-   * be seen in. A plain effect here would leave one, and it would read as the
-   * day flickering back and forth.
+   * Written straight onto the node rather than through state, because the
+   * alternative is re-rendering three days' worth of blocks sixty times a
+   * second. Percentages rather than pixels for the pane part, so nothing has to
+   * be measured before the first frame can be drawn correctly.
    */
-  useLayoutEffect(() => {
-    const box = rail.current;
-    if (!box || !live) return;
-    busy.current = false;
-    box.scrollLeft = restingAt(box.clientWidth);
-  }, [live, at]);
-
-  const settle = useRef(function settle() {
-    const box = rail.current;
-    if (!box || busy.current || held.current) return;
-
-    const by = stepFrom(box.scrollLeft, box.clientWidth);
-    if (by === 0) return;
-
-    busy.current = true;
-    setSwiped(true);
-
-    /*
-     * If the screen does not move, put the rail back rather than leaving it.
-     *
-     * Nothing today declines a step, so this should never fire. It exists
-     * because the alternative failure is silent and total: `busy` would stay
-     * set, every later settle would return early, and the rail would sit on a
-     * neighbour with the gesture dead and no way back but a reload.
-     */
-    clearTimeout(jam.current);
-    jam.current = setTimeout(() => {
-      if (!busy.current) return;
-      busy.current = false;
-      const now = rail.current;
-      if (now) now.scrollLeft = restingAt(now.clientWidth);
-    }, JAM_MS);
-
-    step.current(by);
+  const place = useRef(function place(by: number, dx: number, ms: number) {
+    const node = track.current;
+    if (!node) return;
+    node.style.transition = ms > 0 ? `transform ${ms}ms ${EASE}` : "none";
+    node.style.transform = `translate3d(calc(${-100 - by * 100}% + ${dx}px), 0, 0)`;
   }).current;
 
-  useEffect(() => {
-    const box = rail.current;
-    if (!box || !live) return;
+  /*
+   * Put the pane being read back under the finger, before the frame is painted.
+   *
+   * This runs on arrival and again after every step, and the second case is the
+   * one that matters. By the time it runs React has moved every pane along by
+   * one, so the rail is transformed to a neighbour whose content has become the
+   * middle pane's — writing the transform back to the middle puts the same
+   * pixels in the same place. The swap has no frame of its own to be seen in.
+   */
+  useLayoutEffect(() => {
+    if (!live) return;
+    settling.current = false;
+    clearTimeout(timer.current);
+    place(0, 0, 0);
+  }, [live, at, place]);
 
-    const arm = () => {
-      clearTimeout(idle.current);
-      idle.current = setTimeout(settle, IDLE_MS);
-    };
+  /**
+   * Eats the click a finger leaves behind when it lifts off a swipe.
+   *
+   * A swipe that began on a lecture ends with a `pointerup` over that lecture,
+   * and the browser dutifully fires a click at it — so a flick to tomorrow
+   * would also open a drawer on the class it started from. On the document in
+   * the capture phase, because by then the block may not be there at all.
+   */
+  const swallow = useRef(function swallow(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.removeEventListener("click", swallow, true);
+  }).current;
 
-    // Where `scrollend` exists it says exactly this and says it once, so the
-    // timer is not armed at all rather than racing it.
-    const onScroll = hasScrollEnd ? null : arm;
-    /*
-     * The finger, which the timer alone cannot see.
-     *
-     * Dragging the rail to a neighbour and holding it there produces no further
-     * scroll events, so the idle timer fires while the finger is still down and
-     * would step the day out from under a gesture the reader has not finished —
-     * and could still drag back. Hence: disarm on touch, re-arm on release.
-     */
-    const onDown = () => {
-      held.current = true;
-      clearTimeout(idle.current);
-    };
-    const onUp = () => {
-      held.current = false;
-      if (!hasScrollEnd) arm();
-    };
+  const armSwallow = useRef(function armSwallow() {
+    document.removeEventListener("click", swallow, true);
+    document.addEventListener("click", swallow, true);
+    setTimeout(
+      () => document.removeEventListener("click", swallow, true),
+      SUPPRESS_MS,
+    );
+  }).current;
 
-    if (onScroll) box.addEventListener("scroll", onScroll, { passive: true });
-    box.addEventListener("pointerdown", onDown, { passive: true });
-    box.addEventListener("pointerup", onUp, { passive: true });
-    box.addEventListener("pointercancel", onUp, { passive: true });
-    if (hasScrollEnd) box.addEventListener("scrollend", settle);
+  const land = useRef(function land(by: Offset) {
+    const ms = stillness() ? 0 : SETTLE_MS;
+    place(by, 0, ms);
+    if (by === 0) return;
 
-    return () => {
-      if (onScroll) box.removeEventListener("scroll", onScroll);
-      box.removeEventListener("pointerdown", onDown);
-      box.removeEventListener("pointerup", onUp);
-      box.removeEventListener("pointercancel", onUp);
-      if (hasScrollEnd) box.removeEventListener("scrollend", settle);
-      clearTimeout(idle.current);
-      clearTimeout(jam.current);
-    };
-  }, [live, settle]);
+    settling.current = true;
+    setSwiped(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      step.current(by);
+      /*
+       * If the screen does not move, put the rail back rather than leaving it.
+       *
+       * Nothing today declines a step, so this should never fire. It exists
+       * because the alternative failure is silent and total: `settling` would
+       * stay set, every later gesture would be refused, and the rail would sit
+       * on a neighbour with no way back but a reload.
+       */
+      timer.current = setTimeout(() => {
+        if (!settling.current) return;
+        settling.current = false;
+        place(0, 0, 0);
+      }, JAM_MS);
+    }, ms);
+  }).current;
+
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      document.removeEventListener("click", swallow, true);
+    },
+    [swallow],
+  );
 
   if (!live) return <>{pane(0)}</>;
+
+  const width = () => view.current?.clientWidth ?? 0;
 
   return (
     <>
       <div
-        ref={rail}
+        ref={view}
         /*
-         * Out to the edges of the screen, with the page's own gutter moved
-         * inside each pane.
+         * `clip`, not `hidden`, and it is the load-bearing choice here.
          *
-         * Two things at once. A rail is a scroll container and clips both axes
-         * whichever one it was asked to scroll, so a card sitting flush against
-         * the pane edge would have its shadow shaved off down both sides —
-         * moving the gutter inward gives the shadow somewhere to be drawn. And
-         * the gesture then starts at the bezel, where a thumb reaching across a
-         * phone actually lands, rather than sixteen pixels in from it.
+         * `overflow: hidden` on one axis makes the other a scroll container
+         * whatever it was set to — which would put a scroller back around the
+         * calendar, capture anything sticky that ever lands inside it, and hand
+         * the browser back the axis arbitration this whole component exists to
+         * take away from it. `overflow-x: clip` with `overflow-y: visible`
+         * creates no scroller at all, so the page scrolls exactly as it would
+         * if none of this were here.
+         *
+         * Out to the edges of the screen, with the page's own gutter moved
+         * inside each pane: a card flush against the pane edge would have its
+         * shadow shaved off down both sides, and the gesture now starts at the
+         * bezel, where a thumb reaching across a phone actually lands.
          */
-        className="plr-rail -mx-4 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain sm:-mx-6 lg:-mx-9"
-        style={{
-          // The re-centre above must be instant. A `scroll-behavior: smooth`
-          // inherited from anywhere would animate it, and the animation is
-          // precisely the frame this design exists to not have.
-          scrollBehavior: "auto",
+        className="-mx-4 touch-pan-y touch-pinch-zoom overflow-x-clip sm:-mx-6 lg:-mx-9"
+        onPointerDown={(event) => {
+          if (event.pointerType !== "touch" || settling.current) return;
+          // A second finger is a pinch or a scroll with the other hand, and
+          // either way it is not this. Abandoned rather than fought over.
+          if (drag.current) {
+            drag.current.dead = true;
+            return;
+          }
+          drag.current = {
+            id: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            taken: false,
+            from: 0,
+            dead: false,
+            sampleX: event.clientX,
+            sampleAt: event.timeStamp,
+            lastX: event.clientX,
+            lastAt: event.timeStamp,
+          };
+        }}
+        onPointerMove={(event) => {
+          const now = drag.current;
+          if (!now || now.dead || now.id !== event.pointerId) return;
+
+          const dx = event.clientX - now.startX;
+          const dy = event.clientY - now.startY;
+
+          if (!now.taken) {
+            const verdict = intentOf(dx, dy);
+            if (verdict === "undecided") return;
+            if (verdict === "elsewhere") {
+              now.dead = true;
+              return;
+            }
+            now.taken = true;
+            // The slop is paid once. From here the rail is one to one with the
+            // hand, rather than starting fourteen pixels ahead of it.
+            now.from = dx;
+          }
+
+          if (event.timeStamp - now.sampleAt > SAMPLE_MS) {
+            now.sampleX = now.lastX;
+            now.sampleAt = now.lastAt;
+          }
+          now.lastX = event.clientX;
+          now.lastAt = event.timeStamp;
+
+          place(0, travelOf(dx - now.from, width()), 0);
+        }}
+        onPointerUp={(event) => {
+          const now = drag.current;
+          if (now?.id !== event.pointerId) return;
+          drag.current = null;
+          if (!now.taken || now.dead) return;
+
+          const span = width();
+          const dx = travelOf(event.clientX - now.startX - now.from, span);
+          const elapsed = Math.max(1, event.timeStamp - now.sampleAt);
+          const speed = Math.abs(event.clientX - now.sampleX) / elapsed;
+          const by = landingOf(dx, speed, span);
+
+          // Armed for any taken gesture, not only a committed one: a swipe that
+          // came back to where it started still began on a lecture.
+          armSwallow();
+          land(by);
+        }}
+        onPointerCancel={(event) => {
+          const now = drag.current;
+          if (now?.id !== event.pointerId) return;
+          drag.current = null;
+          // The browser has claimed the finger — usually because it decided the
+          // travel was a read after all. Nothing to argue with.
+          if (now.taken && !now.dead) land(0);
         }}
       >
-        {OFFSETS.map((offset) => (
-          <div
-            key={offset}
-            /*
-             * `inert`, which is both halves of what the neighbours need: no
-             * screen reader walks into two days that are not on screen, and no
-             * tap lands on the sliver of tomorrow showing at the edge halfway
-             * through a swipe.
-             */
-            inert={offset !== 0}
-            className="w-full shrink-0 snap-center px-4 sm:px-6 lg:px-9"
-          >
-            {pane(offset)}
-          </div>
-        ))}
+        <div ref={track} className="flex">
+          {OFFSETS.map((offset) => (
+            <div
+              key={offset}
+              /*
+               * `inert`, which is both halves of what the neighbours need: no
+               * screen reader walks into two days that are not on screen, and
+               * no tap lands on the sliver of tomorrow showing at the edge
+               * halfway through a swipe.
+               */
+              inert={offset !== 0}
+              className="w-full shrink-0 px-4 sm:px-6 lg:px-9"
+            >
+              {pane(offset)}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/*

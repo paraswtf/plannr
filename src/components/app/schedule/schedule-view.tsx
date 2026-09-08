@@ -38,7 +38,7 @@ import {
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CalendarSync } from "./calendar-sync";
-import { type Offset } from "./carousel-step";
+import { type Offset } from "./swipe-gesture";
 import { DayCalendar, type DayCalendarEvent } from "./day-calendar";
 import { dayWindow } from "./day-layout";
 import { DaySkeleton } from "./day-skeleton";
