@@ -22,7 +22,7 @@ export async function GET() {
   }
   if (!syncEnabled()) {
     return NextResponse.redirect(
-      new URL("/schedule?calendar=disabled", appUrl),
+      new URL("/settings/calendar?calendar=disabled", appUrl),
     );
   }
 

@@ -337,6 +337,17 @@ export interface FavouriteDto {
   kind: "perspective" | "person";
   subject: string;
   name: string;
+  /**
+   * What this is, in a few words — the same line the picker writes under a name
+   * in its search results.
+   *
+   * Added for the details a favourite can be held down to read. A strip of
+   * initials is deliberately terse, and terse is right for something aimed at
+   * with a thumb; but "AS" is two letters that several people in a college of
+   * this size will share, and the one place that has to be resolvable is the
+   * one where you decide whether to unstar them.
+   */
+  hint: string | null;
 }
 
 export const timetableRouter = createTRPCRouter({
@@ -730,8 +741,11 @@ export const timetableRouter = createTRPCRouter({
               // the test `searchPeople` applies. Selected rather than filtered
               // in the query, because a `where` on this relation would throw
               // away the perspective rows too — they have no person.
-              studentProfile: { select: { userId: true } },
-              facultyProfile: { select: { userId: true } },
+              //
+              // The second field on each is what the hint is written from, and
+              // is exactly what `searchPeople` selects for the same purpose.
+              studentProfile: { select: { userId: true, prn: true } },
+              facultyProfile: { select: { userId: true, department: true } },
             },
           },
         },
@@ -758,6 +772,11 @@ export const timetableRouter = createTRPCRouter({
                 kind: "perspective" as const,
                 subject: row.subject,
                 name: PERSPECTIVE_LABELS[row.subject as Perspective],
+                // Nothing, deliberately. The picker already writes "you" under
+                // every perspective, and a second wording supplied from here
+                // would reword the identical row as a side effect of starring
+                // it. Presentation copy is the screen's to choose.
+                hint: null,
               },
             ]
           : [];
@@ -785,6 +804,13 @@ export const timetableRouter = createTRPCRouter({
           kind: "person" as const,
           subject: person.id,
           name: personName(person),
+          hint:
+            [
+              person.facultyProfile ? "Faculty" : "Student",
+              person.facultyProfile?.department ?? person.studentProfile?.prn,
+            ]
+              .filter(Boolean)
+              .join(" · ") || null,
         },
       ];
     });

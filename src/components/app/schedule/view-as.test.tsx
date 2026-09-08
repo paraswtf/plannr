@@ -220,6 +220,144 @@ describe("the favourites strip", () => {
   });
 });
 
+describe("favourites in the list", () => {
+  it("puts what is starred at the top, above your own angles", () => {
+    // The star is how a favourite is taken back, and it used to be reachable
+    // only wherever that name happened to fall in a directory of hundreds — so
+    // unstarring somebody meant searching for them first, which is exactly what
+    // starring them was for.
+    view({ favourites: [PEOPLE[0]!, PERSPECTIVES[1]!] });
+    openList();
+
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+      expect.stringContaining("Dr Rao"),
+      expect.stringContaining("Coordinator"),
+      expect.stringContaining("Student"),
+      expect.stringContaining("A Sharma"),
+    ]);
+  });
+
+  it("lists a starred name once, not twice", () => {
+    // One name in two groups is two answers to whether it is starred, and two
+    // stars to press to find out which.
+    view({ favourites: [PEOPLE[0]!] });
+    openList();
+
+    expect(
+      screen
+        .getAllByRole("option")
+        .filter((o) => o.textContent?.includes("Dr Rao")),
+    ).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Star Dr Rao" })).toBeNull();
+  });
+
+  it("keeps a starred person the server found by something other than a name", () => {
+    // The server searches names *and* PRNs; this component narrows favourites
+    // by name. A starred student found by their number failed the name test in
+    // the top group and the starred test in the people group, and disappeared
+    // out of a search that had just found exactly them — "Nobody matches that."
+    view({
+      favourites: [PEOPLE[1]!],
+      people: [PEOPLE[1]!],
+      query: "23030121",
+      total: 1,
+    });
+    openList();
+
+    expect(screen.getByText("A Sharma")).toBeInTheDocument();
+    expect(screen.queryByText(/nobody matches that/i)).toBeNull();
+    // And wherever it fell back to, the star still tells the truth about it.
+    expect(
+      screen.getByRole("button", { name: "Unstar A Sharma" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says the same thing about a perspective whether or not it is starred", () => {
+    // Same row, same list. A subtitle that changed as a side effect of
+    // starring would be the control reporting on itself.
+    view({ favourites: [PERSPECTIVES[1]!] });
+    openList();
+
+    const starredRow = screen
+      .getAllByRole("option")
+      .find((o) => o.textContent?.includes("Coordinator"));
+    expect(starredRow).toHaveTextContent("you");
+  });
+
+  it("unstars from the top of the list, without searching first", () => {
+    const { onToggleFavourite } = view({ favourites: [PEOPLE[0]!] });
+    openList();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unstar Dr Rao" }));
+    expect(onToggleFavourite).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "user-rao" }),
+      false,
+    );
+  });
+});
+
+describe("going back to your own schedule", () => {
+  const backwards = { name: /back to your own schedule/i };
+
+  it("offers no way back when there is nowhere to come back from", () => {
+    // A cross that undoes nothing is a control that has to be read before it
+    // can be ignored. The screen decides; this only draws what it is given.
+    view();
+    expect(screen.queryByRole("button", backwards)).toBeNull();
+  });
+
+  it("goes back in one press once the screen is pointed elsewhere", () => {
+    const onClear = vi.fn();
+    view({ onClear, current: PEOPLE[0]! });
+
+    fireEvent.click(screen.getByRole("button", backwards));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("holding a favourite", () => {
+  const hold = () =>
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "View as Dr Rao" }),
+    );
+
+  it("says who it is, which two initials cannot", () => {
+    // "AS" is two letters that several people in a college of this size share,
+    // and the one place that has to be resolvable is where you decide whether
+    // to keep them.
+    view({ favourites: [PEOPLE[0]!] });
+    hold();
+
+    expect(screen.getByText("Faculty · Computer Science")).toBeInTheDocument();
+  });
+
+  it("takes the favourite off without moving the screen", () => {
+    const { onPick, onToggleFavourite } = view({ favourites: [PEOPLE[0]!] });
+    hold();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /remove from favourites/i }),
+    );
+    expect(onToggleFavourite).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "user-rao" }),
+      false,
+    );
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it("switches to it from the inside, for whoever opened it to look", () => {
+    const { onPick } = view({ favourites: [PEOPLE[0]!] });
+    hold();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /view this schedule/i }),
+    );
+    expect(onPick).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "user-rao" }),
+    );
+  });
+});
+
 describe("the people search", () => {
   it("is held back until the list is opened", () => {
     // Every student loading their own timetable would otherwise pay for a

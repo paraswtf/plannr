@@ -6,6 +6,7 @@ import { PageHeader } from "~/components/app/shell/page-header";
 import { Card } from "~/components/ui/card";
 import { Icon, type IconName } from "~/components/ui/icon";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
+import { env } from "~/env";
 import { canOpen } from "~/lib/role-nav";
 import { auth } from "~/server/auth";
 
@@ -49,6 +50,18 @@ const SECTIONS: Section[] = [
     icon: "sparkles",
     requires: PermissionFlags.ViewOwnEvents,
   },
+  // Beside Siri, and for the same reason: one person's own phone, granting
+  // nothing they do not already have. It was a chip in the schedule's toolbar,
+  // competing for a row with the span tabs and the day navigator, none of which
+  // it has anything to do with — and it is a thing you set up once.
+  {
+    href: "/settings/calendar",
+    title: "Google Calendar",
+    blurb:
+      "Copy your classes into a calendar of their own, so they show up on your phone beside everything else.",
+    icon: "calendar",
+    requires: PermissionFlags.ViewOwnEvents,
+  },
   {
     href: "/settings/api-keys",
     title: "API keys",
@@ -67,7 +80,21 @@ export default async function SettingsPage() {
   if (!canOpen(permissions, "/settings")) redirect("/");
 
   const bits = new PermissionBitField(permissions);
-  const sections = SECTIONS.filter((section) => bits.has(section.requires));
+  const sections = SECTIONS.filter(
+    (section) =>
+      bits.has(section.requires) &&
+      /*
+       * Nothing is gained by listing a door that opens onto "this institution
+       * does not have that". Configuration rather than the database, which is
+       * all `calendar.status`'s `available` ever meant.
+       *
+       * The flag itself rather than `syncEnabled()`, which reads it: that lives
+       * in the sync service, and importing it here would drag Prisma, the token
+       * crypto and the Google client into a page that wanted one boolean.
+       */
+      (section.href !== "/settings/calendar" ||
+        env.GOOGLE_CALENDAR_SYNC_ENABLED),
+  );
 
   return (
     <>

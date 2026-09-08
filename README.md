@@ -151,7 +151,8 @@ relative to the real clock rather than a fixed date.
 ## Google Calendar sync
 
 Off unless `GOOGLE_CALENDAR_SYNC_ENABLED=true`. On, anyone can connect their own
-Google account from the schedule screen, and the classes they attend or teach
+Google account from Settings → Google Calendar (`/settings/calendar`), and the
+section is listed there only while the flag is on. The classes they attend or teach
 are mirrored into a calendar Plannr creates — cancellations and reschedules
 follow on the next drain, which is hourly on Vercel's Hobby plan and can be
 per-minute on Pro.

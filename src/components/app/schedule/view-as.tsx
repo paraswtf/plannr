@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 
+import { Dialog } from "~/components/ui/dialog";
 import { Icon } from "~/components/ui/icon";
 import { Popover } from "~/components/ui/popover";
+import { useLongPress } from "~/components/ui/use-long-press";
 import { initialsOf } from "~/components/ui/entity-card";
 
 /**
@@ -48,6 +50,15 @@ export interface ViewAsProps {
   onPick: (subject: ViewAsSubject) => void;
   onToggleFavourite: (subject: ViewAsSubject, on: boolean) => void;
   /**
+   * Puts the screen back on your own schedule. Absent when it already is.
+   *
+   * Its own callback rather than picking the first perspective, because those
+   * are not the same thing: the default is whatever the server would choose if
+   * it had never been asked, and the screen is the only thing that knows it has
+   * stopped asking.
+   */
+  onClear?: () => void;
+  /**
    * Told when the list is opened, so the screen can hold the people search back
    * until somebody actually wants it. Every student loading their own timetable
    * would otherwise pay for a directory query they were never going to read.
@@ -69,10 +80,13 @@ export function ViewAs({
   onQueryChange,
   onPick,
   onToggleFavourite,
+  onClear,
   onOpen,
   loading = false,
 }: ViewAsProps) {
   const [open, setOpen] = useState(false);
+  /** The favourite being held down and read about, if any. */
+  const [detail, setDetail] = useState<ViewAsSubject | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -86,9 +100,42 @@ export function ViewAs({
    * people half is searched server side because there are thousands.
    */
   const needle = query.trim().toLowerCase();
-  const shownPerspectives = needle
-    ? perspectives.filter((p) => p.name.toLowerCase().includes(needle))
-    : perspectives;
+  const matches = (option: ViewAsSubject) =>
+    !needle || option.name.toLowerCase().includes(needle);
+
+  /*
+   * Starred first, and only once.
+   *
+   * The star is how a favourite is taken back, and until now the only place it
+   * could be reached was wherever that name happened to fall in a directory of
+   * hundreds — so unstarring somebody meant searching for them first, which is
+   * exactly the thing starring them was meant to stop. They are pulled out of
+   * the groups below rather than repeated in them: one name listed twice, with
+   * a star on both, is two answers to whether it is starred.
+   */
+  const shownFavourites = favourites.filter(matches);
+  /*
+   * Deduplicated against the favourites actually drawn, not against every
+   * favourite there is — which is not the same set, and the difference deleted
+   * people.
+   *
+   * The server searches names *and* PRNs; this narrows favourites by name,
+   * because a PRN is not in `name`. So a starred student found by their PRN
+   * matched the server and failed `matches`: dropped from the top group for
+   * failing the name test, dropped from the people group for being starred, and
+   * so missing from a search that had just found exactly them. Keyed on what
+   * survived, a favourite the needle excluded falls back to its ordinary group.
+   */
+  const drawn = new Set(shownFavourites.map(keyOf));
+  const shownPerspectives = perspectives.filter(
+    (option) => matches(option) && !drawn.has(keyOf(option)),
+  );
+  // Already narrowed by the server, which is what `query` was sent to it for.
+  const shownPeople = people.filter((option) => !drawn.has(keyOf(option)));
+  const nothing =
+    shownFavourites.length === 0 &&
+    shownPerspectives.length === 0 &&
+    shownPeople.length === 0;
 
   const pick = (subject: ViewAsSubject) => {
     onPick(subject);
@@ -96,161 +143,286 @@ export function ViewAs({
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-      {/*
-       * The label and the control are one item, full width until there is a
-       * row to share.
-       *
-       * They used to be two, with the trigger `flex-1` — which meant the
-       * favourites strip competed with it for the same line and the panel,
-       * sized off the trigger, narrowed as somebody starred people. A phone
-       * ended up with a list about two hundred pixels wide whose width moved
-       * while it was open. Now the strip wraps beneath instead, and the panel
-       * is as wide as the screen allows and stays there.
-       */}
-      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-        <span className="text-faint shrink-0 font-mono text-[12px]">
-          view as
-        </span>
-
+    <>
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
         {/*
-         * A real width. The panel is sized off this box, so `flex-none` with
-         * no width — which resolves to "as wide as the name currently in it" —
-         * made the list about a hundred pixels across, and inside that the
-         * avatar and the star are `shrink-0` while the name is `min-w-0
-         * flex-1`, so the name was the only thing that could give way: it
-         * truncated to nothing and every row came out as an icon, a gap and a
-         * star. On a phone it takes the rest of its own line instead, which is
-         * a good deal wider than a fixed 288 would be.
+         * The label and the control are one item, full width until there is a
+         * row to share.
+         *
+         * They used to be two, with the trigger `flex-1` — which meant the
+         * favourites strip competed with it for the same line and the panel,
+         * sized off the trigger, narrowed as somebody starred people. A phone
+         * ended up with a list about two hundred pixels wide whose width moved
+         * while it was open. Now the strip wraps beneath instead, and the panel
+         * is as wide as the screen allows and stays there.
          */}
-        <div ref={boxRef} className="min-w-0 flex-1 sm:w-[288px] sm:flex-none">
-          <button
-            ref={triggerRef}
-            type="button"
-            onClick={() => {
-              if (!open) onOpen?.();
-              setOpen((v) => !v);
-            }}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            className="bg-surface flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0 lg:py-1.5"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            <span className="text-title min-w-0 truncate font-medium">
-              {current.name}
-            </span>
-            <Icon name="chevronDown" size={14} color="var(--muted)" />
-          </button>
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <span className="text-faint shrink-0 font-mono text-[12px]">
+            view as
+          </span>
 
-          <Popover
-            open={open}
-            anchorRef={boxRef}
-            onClose={() => setOpen(false)}
-            /*
-             * A fixed width, taken from the trigger, and deliberately not
-             * `min-width`.
-             *
-             * `min-width` lets the panel size itself off its own content — and
-             * `usePopoverPlacement` watches the panel with a ResizeObserver, so
-             * every keystroke that changed the results changed the width, which
-             * re-measured, which could cap the width against the viewport, which
-             * re-measured again. A long name is what made it visible: the list
-             * jittered as you typed. The trigger is a fixed width, so the panel
-             * is too, and a name longer than it truncates with the whole of it
-             * on the row's `title`.
-             */
-            match="width"
-            className="bg-surface flex flex-col rounded-[10px] p-1.5"
-            style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+          {/*
+           * A real width. The panel is sized off this box, so `flex-none` with
+           * no width — which resolves to "as wide as the name currently in it" —
+           * made the list about a hundred pixels across, and inside that the
+           * avatar and the star are `shrink-0` while the name is `min-w-0
+           * flex-1`, so the name was the only thing that could give way: it
+           * truncated to nothing and every row came out as an icon, a gap and a
+           * star. On a phone it takes the rest of its own line instead, which is
+           * a good deal wider than a fixed 288 would be.
+           */}
+          <div
+            ref={boxRef}
+            className="min-w-0 flex-1 sm:w-[288px] sm:flex-none"
           >
-            <div className="relative mb-1.5 shrink-0">
-              <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
-                <Icon name="search" size={13} color="var(--faint)" />
-              </span>
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setOpen(false);
-                    triggerRef.current?.focus();
-                  }
-                  // Tab leaves the picker rather than walking its rows: the panel
-                  // hangs off <body>, so the stop after it is the browser's own
-                  // chrome rather than the next control in the toolbar.
-                  if (e.key === "Tab") {
-                    triggerRef.current?.focus();
-                    setOpen(false);
-                  }
-                }}
-                placeholder="Search perspectives, students and staff…"
-                // 16px on a phone: anything smaller and Safari zooms the page on
-                // focus, which on this toolbar throws the calendar off screen.
-                className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
-              />
-            </div>
-
-            <div
-              role="listbox"
-              className="plr-scroll max-h-[280px] min-h-0 overflow-y-auto"
+            <button
+              ref={triggerRef}
+              type="button"
+              onClick={() => {
+                if (!open) onOpen?.();
+                setOpen((v) => !v);
+              }}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              className="bg-surface flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0 lg:py-1.5"
+              style={{ boxShadow: "var(--ring)" }}
             >
-              {shownPerspectives.map((option) => (
-                <Row
-                  key={keyOf(option)}
-                  option={option}
-                  hint="you"
-                  selected={keyOf(option) === keyOf(current)}
-                  starred={starred.has(keyOf(option))}
-                  onPick={pick}
-                  onToggleFavourite={onToggleFavourite}
+              <span className="text-title min-w-0 truncate font-medium">
+                {current.name}
+              </span>
+              <Icon name="chevronDown" size={14} color="var(--muted)" />
+            </button>
+
+            <Popover
+              open={open}
+              anchorRef={boxRef}
+              onClose={() => setOpen(false)}
+              /*
+               * A fixed width, taken from the trigger, and deliberately not
+               * `min-width`.
+               *
+               * `min-width` lets the panel size itself off its own content — and
+               * `usePopoverPlacement` watches the panel with a ResizeObserver, so
+               * every keystroke that changed the results changed the width, which
+               * re-measured, which could cap the width against the viewport, which
+               * re-measured again. A long name is what made it visible: the list
+               * jittered as you typed. The trigger is a fixed width, so the panel
+               * is too, and a name longer than it truncates with the whole of it
+               * on the row's `title`.
+               */
+              match="width"
+              className="bg-surface flex flex-col rounded-[10px] p-1.5"
+              style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+            >
+              <div className="relative mb-1.5 shrink-0">
+                <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
+                  <Icon name="search" size={13} color="var(--faint)" />
+                </span>
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => onQueryChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setOpen(false);
+                      triggerRef.current?.focus();
+                    }
+                    // Tab leaves the picker rather than walking its rows: the panel
+                    // hangs off <body>, so the stop after it is the browser's own
+                    // chrome rather than the next control in the toolbar.
+                    if (e.key === "Tab") {
+                      triggerRef.current?.focus();
+                      setOpen(false);
+                    }
+                  }}
+                  placeholder="Search perspectives, students and staff…"
+                  // 16px on a phone: anything smaller and Safari zooms the page on
+                  // focus, which on this toolbar throws the calendar off screen.
+                  className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
                 />
-              ))}
+              </div>
 
-              {shownPerspectives.length > 0 && people.length > 0 && (
-                <div
-                  className="mx-2.5 my-1"
-                  style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
-                />
-              )}
+              <div
+                role="listbox"
+                className="plr-scroll max-h-[280px] min-h-0 overflow-y-auto"
+              >
+                {shownFavourites.map((option) => (
+                  <Row
+                    key={keyOf(option)}
+                    option={option}
+                    // The same word the ungrouped row uses, so starring a
+                    // perspective does not quietly reword it.
+                    hint={
+                      option.hint ??
+                      (option.kind === "perspective" ? "you" : null)
+                    }
+                    selected={keyOf(option) === keyOf(current)}
+                    starred
+                    onPick={pick}
+                    onToggleFavourite={onToggleFavourite}
+                  />
+                ))}
 
-              {people.map((option) => (
-                <Row
-                  key={keyOf(option)}
-                  option={option}
-                  hint={option.hint}
-                  selected={keyOf(option) === keyOf(current)}
-                  starred={starred.has(keyOf(option))}
-                  onPick={pick}
-                  onToggleFavourite={onToggleFavourite}
-                />
-              ))}
+                {shownFavourites.length > 0 &&
+                  (shownPerspectives.length > 0 || shownPeople.length > 0) && (
+                    <Divider />
+                  )}
 
-              {shownPerspectives.length === 0 && people.length === 0 && (
-                <p className="text-muted p-2 text-[12.5px]">
-                  {loading ? "Searching…" : "Nobody matches that."}
-                </p>
-              )}
+                {shownPerspectives.map((option) => (
+                  <Row
+                    key={keyOf(option)}
+                    option={option}
+                    hint="you"
+                    selected={keyOf(option) === keyOf(current)}
+                    starred={starred.has(keyOf(option))}
+                    onPick={pick}
+                    onToggleFavourite={onToggleFavourite}
+                  />
+                ))}
 
-              {/*
-               * How many matched, rather than how many are listed. A full page
-               * used to be the only clue that there were more, and it could not
-               * say how many more.
-               */}
-              {total > people.length && (
-                <p className="text-faint px-2.5 py-1.5 text-[11.5px]">
-                  {total - people.length} more — keep typing to narrow it.
-                </p>
-              )}
-            </div>
-          </Popover>
+                {shownPerspectives.length > 0 && shownPeople.length > 0 && (
+                  <Divider />
+                )}
+
+                {shownPeople.map((option) => (
+                  <Row
+                    key={keyOf(option)}
+                    option={option}
+                    hint={option.hint}
+                    selected={keyOf(option) === keyOf(current)}
+                    // Not always false: a favourite the needle kept out of the
+                    // group above lands here, and its star has to say so.
+                    starred={starred.has(keyOf(option))}
+                    onPick={pick}
+                    onToggleFavourite={onToggleFavourite}
+                  />
+                ))}
+
+                {nothing && (
+                  <p className="text-muted p-2 text-[12.5px]">
+                    {loading ? "Searching…" : "Nobody matches that."}
+                  </p>
+                )}
+
+                {/*
+                 * How many matched, rather than how many are listed. A full page
+                 * used to be the only clue that there were more, and it could not
+                 * say how many more.
+                 */}
+                {total > people.length && (
+                  <p className="text-faint px-2.5 py-1.5 text-[11.5px]">
+                    {total - people.length} more — keep typing to narrow it.
+                  </p>
+                )}
+              </div>
+            </Popover>
+          </div>
+
+          {/*
+           * Out of somebody else's schedule, in one press.
+           *
+           * Only here when there is something to leave — a cross that undoes
+           * nothing is a control that has to be read before it can be ignored.
+           * Outside the box the panel is measured against, so starring people
+           * does not narrow the list they are starred from.
+           */}
+          {onClear && (
+            <button
+              type="button"
+              // The trigger takes focus first, because this control is about to
+              // stop existing: activated from the keyboard it would otherwise
+              // drop focus to <body> and the next Tab would restart at the top
+              // of the page. The same move the search box makes on Escape.
+              onClick={() => {
+                triggerRef.current?.focus();
+                onClear();
+              }}
+              title="Back to your own schedule"
+              aria-label="Back to your own schedule"
+              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
+              style={{ background: "rgba(68,88,121,0.07)" }}
+            >
+              <Icon name="x" size={15} color="var(--slate)" stroke={2.2} />
+            </button>
+          )}
         </div>
+
+        {favourites.length > 0 && (
+          <Favourites
+            favourites={favourites}
+            current={current}
+            onPick={onPick}
+            onDetails={setDetail}
+          />
+        )}
       </div>
 
-      {favourites.length > 0 && (
-        <Favourites favourites={favourites} current={current} onPick={onPick} />
-      )}
-    </div>
+      {/*
+       * What a favourite is, and how to stop it being one.
+       *
+       * Held down or right-clicked, the same way a class on the calendar is —
+       * so the gesture is learnt once and means the same thing in both places:
+       * "tell me more about this, without going anywhere."
+       */}
+      <Dialog
+        open={detail !== null}
+        title={detail?.name ?? ""}
+        subtitle={detail?.hint ?? undefined}
+        onClose={() => setDetail(null)}
+        width={360}
+      >
+        {detail && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <Avatar option={detail} size={40} />
+              <p className="text-muted m-0 text-[13px]">
+                {detail.kind === "perspective"
+                  ? "One of your own angles on your timetable. Starred, so it is one tap away."
+                  : "Starred, so their schedule is one tap away from yours."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onPick(detail);
+                  setDetail(null);
+                }}
+                className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+                style={{ background: "var(--slate)", color: "#fff" }}
+              >
+                View this schedule
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleFavourite(detail, false);
+                  setDetail(null);
+                }}
+                className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+                style={{
+                  background: "rgba(200,60,60,0.08)",
+                  color: "var(--danger, #b3261e)",
+                }}
+              >
+                <Icon name="star" size={13} stroke={2.2} color="currentColor" />
+                Remove from favourites
+              </button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
+/** The hairline between two groups of the list. */
+function Divider() {
+  return (
+    <div
+      className="mx-2.5 my-1"
+      style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
+    />
   );
 }
 
@@ -323,10 +495,12 @@ function Favourites({
   favourites,
   current,
   onPick,
+  onDetails,
 }: {
   favourites: ViewAsSubject[];
   current: ViewAsSubject;
   onPick: (subject: ViewAsSubject) => void;
+  onDetails: (subject: ViewAsSubject) => void;
 }) {
   return (
     // Scrolls inside itself rather than wrapping: a row that grows a second
@@ -341,28 +515,53 @@ function Favourites({
      * nothing around it moves.
      */
     <div className="plr-scroll -m-1 flex max-w-full min-w-0 items-center gap-1.5 overflow-x-auto p-1">
-      {favourites.map((option) => {
-        const on = keyOf(option) === keyOf(current);
-        return (
-          <button
-            key={keyOf(option)}
-            type="button"
-            title={option.name}
-            aria-label={`View as ${option.name}`}
-            aria-pressed={on}
-            onClick={() => onPick(option)}
-            className="shrink-0 cursor-pointer rounded-full"
-            style={{
-              // The ring rather than a fill, so the avatar underneath still
-              // reads as the person it names.
-              boxShadow: on ? "0 0 0 2px var(--slate)" : undefined,
-            }}
-          >
-            <Avatar option={option} size={28} />
-          </button>
-        );
-      })}
+      {favourites.map((option) => (
+        <FavouriteChip
+          key={keyOf(option)}
+          option={option}
+          on={keyOf(option) === keyOf(current)}
+          onPick={onPick}
+          onDetails={onDetails}
+        />
+      ))}
     </div>
+  );
+}
+
+/** One starred schedule: a tap to take it, a hold to ask about it. */
+function FavouriteChip({
+  option,
+  on,
+  onPick,
+  onDetails,
+}: {
+  option: ViewAsSubject;
+  on: boolean;
+  onPick: (subject: ViewAsSubject) => void;
+  onDetails: (subject: ViewAsSubject) => void;
+}) {
+  // Its own component because this is a hook, and the strip is a map. The hook
+  // swallows the click a finished press leaves behind, so a hold does not also
+  // switch the schedule out from under the dialog it just opened.
+  const press = useLongPress(() => onDetails(option));
+
+  return (
+    <button
+      type="button"
+      title={option.name}
+      aria-label={`View as ${option.name}`}
+      aria-pressed={on}
+      onClick={() => onPick(option)}
+      {...press}
+      className="shrink-0 cursor-pointer rounded-full"
+      style={{
+        // The ring rather than a fill, so the avatar underneath still reads as
+        // the person it names.
+        boxShadow: on ? "0 0 0 2px var(--slate)" : undefined,
+      }}
+    >
+      <Avatar option={option} size={28} />
+    </button>
   );
 }
 

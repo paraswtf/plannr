@@ -37,7 +37,6 @@ import {
   type Perspective,
 } from "~/lib/schedule-views";
 import { api, type RouterOutputs } from "~/trpc/react";
-import { CalendarSync } from "./calendar-sync";
 import { type Offset } from "./swipe-gesture";
 import { DayCalendar, type DayCalendarEvent } from "./day-calendar";
 import { dayWindow } from "./day-layout";
@@ -352,6 +351,7 @@ export function ScheduleView({
     kind: row.kind,
     subject: row.subject,
     name: row.name,
+    hint: row.hint,
   }));
 
   const currentSubject: ViewAsSubject = viewingAs
@@ -366,6 +366,31 @@ export function ScheduleView({
           viewAs ?? data?.viewAs ?? views[0] ?? "student"
         ],
       };
+
+  /**
+   * Whether the screen has been pointed somewhere by hand, and so has somewhere
+   * to come back from.
+   *
+   * Measured against where it would be sitting anyway, not against whether
+   * anything was asked for. Counting the perspectives instead was wrong twice
+   * over: somebody with two angles who picks the one already on screen got a
+   * cross that undid nothing, and so did somebody who searched up their own
+   * name and chose themselves — `asUserId` is set, but the server resolves it
+   * to nobody, which is what `viewingAs` being null means. A cross that undoes
+   * nothing is a control that has to be read before it can be ignored.
+   *
+   * `views[0]` is the default the same way `currentSubject` below assumes it
+   * is: the server's own choice is only observable while nothing has been
+   * asked for, so this is the nearest thing to it the screen can see.
+   */
+  const pointed =
+    viewingAs !== null || (viewAs !== null && viewAs !== views[0]);
+
+  /** Back to whatever the server would have chosen if it had never been asked. */
+  const clearSubject = () => {
+    setAsUserId(null);
+    setViewAs(null);
+  };
 
   /** Points the screen at one of them, whichever kind it is. */
   const pickSubject = (subject: ViewAsSubject) => {
@@ -646,12 +671,6 @@ export function ScheduleView({
             .join(" · ")}
         />
         <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
-          {/*
-           * `ml-auto` on the calendar-sync button rather than
-           * `justify-between` on the row: with three wrapping children,
-           * space-between decides where the middle one lands, and it is never
-           * where you wanted it.
-           */}
           <div className="mb-4 flex flex-wrap items-center gap-3">
             {/*
              * First, because it changes what every other control in the row
@@ -683,17 +702,6 @@ export function ScheduleView({
               timeZone={timeZone}
               onChange={goTo}
             />
-
-            {/*
-              Only on your own schedule. Somebody else's classes are not yours
-              to put in your calendar, and the control would be claiming to
-              sync whatever is currently on screen.
-            */}
-            {!viewingAs && (
-              <div className="sm:ml-auto">
-                <CalendarSync />
-              </div>
-            )}
           </div>
 
           {/*
@@ -714,6 +722,7 @@ export function ScheduleView({
               onQueryChange={setPersonQuery}
               onOpen={() => setPickerUsed(true)}
               onPick={pickSubject}
+              onClear={pointed ? clearSubject : undefined}
               onToggleFavourite={(subject, on) =>
                 toggleFavourite.mutate({
                   kind: subject.kind,

@@ -1,8 +1,9 @@
 /**
  * Step two: Google sends them back here with a one-time code.
  *
- * Everything that can go wrong ends the same way — back on the schedule with a
- * `calendar=` reason in the query, which the page turns into a sentence. A
+ * Everything that can go wrong ends the same way — back on the calendar
+ * settings screen with a `calendar=` reason in the query, which the page turns
+ * into a sentence. A
  * blank screen or a raw stack trace is the worst possible answer to "I clicked
  * connect and something went wrong", and none of these failures is the user's
  * fault to debug.
@@ -13,12 +14,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { appUrl } from "~/env";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
-import { CALENDAR_SCOPE, exchangeCode, identityFromIdToken } from "~/server/services/calendar/google";
+import {
+  CALENDAR_SCOPE,
+  exchangeCode,
+  identityFromIdToken,
+} from "~/server/services/calendar/google";
 import { decodeState } from "~/server/services/calendar/oauth";
 import { recordConnection, syncEnabled } from "~/server/services/calendar/sync";
 
 function back(reason: string): NextResponse {
-  return NextResponse.redirect(new URL(`/schedule?calendar=${reason}`, appUrl));
+  return NextResponse.redirect(
+    new URL(`/settings/calendar?calendar=${reason}`, appUrl),
+  );
 }
 
 export async function GET(request: NextRequest) {
