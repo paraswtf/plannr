@@ -61,8 +61,8 @@ export const opening: SectionDef = {
       steps: 5,
       notes: [
         "Plannr is a replacement for the timetable app we all use today. This is it — time-table.sicsr.ac.in. One huge page for the entire college: every room, every course, every hour. To be fair, it does show the timetable. But that is all it does.",
-        "Look at what it asks of you. It's one page for everybody, so first you hunt for your own division.",
-        "It's built for a desktop, but almost all of us open it on a phone.",
+        "Look at what it asks of you. It's one page for everybody, so first you hunt for your own division. And the names are cut off mid-word: to see the class and the teacher, you hover over each one. (Hover any booking to show it.)",
+        "It's built for a desktop, but almost all of us open it on a phone. This is the same page on a phone: nothing adapts, it just shrinks, and every name is down to a few letters. And there's no hover on a phone.",
         "It loads the whole college on every visit.",
         "And it isn't even served securely. That's where we started — but the real problem isn't this page. It's everything people do around it.",
       ],
@@ -75,12 +75,7 @@ export const opening: SectionDef = {
           }
           lede="Plannr takes over from the timetable site, and from the mails, calls and spreadsheets that hold it together."
           visual={
-            <OldTimetable
-              step={step}
-              active={active}
-              flipId="app-timetable"
-              stepped
-            />
+            <OldTimetable step={step} active={active} flipId="app-timetable" />
           }
           step={step}
         />

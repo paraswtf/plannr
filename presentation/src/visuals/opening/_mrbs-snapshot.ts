@@ -20,7 +20,8 @@
  *
  * The rooms, bookings and booking types are the page's own, as published.
  * The builders below put them back into the page's structure; drawn into a
- * 1440 × 1146 window, the copy matches the live page pixel for pixel.
+ * 1440 × 1146 window, the copy matches the live page pixel for pixel, and in
+ * a phone's 980px window it lays out as the site does on a phone.
  */
 
 /** The window the page is drawn for, in the page's own CSS pixels. */
@@ -31,6 +32,7 @@ export const VIEW = { width: 1440, height: 1146 } as const;
  * pixels. The table's rows are 18px from 07:30; its columns share the width.
  */
 export const LAYOUT = {
+  width: 1440,
   bannerBottom: 74.34,
   tableTop: 286.28,
   headBottom: 316.28,
@@ -43,6 +45,26 @@ export const LAYOUT = {
   /** The bottom of the last line of the trailer, the page's end. */
   end: 1057,
 } as const;
+
+/**
+ * The same, as a phone lays the page out. It has no viewport tag, so a phone
+ * browser gives it a 980px-wide window and shrinks that to the screen: the
+ * banner's title wraps, and every column loses a third of its width.
+ */
+export const PHONE_LAYOUT = {
+  width: 980,
+  bannerBottom: 89.34,
+  tableTop: 301.28,
+  headBottom: 331.28,
+  rowH: 18,
+  tableLeft: 26,
+  roomsLeft: 62.55,
+  tableRight: 954,
+  colour: { x: 26, y: 845.28, w: 928, h: 133 },
+  end: 1072,
+} as const;
+
+type Layout = typeof LAYOUT | typeof PHONE_LAYOUT;
 
 /** [letter, name, colour]: MRBS keys a booking's type, and its colour, by letter. */
 // prettier-ignore
@@ -249,7 +271,7 @@ const BOOKINGS: readonly Booking[] = [
   ["SDRC (15)", "14:30", 2, "d", "B.B.A. (IT) I -DIV  B -Foundation Web Technology - Prakash Raut"],
 ];
 
-/** The cell the "desktop-sized text" callout rings: the faculty is cut off. */
+/** The cell the "desktop-sized text" callout rings: its faculty is cut off. */
 export const PINNED = { room: "301 (50)", start: "11:30" } as const;
 
 /** The half-hours down the side, 07:30 to 20:30. */
@@ -258,17 +280,17 @@ const TIMES = Array.from({ length: 27 }, (_, i) => {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 });
 
-/** A booking's cell, in page pixels. */
-export function cellRect(room: string, start: string) {
+/** A booking's cell, in page pixels, on the desktop or (`PHONE_LAYOUT`) a phone. */
+export function cellRect(room: string, start: string, layout: Layout = LAYOUT) {
   const col = ROOMS.findIndex(([name]) => name === room);
   const row = TIMES.indexOf(start);
   const booking = BOOKINGS.find(([r, s]) => r === room && s === start);
-  const colW = (LAYOUT.tableRight - LAYOUT.roomsLeft) / ROOMS.length;
+  const colW = (layout.tableRight - layout.roomsLeft) / ROOMS.length;
   return {
-    x: LAYOUT.roomsLeft + col * colW,
-    y: LAYOUT.headBottom + row * LAYOUT.rowH,
+    x: layout.roomsLeft + col * colW,
+    y: layout.headBottom + row * layout.rowH,
     w: colW,
-    h: (booking?.[2] ?? 1) * LAYOUT.rowH,
+    h: (booking?.[2] ?? 1) * layout.rowH,
   };
 }
 

@@ -16,10 +16,26 @@ import { Icon } from "./icon";
 
 export const PHONE_SCREEN = { width: 393, height: 852 } as const;
 const BEZEL = 13;
-const PHONE = {
+
+/**
+ * The phone PhoneFrame draws, in phone pixels: for a slide that draws the
+ * device itself (one that changes into a phone, say) and must match it.
+ */
+export const PHONE_BODY = {
   width: PHONE_SCREEN.width + BEZEL * 2,
   height: PHONE_SCREEN.height + BEZEL * 2,
-};
+  bezel: BEZEL,
+  radius: 68,
+  screenRadius: 55,
+  /** A dark titanium edge, drawn as rings rather than borders. */
+  background: "linear-gradient(160deg, #3a414d, #161a20 40%, #2a3039)",
+  edge: "inset 0 0 0 1.5px rgba(255,255,255,0.18)",
+  /** A light stage: the shadow is long, soft and slate-tinted. */
+  shadow:
+    "0 56px 110px -34px rgba(16,24,40,0.42), 0 20px 40px -20px rgba(16,24,40,0.3)",
+  island: { top: 11, width: 124, height: 36 },
+} as const;
+const PHONE = PHONE_BODY;
 
 export function PhoneFrame({
   children,
@@ -59,20 +75,18 @@ export function PhoneFrame({
           transform: `scale(${k})`,
         }}
       >
-        {/* Body: a dark titanium edge, drawn as rings rather than borders. */}
         <div
-          className="absolute inset-0 rounded-[68px]"
+          className="absolute inset-0"
           style={{
-            background:
-              "linear-gradient(160deg, #3a414d, #161a20 40%, #2a3039)",
-            // A light stage: the shadow is long, soft and slate-tinted.
-            boxShadow:
-              "inset 0 0 0 1.5px rgba(255,255,255,0.18), 0 56px 110px -34px rgba(16,24,40,0.42), 0 20px 40px -20px rgba(16,24,40,0.3)",
+            borderRadius: PHONE.radius,
+            background: PHONE.background,
+            boxShadow: `${PHONE.edge}, ${PHONE.shadow}`,
           }}
         />
         <div
-          className="absolute overflow-hidden rounded-[55px]"
+          className="absolute overflow-hidden"
           style={{
+            borderRadius: PHONE.screenRadius,
             left: BEZEL,
             top: BEZEL,
             width: PHONE_SCREEN.width,
@@ -94,7 +108,7 @@ export function PhoneFrame({
           {/* Dynamic island */}
           <div
             className="absolute left-1/2 -translate-x-1/2 rounded-full bg-black"
-            style={{ top: 11, width: 124, height: 36 }}
+            style={PHONE.island}
           />
           {/* Home indicator */}
           <div
@@ -163,6 +177,71 @@ export function StatusBar({
   );
 }
 
+/** A light BrowserFrame's edge and shadow. */
+export const BROWSER_SHADOW =
+  "inset 0 0 0 1px rgba(16,24,40,0.1), 0 2px 6px -2px rgba(16,24,40,0.1), 0 48px 100px -36px rgba(16,24,40,0.36)";
+
+/**
+ * A BrowserFrame's 52px toolbar on its own: traffic lights and the URL bar.
+ * `insecure` adds Chrome's "Not secure" label, for plain-HTTP sites.
+ */
+export function BrowserBar({
+  url,
+  theme = "light",
+  insecure = false,
+}: {
+  url: string;
+  theme?: "light" | "dark";
+  insecure?: boolean;
+}) {
+  const dark = theme === "dark";
+  return (
+    <div
+      className="relative flex h-[52px] shrink-0 items-center px-5"
+      style={{
+        background: dark ? "#1e2630" : "#eceef1",
+        boxShadow: dark
+          ? "inset 0 -1px 0 rgba(255,255,255,0.08)"
+          : "inset 0 -1px 0 rgba(13,17,23,0.08)",
+      }}
+    >
+      <span className="flex gap-2">
+        <span className="h-[13px] w-[13px] rounded-full bg-[#ff5f57]" />
+        <span className="h-[13px] w-[13px] rounded-full bg-[#febc2e]" />
+        <span className="h-[13px] w-[13px] rounded-full bg-[#28c840]" />
+      </span>
+      <div
+        className="absolute left-1/2 flex h-[32px] w-[min(560px,60%)] -translate-x-1/2 items-center gap-2 rounded-[9px] px-3 text-[15px]"
+        style={{
+          background: dark ? "rgba(255,255,255,0.07)" : "#ffffff",
+          color: dark ? "rgba(255,255,255,0.7)" : "rgba(13,17,23,0.7)",
+          boxShadow: dark ? "none" : "inset 0 0 0 1px rgba(13,17,23,0.08)",
+        }}
+      >
+        {insecure ? (
+          <span className="flex shrink-0 items-center gap-1.5 font-semibold whitespace-nowrap text-[#c5221f]">
+            <Icon name="alert" size={15} stroke={2.2} />
+            Not secure
+            <span className="mx-1 h-4 w-px bg-current opacity-30" />
+          </span>
+        ) : (
+          <svg
+            width="12"
+            height="14"
+            viewBox="0 0 12 14"
+            aria-hidden
+            fill="currentColor"
+            opacity={0.65}
+          >
+            <path d="M2 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 12 7.5v5A1.5 1.5 0 0 1 10.5 14h-9A1.5 1.5 0 0 1 0 12.5v-5A1.5 1.5 0 0 1 1.5 6zm1.6 0h4.8V4.5a2.4 2.4 0 1 0-4.8 0z" />
+          </svg>
+        )}
+        <span className="truncate">{url}</span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * A desktop browser window: traffic lights, a URL bar, and your page below.
  * `insecure` adds Chrome's "Not secure" label, for plain-HTTP sites.
@@ -201,53 +280,11 @@ export function BrowserFrame({
         background: dark ? "#151d28" : "#ffffff",
         boxShadow: dark
           ? "inset 0 0 0 1px rgba(255,255,255,0.12), 0 40px 100px rgba(0,0,0,0.5)"
-          : "inset 0 0 0 1px rgba(16,24,40,0.1), 0 2px 6px -2px rgba(16,24,40,0.1), 0 48px 100px -36px rgba(16,24,40,0.36)",
+          : BROWSER_SHADOW,
         ...style,
       }}
     >
-      <div
-        className="relative flex h-[52px] shrink-0 items-center px-5"
-        style={{
-          background: dark ? "#1e2630" : "#eceef1",
-          boxShadow: dark
-            ? "inset 0 -1px 0 rgba(255,255,255,0.08)"
-            : "inset 0 -1px 0 rgba(13,17,23,0.08)",
-        }}
-      >
-        <span className="flex gap-2">
-          <span className="h-[13px] w-[13px] rounded-full bg-[#ff5f57]" />
-          <span className="h-[13px] w-[13px] rounded-full bg-[#febc2e]" />
-          <span className="h-[13px] w-[13px] rounded-full bg-[#28c840]" />
-        </span>
-        <div
-          className="absolute left-1/2 flex h-[32px] w-[min(560px,60%)] -translate-x-1/2 items-center gap-2 rounded-[9px] px-3 text-[15px]"
-          style={{
-            background: dark ? "rgba(255,255,255,0.07)" : "#ffffff",
-            color: dark ? "rgba(255,255,255,0.7)" : "rgba(13,17,23,0.7)",
-            boxShadow: dark ? "none" : "inset 0 0 0 1px rgba(13,17,23,0.08)",
-          }}
-        >
-          {insecure ? (
-            <span className="flex shrink-0 items-center gap-1.5 font-semibold whitespace-nowrap text-[#c5221f]">
-              <Icon name="alert" size={15} stroke={2.2} />
-              Not secure
-              <span className="mx-1 h-4 w-px bg-current opacity-30" />
-            </span>
-          ) : (
-            <svg
-              width="12"
-              height="14"
-              viewBox="0 0 12 14"
-              aria-hidden
-              fill="currentColor"
-              opacity={0.65}
-            >
-              <path d="M2 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 12 7.5v5A1.5 1.5 0 0 1 10.5 14h-9A1.5 1.5 0 0 1 0 12.5v-5A1.5 1.5 0 0 1 1.5 6zm1.6 0h4.8V4.5a2.4 2.4 0 1 0-4.8 0z" />
-            </svg>
-          )}
-          <span className="truncate">{url}</span>
-        </div>
-      </div>
+      <BrowserBar url={url} theme={theme} insecure={insecure} />
       <div
         data-enter
         className="relative min-h-0 flex-1 overflow-hidden"
