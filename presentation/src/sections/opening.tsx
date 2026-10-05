@@ -83,19 +83,19 @@ export const opening: SectionDef = {
     },
     {
       id: "three-apps",
-      title: "Three apps, no single source of truth",
+      title: "Three places and conflicting information",
       steps: 3,
       notes: [
-        "Today a student lives in three places. The timetable site, for classes. Moodle, for assignments, material and attendance. And email, for every change to either of them.",
-        "Here's what that looks like on a normal morning. A coordinator sends a mail: Design Thinking has moved to two o'clock, room 304.",
-        "But the timetable still says eleven, room 301 — the mail went out, and the data was never updated anywhere. Moodle says something else again. So which one do you believe? There is no single source of truth, and it's on the student to reconcile three apps every morning.",
+        "Today a student lives in three places. The timetable site, for classes. Gmail, for every change to them. And the class WhatsApp group, where the news actually travels.",
+        "Here's what that looks like on a normal morning. A coordinator sends a mail: Design Thinking has moved from nine to two o'clock, room 406.",
+        "But the timetable still says nine, room 405 — the mail went out, and the timetable was never updated. And the class group says something else again: three o'clock, room 701. So which one do you believe? Three places, three answers, and it's on the student to work out the right one every morning.",
       ],
       render: ({ step, active }) => (
         <VisualSlide
           layout="below"
           title={
             <>
-              Three apps. <Grad>No single source of truth.</Grad>
+              Three places and <Grad>conflicting information.</Grad>
             </>
           }
           visual={<ThreeApps step={step} active={active} />}

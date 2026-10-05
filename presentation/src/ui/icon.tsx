@@ -84,6 +84,7 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import { WhatsappLogoIcon } from "@phosphor-icons/react/dist/csr/WhatsappLogo";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 
@@ -179,6 +180,7 @@ const ICONS = {
   download: DownloadSimpleIcon,
   question: QuestionIcon,
   camera: CameraIcon,
+  whatsapp: WhatsappLogoIcon,
 } satisfies Record<string, PhosphorIcon>;
 
 export type IconName = keyof typeof ICONS;

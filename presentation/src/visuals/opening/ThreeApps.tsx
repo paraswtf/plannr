@@ -1,6 +1,11 @@
 "use client";
 
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
@@ -8,28 +13,35 @@ import { useSteps } from "~/deck/useSteps";
 import { BrowserFrame } from "~/ui/frames";
 import { Icon, type IconName } from "~/ui/icon";
 
+import { GMAIL, GMAIL_FONT, GmailPage } from "./_gmail-page";
+import { MRBS_CSS, mrbsHtml, VIEW } from "./_mrbs-snapshot";
+import { SCALE } from "./_oldtimetable-page";
+import { WHATSAPP, WHATSAPP_FONT, WhatsAppPage } from "./_whatsapp-page";
+
 export interface ThreeAppsProps {
   step: number;
   active: boolean;
 }
 
 /**
- * Three windows side by side (the timetable site, Moodle, and the college
- * inbox), each correct on its own, contradicting each other together. They
- * sit on the light stage as product shots: Plannr's own app colours inside,
- * the deck's soft slate shadows outside, and the single accent for the one
+ * Three windows side by side (the timetable site, Gmail and the class's
+ * WhatsApp group), each sure of itself, contradicting each other together.
+ * Each app is drawn as it really looks; the single accent is kept for the one
  * thing that matters, the contradiction.
  *
  * The timetable window carries data-flip-id="app-timetable": the previous
- * slide's big timetable browser shrinks into it.
+ * slide's big timetable browser shrinks into it. The page inside is the same
+ * copy of the site at the same scale, so the smaller window only crops it.
+ *
+ * The story runs on that page's real data: Design Thinking for BCA Sem VII
+ * Div A is at 09:00 in 405. 406 is free at 2:00 PM and 701 at 3:00 PM, so
+ * neither the mail nor the group contradicts the page by accident.
  *
  * Builds (steps = 3):
  *   0: the three apps, calm.
- *   1: a mail lands: "Design Thinking moved to 2:00 pm, Room 304".
- *   2: the timetable still says 11:00, Room 301, and Moodle says something
- *      else: accent links ring the three contradictions and run into a
- *      marker, "Which one is right?" (the title already says "No single
- *      source of truth").
+ *   1: a mail lands in Gmail: Design Thinking moved to 2:00 PM, Room 406.
+ *   2: the class group says 3:00 PM, Room 701. Accent links ring the three
+ *      facts and run into a marker, "Which one is right?".
  */
 
 /* The stage is laid out in fixed canvas pixels, so the links can be drawn
@@ -82,8 +94,9 @@ function link(i: 0 | 1 | 2) {
   return `${ring(2)} V${BUS_Y - r} Q${cx},${BUS_Y} ${cx - r},${BUS_Y} H${BADGE_RIGHT}`;
 }
 
-const OLD_FONT: CSSProperties = {
-  fontFamily: "Verdana, Tahoma, Arial, sans-serif",
+/* The timetable site's own face, for the fact under its page. */
+const MRBS_FONT: CSSProperties = {
+  fontFamily: "Arial, Helvetica, sans-serif",
 };
 /* The deck's accent, as hex: GSAP tweens the fact values to it, and cannot
  * interpolate towards a var(). Keep in step with --accent in globals.css. */
@@ -95,7 +108,7 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
   const stepNow = useRef(step);
   stepNow.current = step;
 
-  /* Moodle and the inbox wait out of the way while the timetable window
+  /* Gmail and WhatsApp wait out of the way while the timetable window
    * shrinks in from the slide before, then slide in beside it once it has
    * nearly landed, so the travelling window never crosses another one. */
   useGSAP(
@@ -126,12 +139,12 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     tl.addLabel("mail");
     tl.to(
       ".ta-list",
-      { y: MAIL_ROW, duration: 0.7, ease: "deck.morph" },
+      { y: GMAIL.row, duration: 0.7, ease: "deck.morph" },
       "mail",
     );
     tl.fromTo(
       ".ta-newrow",
-      { y: -MAIL_ROW, autoAlpha: 0 },
+      { y: -GMAIL.row, autoAlpha: 0 },
       { y: 0, autoAlpha: 1, duration: 0.7, ease: "deck.morph" },
       "mail",
     );
@@ -139,13 +152,18 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     tl.set(".ta-count-new", { autoAlpha: 1 }, "mail+=0.3");
     tl.fromTo(
       ".ta-pane",
-      { top: LIST_TOP, height: MAIL_ROW, autoAlpha: 0 },
+      { top: GMAIL.listTop, height: GMAIL.row, autoAlpha: 0 },
       { autoAlpha: 1, duration: 0.15, ease: "power1.out" },
       "mail+=0.8",
     );
     tl.to(
       ".ta-pane",
-      { top: PANE_TOP, height: PANE_HEIGHT, duration: 0.7, ease: "deck.morph" },
+      {
+        top: GMAIL.paneTop,
+        height: GMAIL.paneHeight,
+        duration: 0.7,
+        ease: "deck.morph",
+      },
       "mail+=0.8",
     );
     tl.fromTo(
@@ -156,9 +174,29 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     );
     mark();
 
-    // 2: the three facts turn accent, a pen rings each one and runs to the
-    // marker, which rises into place as the lines arrive.
-    tl.addLabel("clash");
+    // 2: the class group says something else again, the way WhatsApp shows
+    // it: "Ishaan is typing…" in the header, then the message lands whole and
+    // the conversation scrolls up by its height. Then the three facts turn
+    // accent, a pen rings each one and runs to the marker, which rises into
+    // place as the lines arrive.
+    tl.addLabel("chat");
+    tl.set(".ta-wa-typing", { autoAlpha: 1 }, "chat");
+    tl.addLabel("landed", "chat+=0.8");
+    tl.set(".ta-wa-typing", { autoAlpha: 0 }, "landed");
+    tl.set(".ta-wa-new", { autoAlpha: 1 }, "landed");
+    tl.to(
+      ".ta-wa-msgs",
+      { y: -WHATSAPP.lift, duration: 0.35, ease: "power2.out" },
+      "landed",
+    );
+    tl.fromTo(
+      ".ta-wa-fact",
+      { autoAlpha: 0, y: 14 },
+      { autoAlpha: 1, y: 0, duration: 0.45, ease: "deck.enter" },
+      "landed+=0.45",
+    );
+
+    tl.addLabel("clash", "landed+=1");
     tl.to(
       ".ta-fact-value",
       { color: ACCENT, duration: 0.4, ease: "power2.out", stagger: 0.12 },
@@ -187,7 +225,7 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     >
       <div className="relative shrink-0" style={STAGE}>
         <BrowserFrame
-          url="time-table.sicsr.ac.in"
+          url="time-table.sicsr.ac.in/day.php?year=2026&month=10&day=06&area=1&room=29"
           insecure
           width={WIN.width}
           height={WIN.height}
@@ -202,12 +240,28 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
           style={{ left: winX(1) }}
         >
           <BrowserFrame
-            url="moodle.sicsr.ac.in"
+            url="mail.google.com/mail/u/0/#inbox"
             width={WIN.width}
             height={WIN.height}
           >
-            <MoodlePage />
+            <GmailPage />
           </BrowserFrame>
+          {/* Over the open mail's foot, once it has opened. */}
+          <div className="ta-pane-in pointer-events-none invisible absolute inset-0">
+            <Fact
+              label={
+                <>
+                  <b className="text-[#1f1f1f]">Design Thinking</b> moved to
+                </>
+              }
+              value="2:00 PM · Room 406"
+              tone="#fce8e6"
+              ring="rgba(217,48,37,0.3)"
+              icon="mail"
+              iconColor="#d93025"
+              font={GMAIL_FONT}
+            />
+          </div>
         </div>
         <div
           data-no-enter
@@ -215,12 +269,29 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
           style={{ left: winX(2) }}
         >
           <BrowserFrame
-            url="mail.sicsr.ac.in"
+            url="web.whatsapp.com"
             width={WIN.width}
             height={WIN.height}
           >
-            <Inbox />
+            <WhatsAppPage />
           </BrowserFrame>
+          {/* Over the composer, once the new message is in. */}
+          <div className="ta-wa-fact pointer-events-none invisible absolute inset-0">
+            <Fact
+              label={
+                <>
+                  <b className="text-[#111b21]">Class group</b>: Design Thinking
+                  at
+                </>
+              }
+              value="3:00 PM · Room 701"
+              tone="#d9fdd3"
+              ring="rgba(0,168,132,0.32)"
+              icon="whatsapp"
+              iconColor="#25d366"
+              font={WHATSAPP_FONT}
+            />
+          </div>
         </div>
 
         <svg
@@ -298,7 +369,7 @@ function Fact({
         right: FACT.inset,
         // Pinned to the foot of the page (FACT_BOTTOM in window terms), so
         // while the timetable window morphs in at another size the row stays
-        // under the grid rather than over it.
+        // under the page rather than over it.
         bottom: FACT.inset,
         height: FACT.height,
         background: tone,
@@ -327,475 +398,47 @@ function Fact({
 }
 
 /* ------------------------------------------------------------------------ */
-/* 1. The timetable site: MRBS, as it has looked for fifteen years.          */
+/* 1. The timetable site: the college's own page (see _mrbs-snapshot.ts), at */
+/*    the scale the slide before shows it, so the morph only crops it.       */
 
-const ROOMS = ["301", "302", "304", "Lab 1", "Lab 2"];
-const HOURS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00"];
-/* The same navy and stock MRBS colours as the full page on the slide before. */
-const NAVY = "#1d3b6e";
-const TH = "#4a6a99";
-const LINK = "#1a3fa8";
-const MRBS = {
-  a: "#99cccc",
-  b: "#c0e0ff",
-  c: "#ffccff",
-  d: "#ffcc99",
-  e: "#ddffdd",
-  dt: "#ffff99",
-};
-
-/** [room][hour]: [label, colour] or null. */
-const BOOKINGS: ([string, string] | null)[][] = [
-  [
-    ["BCA-A WT (DM)", MRBS.a],
-    ["BCA-A WT (DM)", MRBS.a],
-    ["BCA-A DT (PK)", MRBS.dt],
-    null,
-    ["BBA-A BA (PI)", MRBS.d],
-    ["BCA-C WT (DF)", MRBS.b],
-  ],
-  [
-    null,
-    ["BCA-B CS (DF)", MRBS.b],
-    ["BCA-B CS (DF)", MRBS.b],
-    ["BCA-C ST (PI)", MRBS.e],
-    null,
-    ["BBA-A CC (DM)", MRBS.c],
-  ],
-  // 304 is free at 14:00, which is where the mail moves Design Thinking.
-  [
-    ["BBA-A CC (DM)", MRBS.c],
-    null,
-    ["BCA-C DM (PK)", MRBS.d],
-    ["BCA-C DM (PK)", MRBS.d],
-    ["BCA-B WT (DF)", MRBS.b],
-    null,
-  ],
-  [
-    ["BCA-B Lab", MRBS.e],
-    ["BCA-B Lab", MRBS.e],
-    null,
-    ["BBA-A ST (DF)", MRBS.a],
-    ["BBA-A ST (DF)", MRBS.a],
-    ["BCA-A Lab", MRBS.e],
-  ],
-  [
-    null,
-    ["BCA-A CS (PI)", MRBS.c],
-    ["BCA-A CS (PI)", MRBS.c],
-    null,
-    ["BCA-C CC (DM)", MRBS.d],
-    null,
-  ],
-];
+let mrbsMarkup: string | null = null;
 
 function TimetableSite() {
-  const timeCol = 56;
-  /* Columns share the width rather than being fixed, and line height is
-   * set here: this page rides inside the travelling window, whose width and
-   * line height morph from the slide before, so neither must leak in. */
-  const col = { flex: "1 1 0", minWidth: 0 } as const;
+  const host = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    mrbsMarkup ??= `<style>${MRBS_CSS}</style>${mrbsHtml()}`;
+    (el.shadowRoot ?? el.attachShadow({ mode: "open" })).innerHTML = mrbsMarkup;
+  }, []);
+
   return (
-    <div
-      className="absolute inset-0 bg-white leading-normal text-black"
-      style={OLD_FONT}
-    >
+    <div className="absolute inset-0 overflow-hidden bg-white">
+      {/* A picture of the page: inert, so its fields never take the keys
+          that drive the deck. */}
       <div
-        className="flex h-[48px] items-center gap-2.5 px-4 text-white"
-        style={{ background: NAVY }}
-      >
-        <svg width="30" height="30" viewBox="0 0 34 34" aria-hidden>
-          <circle cx="17" cy="17" r="15.5" fill="#fff" />
-          <circle
-            cx="17"
-            cy="17"
-            r="12"
-            fill="none"
-            stroke={NAVY}
-            strokeWidth="1.5"
-          />
-          <path
-            d="M11 21.5h12M12.5 20V13M17 20V12M21.5 20V13M10.5 12.5 17 9l6.5 3.5z"
-            stroke={NAVY}
-            strokeWidth="1.4"
-            fill="none"
-          />
-        </svg>
-        <span className="flex flex-col leading-tight">
-          <span className="text-[13.5px] font-bold">SICSR</span>
-          <span className="text-[11px] opacity-85">Timetable</span>
-        </span>
-        <span className="ml-auto flex gap-3 text-[11px] underline opacity-90">
-          <span>Help</span>
-          <span>Report</span>
-          <span>Log in</span>
-        </span>
-      </div>
-      <div className="flex items-baseline justify-between px-4 pt-3 pb-2.5">
-        <span className="text-[14px] font-bold">Thursday 13 August 2026</span>
-        <span
-          className="flex gap-3 text-[11px] underline"
-          style={{ color: LINK }}
-        >
-          <span>&lt;&lt; Day Before</span>
-          <span>Day After &gt;&gt;</span>
-        </span>
-      </div>
-      <div
-        className="mx-4 text-[10.5px]"
-        style={{ boxShadow: "inset 0 0 0 1px #9c9c9c" }}
-      >
-        <div className="flex font-bold text-white" style={{ background: TH }}>
-          <span className="shrink-0 px-1.5 py-[6px]" style={{ width: timeCol }}>
-            Time
-          </span>
-          {ROOMS.map((room) => (
-            <span key={room} className="py-[6px] text-center" style={col}>
-              {room}
-            </span>
-          ))}
-        </div>
-        {HOURS.map((hour, h) => (
-          <div
-            key={hour}
-            className="flex"
-            style={{ boxShadow: "inset 0 1px 0 #c8c8c8" }}
-          >
-            <span
-              className="shrink-0 px-1.5 py-[13px]"
-              style={{ width: timeCol, background: "#e4eaf4", color: LINK }}
-            >
-              {hour}
-            </span>
-            {ROOMS.map((room, r) => {
-              const booking = BOOKINGS[r]?.[h] ?? null;
-              const isDT = r === 0 && h === 2;
-              return (
-                <span
-                  key={room}
-                  className="truncate px-1 py-[13px]"
-                  style={{
-                    ...col,
-                    background: booking?.[1] ?? "#fff",
-                    boxShadow: isDT
-                      ? `inset 0 0 0 2px ${NAVY}`
-                      : "inset 1px 0 0 #c8c8c8",
-                    fontWeight: isDT ? 700 : 400,
-                  }}
-                >
-                  {booking?.[0] ?? ""}
-                </span>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+        ref={host}
+        inert
+        className="absolute top-0 left-0"
+        style={{
+          width: VIEW.width,
+          height: VIEW.height,
+          transform: `scale(${SCALE})`,
+          transformOrigin: "0 0",
+        }}
+      />
       <Fact
         label={
           <>
-            <b className="text-black">Design Thinking</b> (BCA-A), Prof.
-            Kulkarni
+            <b className="text-black">Design Thinking</b>, BCA Sem VII Div A
           </>
         }
-        value="11:00 · Room 301"
-        tone="#ffffb8"
-        ring="#c9c25a"
-        font={OLD_FONT}
+        value="09:00 · Room 405"
+        icon="calendar"
+        iconColor="#cc0066"
+        font={MRBS_FONT}
       />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------------ */
-/* 2. Moodle: the course page, where assignments and attendance live.        */
-
-const MOODLE = "#f98012";
-
-function MoodleRow({
-  icon,
-  color,
-  title,
-  meta,
-}: {
-  icon: IconName;
-  color: string;
-  title: string;
-  meta: string;
-}) {
-  return (
-    <div
-      className="flex items-center gap-4 px-5 py-[11px]"
-      style={{ boxShadow: "inset 0 -1px 0 rgba(13,17,23,0.08)" }}
-    >
-      <span
-        className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px]"
-        style={{ background: color, color: "#fff" }}
-      >
-        <Icon name={icon} size={22} stroke={2} />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[16px] font-semibold text-[#0f6cbf]">
-          {title}
-        </span>
-        <span className="mt-0.5 block truncate text-[13.5px] text-[rgba(44,49,53,0.62)]">
-          {meta}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function MoodlePage() {
-  return (
-    <div className="font-body absolute inset-0 bg-white text-[#1d2125]">
-      <div
-        className="flex h-[52px] items-center justify-between px-4"
-        style={{ background: MOODLE }}
-      >
-        <span className="flex items-center gap-2.5 text-white">
-          <span
-            className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-white"
-            style={{ color: MOODLE }}
-          >
-            <Icon name="cap" size={20} stroke={2.2} />
-          </span>
-          <span className="text-[21px] font-bold tracking-[-0.01em]">
-            Moodle
-          </span>
-        </span>
-        <span className="flex items-center gap-3 text-white">
-          <Icon name="bell" size={20} stroke={2} />
-          <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-white/25 text-[12px] font-bold">
-            SA
-          </span>
-        </span>
-      </div>
-      <div className="px-5 pt-3">
-        <p className="truncate text-[12.5px] text-[#0f6cbf]">
-          Dashboard / My courses / BCA-A / Design Thinking
-        </p>
-        <h3 className="mt-1.5 text-[26px] leading-tight font-bold tracking-[-0.01em]">
-          Design Thinking
-        </h3>
-        <p className="mt-2 text-[14px] font-semibold text-[rgba(44,49,53,0.6)]">
-          Week 6: Prototyping
-        </p>
-      </div>
-      <div className="mt-2">
-        <MoodleRow
-          icon="edit"
-          color="#c43c8a"
-          title="Assignment 2: Empathy map"
-          meta="Due Friday, 9 October, 11:59 PM"
-        />
-        <MoodleRow
-          icon="file"
-          color="#3d7fd6"
-          title="Week 6 slides: Prototyping.pdf"
-          meta="2.4 MB · added yesterday"
-        />
-        <MoodleRow
-          icon="message"
-          color="#7a5bc4"
-          title="Forum: Choose your prototype groups"
-          meta="14 replies · last post 9:30 AM"
-        />
-      </div>
-      <Fact
-        label={
-          <>
-            <b className="text-[#1d2125]">Attendance</b>, next session
-          </>
-        }
-        value="Today 11:00 · Lab 2"
-        icon="checkCircle"
-        iconColor="#3f9b52"
-      />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------------ */
-/* 3. The college inbox: where every change actually arrives.               */
-
-const MAIL_RED = "#d93025";
-const MAIL_ROW = 74;
-/** Where the list starts, from the top of the page. */
-const LIST_TOP = 60;
-/** The open mail covers the list, from just under the inbox's own bar. */
-const PANE_TOP = 60;
-const PANE_HEIGHT = WIN.height - WIN.bar - PANE_TOP;
-
-const MAILS = [
-  {
-    from: "Exam Cell",
-    subject: "Hall tickets for internal exams",
-    time: "9:12 AM",
-  },
-  { from: "Library", subject: "2 books due back on Friday", time: "Yesterday" },
-  {
-    from: "Placement Cell",
-    subject: "Registrations close tonight",
-    time: "Yesterday",
-  },
-  { from: "Student Council", subject: "Cultural fest volunteers", time: "Sat" },
-  { from: "Accounts", subject: "Fee receipt, semester V", time: "Fri" },
-];
-
-function MailRow({
-  from,
-  subject,
-  time,
-  unread,
-}: {
-  from: string;
-  subject: string;
-  time: string;
-  unread?: boolean;
-}) {
-  return (
-    <div
-      className="flex items-center gap-3 px-5"
-      style={{
-        height: MAIL_ROW,
-        boxShadow: "inset 0 -1px 0 rgba(13,17,23,0.07)",
-        background: unread ? "#fff" : "#f6f8fb",
-      }}
-    >
-      <span
-        className="h-[9px] w-[9px] shrink-0 rounded-full"
-        style={{ background: unread ? MAIL_RED : "transparent" }}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline justify-between gap-3">
-          <span
-            className={`truncate text-[16px] ${unread ? "font-bold" : "font-medium"}`}
-          >
-            {from}
-          </span>
-          <span
-            className={`shrink-0 text-[13px] ${unread ? "font-bold text-[#0d1117]" : "text-[rgba(44,49,53,0.55)]"}`}
-          >
-            {time}
-          </span>
-        </span>
-        <span
-          className={`mt-1 block truncate text-[14.5px] ${unread ? "font-semibold" : "text-[rgba(44,49,53,0.7)]"}`}
-        >
-          {subject}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function Inbox() {
-  return (
-    <div className="font-body absolute inset-0 overflow-hidden bg-white text-[#0d1117]">
-      <div
-        className="relative z-10 flex items-center justify-between bg-white px-5"
-        style={{
-          height: LIST_TOP,
-          boxShadow: "inset 0 -1px 0 rgba(13,17,23,0.08)",
-        }}
-      >
-        <span className="flex items-center gap-2.5">
-          <Icon name="mail" size={26} stroke={2.2} color={MAIL_RED} />
-          <span className="text-[21px] font-bold">Inbox</span>
-          <span className="relative ml-1 inline-block h-[24px] w-[34px]">
-            <span
-              className="ta-count-old absolute inset-0 flex items-center justify-center rounded-full text-[13px] font-bold text-white"
-              style={{ background: MAIL_RED }}
-            >
-              12
-            </span>
-            <span
-              className="ta-count-new invisible absolute inset-0 flex items-center justify-center rounded-full text-[13px] font-bold text-white"
-              style={{ background: MAIL_RED }}
-            >
-              13
-            </span>
-          </span>
-        </span>
-        <span className="flex h-[34px] w-[190px] items-center gap-2 rounded-full bg-[#eef1f5] px-3 text-[13.5px] text-[rgba(44,49,53,0.5)]">
-          <Icon name="search" size={16} stroke={2} />
-          Search mail
-        </span>
-      </div>
-
-      <div className="absolute inset-x-0" style={{ top: LIST_TOP }}>
-        <div className="ta-newrow invisible absolute inset-x-0 top-0">
-          <MailRow
-            from="BCA Coordinator"
-            subject="Change in today's schedule"
-            time="10:41 AM"
-            unread
-          />
-        </div>
-        <div className="ta-list">
-          {MAILS.map((m) => (
-            <MailRow key={m.from} {...m} />
-          ))}
-        </div>
-      </div>
-
-      <div
-        className="ta-pane invisible absolute inset-x-0 overflow-hidden bg-white"
-        style={{
-          top: PANE_TOP,
-          height: PANE_HEIGHT,
-          boxShadow: "inset 0 1px 0 rgba(13,17,23,0.08)",
-        }}
-      >
-        <div className="px-5 pt-5">
-          <div className="ta-pane-in flex items-center gap-3">
-            <span
-              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-[17px] font-bold text-white"
-              style={{ background: "#7a2e8f" }}
-            >
-              BC
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[16px] font-bold">
-                BCA Coordinator
-              </span>
-              <span className="block truncate text-[13px] text-[rgba(44,49,53,0.6)]">
-                to BCA-A · 10:41 AM
-              </span>
-            </span>
-          </div>
-          <h4 className="ta-pane-in mt-4 text-[22px] leading-tight font-bold tracking-[-0.01em]">
-            Change in today&apos;s schedule
-          </h4>
-          <p className="ta-pane-in mt-3 text-[16.5px] leading-snug text-[rgba(44,49,53,0.86)]">
-            Dear students, today&apos;s{" "}
-            <b className="text-[#0d1117]">Design Thinking</b> lecture (BCA-A,
-            Prof. Kulkarni) has been moved from 11:00 AM to{" "}
-            <b className="text-[#0d1117]">2:00 PM, Room 304</b>, as the faculty
-            has a meeting in the morning. Kindly inform your classmates.
-          </p>
-          <p className="ta-pane-in mt-3 text-[16.5px] leading-snug text-[rgba(44,49,53,0.86)]">
-            Regards,
-            <br />
-            Office of the BCA Coordinator
-          </p>
-        </div>
-      </div>
-      {/* The fact sits outside the pane so it can be pinned to the window. */}
-      <div className="ta-pane-in invisible absolute inset-0">
-        <Fact
-          label={
-            <>
-              <b className="text-[#0d1117]">Design Thinking</b> moved to
-            </>
-          }
-          value="2:00 PM · Room 304"
-          tone="#fdeceb"
-          ring="rgba(217,48,37,0.3)"
-          icon="mail"
-          iconColor={MAIL_RED}
-        />
-      </div>
     </div>
   );
 }

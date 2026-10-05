@@ -4,8 +4,10 @@ import { type Metadata, type Viewport } from "next";
 import {
   Instrument_Sans,
   JetBrains_Mono,
+  Roboto,
   Space_Grotesk,
 } from "next/font/google";
+import localFont from "next/font/local";
 
 export const metadata: Metadata = {
   title: "Presenting Plannr — a design thinking study",
@@ -39,6 +41,20 @@ const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
 });
+// The faces the three-apps slide draws Gmail and WhatsApp Web in. Google Sans
+// is open source (OFL, src/fonts/GoogleSans-OFL.txt) but not in next/font's
+// Google catalogue yet, so a subset (printable ASCII and the ellipsis) is
+// loaded from the repo.
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-roboto",
+});
+const googleSans = localFont({
+  src: "../fonts/GoogleSans-subset.woff2",
+  weight: "400 700",
+  variable: "--font-google-sans",
+});
 
 export default function RootLayout({
   children,
@@ -46,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      className={`${display.variable} ${body.variable} ${mono.variable} ${roboto.variable} ${googleSans.variable}`}
     >
       <body>{children}</body>
     </html>
