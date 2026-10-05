@@ -8,7 +8,15 @@ import { useSteps } from "~/deck/useSteps";
 import { BrowserFrame } from "~/ui/frames";
 import { Icon, type IconName } from "~/ui/icon";
 
-import { HOLES, MrbsPage, PAGE, PINNED } from "./_oldtimetable-page";
+import {
+  CONTENT,
+  HOLES,
+  MrbsPage,
+  PAINT,
+  SCALE,
+  VIEW,
+  type PageRect,
+} from "./_oldtimetable-page";
 
 export interface OldTimetableProps {
   step: number;
@@ -23,22 +31,25 @@ export interface OldTimetableProps {
 }
 
 /**
- * The college's timetable today, recreated: an MRBS install at time-
- * table.sicsr.ac.in, in a BrowserFrame marked "Not secure" (it is plain
- * HTTP). A dense rooms-by-time grid of tiny, cryptic cells ("BCA-A SEM VII
- * DT (PK) 301"), no way to see only your classes.
+ * The college's timetable today: the real page from time-table.sicsr.ac.in
+ * (an MRBS install), copied one to one, in a BrowserFrame marked "Not
+ * secure" (it is plain HTTP). Every room in the college across one screen,
+ * names cut off mid-word, no way to see only your classes. Hovering a
+ * booking shows its full name and faculty, as it does on the site.
  *
  * `flipId` goes on the BrowserFrame: the next slide (three-apps) draws a small
  * timetable window with the same id, so this window shrinks into it.
  *
  * Builds (steps = 2):
- *   0 — the page, as it loads in (slowly): a progress strip, then the banner,
- *       then the table painting in, a few rows at a time. Plays on arrival.
- *   1 — the page washes back towards the stage and callouts are pinned onto
- *       it, about a sentence apart: one page for everybody, type too small
- *       for a phone, the whole college loaded on every visit, plain HTTP.
- *       Each ring opens a clear window in the wash, so the thing it points
- *       at keeps its colour. With `stepped`, steps 1–4 pin one each.
+ *   0: the page, as it loads in (slowly): a progress strip, then the page
+ *      painting top-down, the table a few rows at a time. Plays on arrival.
+ *   1: the page washes back towards the stage and callouts are pinned onto
+ *      it, about a sentence apart: one page for everybody (the row of
+ *      rooms), type too small for a phone (a booking whose faculty is cut
+ *      off), the whole college loaded on every visit (the colour key of
+ *      every division), plain HTTP. Each ring opens a clear window in the
+ *      wash, so the thing it points at keeps its colour. With `stepped`,
+ *      steps 1-4 pin one each.
  */
 
 /** The 960 × 844 box the side layout gives us, and the window inside it. */
@@ -46,8 +57,8 @@ const BOX = { width: 960, height: 844 } as const;
 const FRAME = {
   left: 10,
   top: 22,
-  width: PAGE.width,
-  height: PAGE.height + 52,
+  width: CONTENT.width,
+  height: CONTENT.height + 52,
 } as const;
 /** Where the page's (0, 0) lands in the box. */
 const ORIGIN = { x: FRAME.left, y: FRAME.top + 52 } as const;
@@ -65,6 +76,8 @@ interface Callout {
   chip: Point;
   /** A fixed chip width (content centred), when it must cover something. */
   width?: number;
+  /** A taller chip than the usual 60, for the same reason. */
+  height?: number;
   /** Where the leader line meets the chip. */
   anchor: Point;
   /** What it points at: a dot, or a ring around a label. */
@@ -72,46 +85,54 @@ interface Callout {
   ring?: { x: number; y: number; w: number; h: number };
 }
 
-/** The cell with "BCA-A SEM VII DT (PK) 301" in it. */
-const pinnedCell = {
-  x: ORIGIN.x + PAGE.timeW + PINNED.col * PAGE.colW - 2,
-  y: ORIGIN.y + PAGE.gridTop + PAGE.headH + PINNED.row * PAGE.rowH - 2,
-  w: PAGE.colW + 4,
-  h: PINNED.span * PAGE.rowH + 4,
-};
-/** The row of room names, from the first room to the window's edge. */
-const roomHeader = {
-  x: ORIGIN.x + PAGE.timeW - 2,
-  y: ORIGIN.y + PAGE.gridTop - 2,
-  w: PAGE.width - PAGE.bar - PAGE.timeW + 4,
-  h: PAGE.headH + 4,
-};
-/** The "Done: every room…" bubble the page shows once it has loaded. */
-const doneBubble = {
-  x: ORIGIN.x - 3,
-  y: ORIGIN.y + PAGE.height - PAGE.doneH - 3,
-  w: PAGE.doneW + 6,
-  h: PAGE.doneH + 6,
-};
+/** A part of the page, in box pixels, with a little room around it. */
+function onPage(rect: PageRect, pad: number) {
+  return {
+    x: ORIGIN.x + rect.x * SCALE - pad,
+    y: ORIGIN.y + rect.y * SCALE - pad,
+    w: rect.w * SCALE + pad * 2,
+    h: rect.h * SCALE + pad * 2,
+  };
+}
+
+const hole = (id: (typeof HOLES)[number]["id"]) =>
+  HOLES.find((h) => h.id === id)!;
+
+/** The row of room names, "203 (24)" to "Terrace". */
+const roomHeader = onPage(hole("one-page"), 2);
+/** "B.B.A. (IT) I -DIV B -Com municati on Skills", its faculty cut off. */
+const pinnedCell = onPage(hole("tiny-type"), 2);
+/** The colour key: all 52 divisions and kinds of booking. */
+const colourKey = onPage(hole("loads-all"), 3);
 /** The "Not secure" label in the frame's address bar. */
 const insecure = { x: FRAME.left + 194, y: FRAME.top + 9, w: 120, h: 34 };
 
+/*
+ * The chips sit where the page has nothing, or nothing that matters to the
+ * point: over the mini calendars, in the empty evening rows, under the end
+ * of the page, and over the banner's title.
+ */
 const CALLOUTS: Callout[] = [
   {
     id: "one-page",
     text: "One page for the whole college",
     icon: "grid",
-    chip: { x: 392, y: 292 },
-    anchor: { x: 760, y: 292 },
-    pin: { x: 790, y: roomHeader.y + roomHeader.h },
+    // Over the three month calendars, big enough to hide them whole; the
+    // leader drops between the title and the day links to the row of rooms.
+    chip: { x: 482, y: 132 },
+    width: 458,
+    height: 64,
+    anchor: { x: 700, y: 196 },
+    pin: { x: 700, y: roomHeader.y },
     ring: roomHeader,
   },
   {
     id: "tiny-type",
     text: "Desktop-sized text, on a phone",
     icon: "phone",
-    chip: { x: 236, y: 452 },
-    anchor: { x: 236, y: 482 },
+    // In the empty evening rows, below the cell.
+    chip: { x: 176, y: 535 },
+    anchor: { x: 176, y: 565 },
     pin: { x: pinnedCell.x + pinnedCell.w / 2, y: pinnedCell.y + pinnedCell.h },
     ring: pinnedCell,
   },
@@ -119,20 +140,24 @@ const CALLOUTS: Callout[] = [
     id: "loads-all",
     text: "Loads everything, every visit",
     icon: "download",
-    chip: { x: 150, y: 690 },
-    anchor: { x: doneBubble.x + doneBubble.w / 2 + 20, y: 750 },
-    pin: { x: doneBubble.x + doneBubble.w / 2 + 20, y: doneBubble.y },
-    ring: doneBubble,
+    // Under the end of the page; the leader runs down past the end of the
+    // trailer's links, crossing only its rules.
+    chip: { x: 405, y: 758 },
+    width: 470,
+    anchor: { x: 640, y: 758 },
+    pin: { x: 640, y: colourKey.y + colourKey.h },
+    ring: colourKey,
   },
   {
     id: "insecure",
     text: "Not secure: plain HTTP",
     icon: "alert",
-    // Hung straight under the ring, wide enough to cover the whole banner
-    // title, so the short leader crosses no page text and no word pokes out.
-    chip: { x: 58, y: 82 },
-    width: 422,
-    anchor: { x: insecure.x + insecure.w / 2, y: 82 },
+    // Hung straight under the ring, wide enough to cover the banner's title
+    // and short of its first divider, so the short leader crosses no page
+    // text and no word or line pokes out.
+    chip: { x: 58, y: 80 },
+    width: 388,
+    anchor: { x: insecure.x + insecure.w / 2, y: 80 },
     pin: { x: insecure.x + insecure.w / 2, y: insecure.y + insecure.h },
     ring: insecure,
   },
@@ -167,16 +192,14 @@ export function OldTimetable({
     () => {
       const q = gsap.utils.selector(ref);
       const tl = gsap.timeline({ paused: true });
-      const rows = q(".ot-rows");
+      const page = q(".ot-page");
       const progress = q(".ot-progress");
       const status = q(".ot-status");
+      const paintTo = (y: number) => ({
+        clipPath: `inset(0px 0px ${Math.max(0, VIEW.height - y).toFixed(2)}px 0px)`,
+      });
 
-      tl.set(
-        [q(".ot-band"), q(".ot-nav"), q(".ot-thead"), q(".ot-bars")],
-        { autoAlpha: 0 },
-        0,
-      );
-      tl.set(rows, { clipPath: "inset(0px 0px 100% 0px)" }, 0);
+      tl.set(page, paintTo(0), 0);
       tl.set(status, { opacity: 1 }, 0.08);
       tl.fromTo(
         progress,
@@ -184,30 +207,29 @@ export function OldTimetable({
         { scaleX: 0.24, duration: 0.45, ease: "power2.out" },
         0.08,
       );
-      tl.set(q(".ot-band"), { autoAlpha: 1 }, 0.5);
+      // First paint: the banner. Then the calendars and the day's title,
+      // then the room names.
+      const [banner, header, rooms, ...rest] = PAINT;
+      tl.set(page, paintTo(banner), 0.5);
       tl.to(
         progress,
         { scaleX: 0.42, duration: 0.45, ease: "power1.inOut" },
         0.55,
       );
-      tl.set(q(".ot-nav"), { autoAlpha: 1 }, 0.68);
+      tl.set(page, paintTo(header), 0.68);
       tl.set(q(".ot-status-wait"), { display: "none" }, 0.74);
       tl.set(q(".ot-status-data"), { display: "inline" }, 0.74);
-      tl.set([q(".ot-thead"), q(".ot-bars")], { autoAlpha: 1 }, 0.9);
+      tl.set(page, paintTo(rooms), 0.9);
 
-      // The table paints top-down, a few rows at a time, unevenly.
-      const painted = [2, 3, 5, 8, 9, 12, 14, 15, 18, 21, 23, 26, PAGE.rows];
+      // The table paints top-down, a few rows at a time, unevenly; the
+      // colour key and the links under it come last.
       const gaps = [
         0.1, 0.06, 0.12, 0.07, 0.11, 0.06, 0.1, 0.09, 0.07, 0.12, 0.06, 0.09,
+        0.08,
       ];
       let t = 1.0;
-      painted.forEach((n, i) => {
-        const hidden = 100 - (n / PAGE.rows) * 100;
-        tl.set(
-          rows,
-          { clipPath: `inset(0px 0px ${hidden.toFixed(3)}% 0px)` },
-          t,
-        );
+      rest.forEach((y, i) => {
+        tl.set(page, paintTo(y), t);
         t += gaps[i] ?? 0.08;
       });
       tl.to(progress, { scaleX: 0.88, duration: t - 1.0, ease: "none" }, 1.0);
@@ -252,14 +274,6 @@ export function OldTimetable({
       // Stepped: each callout is its own build. Otherwise one build, paced
       // about a sentence apart, so each lands as the speaker reaches it.
       const at = stepped ? (i === 0 ? 0.15 : tl.duration()) : 0.15 + i * 1.8;
-      if (c.id === "loads-all") {
-        tl.fromTo(
-          ".ot-done",
-          { opacity: 0, y: 10 },
-          { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
-          at,
-        );
-      }
       if (HOLE_IDS.has(c.id)) {
         tl.fromTo(
           `.ot-hole-${c.id}`,
@@ -307,7 +321,7 @@ export function OldTimetable({
     >
       <BrowserFrame
         flipId={flipId}
-        url="time-table.sicsr.ac.in/day.php?year=2026&month=8&day=13"
+        url="time-table.sicsr.ac.in/day.php?year=2026&month=10&day=06&area=1&room=29"
         insecure
         width={FRAME.width}
         height={FRAME.height}
@@ -398,7 +412,7 @@ export function OldTimetable({
             top: c.chip.y,
             width: c.width,
             justifyContent: c.width ? "center" : undefined,
-            height: 60,
+            height: c.height ?? 60,
             padding: "0 24px 0 18px",
             boxShadow: "inset 0 0 0 1px var(--line-strong), var(--shadow-2)",
             transformOrigin: `${c.anchor.x - c.chip.x}px ${c.anchor.y - c.chip.y}px`,
