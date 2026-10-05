@@ -47,7 +47,7 @@ export const opening: SectionDef = {
               Presenting <Grad brand>Plannr</Grad>
             </>
           }
-          subtitle="One place for every class, change and room, designed from a week with each person who uses the timetable."
+          subtitle="One source of truth for every academic update."
           team={["paras", "sonal", "ravya", "tanisha"]}
           footer="SICSR, Pune · 2026"
           step={step}
