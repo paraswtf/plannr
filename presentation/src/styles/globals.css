@@ -1,0 +1,286 @@
+@import "tailwindcss";
+
+/*
+ * Plannr's design tokens, as the app defines them in src/styles/globals.css,
+ * plus the few a 1920 × 1080 stage needs on top.
+ *
+ * Every slide is laid out on a fixed 1920 × 1080 canvas that the deck scales
+ * to the screen, so sizes below are real pixels on that canvas: a 28px body
+ * line is 28px on a 1080p projector, whatever the laptop's window is.
+ */
+:root {
+  /* Light app surface (the product's own screens, mocked up on slides) */
+  --surface: #ffffff;
+  --paper: #eef0f3;
+  --app-ink: #2c3135;
+  --app-title: #0d1117;
+  --app-muted: rgba(44, 49, 53, 0.58);
+  --app-faint: rgba(44, 49, 53, 0.4);
+  --hair: rgba(68, 88, 121, 0.16);
+  --card-ring: rgba(68, 88, 121, 0.28);
+  --card-soft: rgba(68, 88, 121, 0.08);
+  --mine-fill: #ffc667;
+  --mine-ring: #d99425;
+  --live-fill: #ffa7a4;
+
+  /* Brand */
+  --slate: #445879;
+  --slate-hover: #4b6186;
+  --slate-muted: #9facc2;
+  --red: #dc3848;
+  --green: #4e7d3a;
+  --orange: #f6a73b;
+  --violet: #7a2e8f;
+  --magenta: #e8455e;
+  --grad-brand: linear-gradient(
+    135deg,
+    #7a2e8f 0%,
+    #c9306c 38%,
+    #e8455e 62%,
+    #f2743c 82%,
+    #f6a73b 100%
+  );
+  --grad-brand-h: linear-gradient(
+    90deg,
+    #7a2e8f 0%,
+    #c9306c 32%,
+    #e8455e 55%,
+    #f2743c 78%,
+    #f6a73b 100%
+  );
+
+  /* Dark neutrals: the marketing surfaces, and the deck's default stage */
+  --ink-0: #0d1117;
+  --ink-1: #151d28;
+  --ink-2: #1e2630;
+  --ink-3: #263141;
+
+  /*
+   * One accent per stakeholder, so a colour on screen always says whose part
+   * of the story it is. Each is a brand colour, lifted where the original is
+   * too dark to read on --ink-0.
+   */
+  --students: #ff5d73;
+  --faculty: #f6a73b;
+  --coordinators: #c174d6;
+  --admins: #86a3d6;
+
+  /* Signals */
+  --good: #7cc46a;
+  --bad: #ff5d5d;
+  --warn: #f6a73b;
+
+  /* Motion, shared by the engine and every slide */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/*
+ * The stage's two themes. A slide sets data-theme on its root, and everything
+ * inside it reads these names rather than raw colours, so a template works on
+ * either without a second set of classes.
+ */
+[data-theme="dark"],
+:root {
+  --bg: var(--ink-0);
+  --bg-raised: var(--ink-1);
+  --bg-card: #18212d;
+  --bg-sunken: #0a0e13;
+  --fg: #ffffff;
+  --fg-muted: rgba(255, 255, 255, 0.64);
+  --fg-faint: rgba(255, 255, 255, 0.4);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --glow: rgba(232, 69, 94, 0.28);
+}
+
+[data-theme="light"] {
+  --bg: var(--paper);
+  --bg-raised: var(--surface);
+  --bg-card: var(--surface);
+  --bg-sunken: #e3e6eb;
+  --fg: var(--app-title);
+  --fg-muted: rgba(44, 49, 53, 0.66);
+  --fg-faint: rgba(44, 49, 53, 0.44);
+  --line: rgba(68, 88, 121, 0.16);
+  --line-strong: rgba(68, 88, 121, 0.28);
+  --glow: rgba(232, 69, 94, 0.14);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-raised: var(--bg-raised);
+  --color-card: var(--bg-card);
+  --color-sunken: var(--bg-sunken);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-surface: var(--surface);
+  --color-paper: var(--paper);
+  --color-app-ink: var(--app-ink);
+  --color-app-title: var(--app-title);
+  --color-app-muted: var(--app-muted);
+  --color-app-faint: var(--app-faint);
+
+  --color-slate: var(--slate);
+  --color-slate-muted: var(--slate-muted);
+  --color-red: var(--red);
+  --color-green: var(--green);
+  --color-orange: var(--orange);
+  --color-violet: var(--violet);
+  --color-magenta: var(--magenta);
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-students: var(--students);
+  --color-faculty: var(--faculty);
+  --color-coordinators: var(--coordinators);
+  --color-admins: var(--admins);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-warn: var(--warn);
+
+  --font-display:
+    var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body:
+    var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+/*
+ * The type scale, in canvas pixels. Space Grotesk carries anything that is
+ * read from the back of the room; Instrument Sans carries sentences; JetBrains
+ * Mono carries times, room codes, counts and the small labels above titles.
+ */
+@utility t-hero {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 176px;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+}
+@utility t-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 120px;
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+}
+@utility t-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 80px;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+@utility t-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 54px;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+@utility t-h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 36px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+@utility t-lede {
+  font-family: var(--font-body);
+  font-size: 36px;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+}
+@utility t-body {
+  font-family: var(--font-body);
+  font-size: 28px;
+  line-height: 1.45;
+}
+@utility t-small {
+  font-family: var(--font-body);
+  font-size: 22px;
+  line-height: 1.4;
+}
+@utility t-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+@utility t-mono {
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+}
+
+/* Gradient-filled type, for the one word on a slide that carries it. */
+@utility grad-text {
+  background: var(--grad-brand-h);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--ink-0);
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Copy the team still has to write. It is marked so nobody presents a
+ * placeholder by accident; `H` hides the marks for a clean rehearsal.
+ */
+.ph {
+  text-decoration: underline dashed 2px;
+  text-decoration-color: color-mix(in srgb, var(--orange) 80%, transparent);
+  text-underline-offset: 0.18em;
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+html[data-placeholders="hidden"] .ph {
+  text-decoration: none;
+  background: none;
+}
+
+.ph-box {
+  outline: 2px dashed color-mix(in srgb, var(--orange) 70%, transparent);
+  outline-offset: -2px;
+}
+html[data-placeholders="hidden"] .ph-box {
+  outline-color: var(--line);
+}
+
+/* Hairline ring, the app's way of drawing an edge without a border. */
+.ring-hair {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ring-strong {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+/* Thin scrollbars for the overview and the presenter's notes. */
+.deck-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
