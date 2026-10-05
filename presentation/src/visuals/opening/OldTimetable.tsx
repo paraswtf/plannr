@@ -113,6 +113,22 @@ function onPage(device: Device, rect: PageRect, pad = 0) {
   };
 }
 
+/** A shadow written in phone pixels, at the phone's size on the canvas. */
+const atPhoneSize = (shadow: string) =>
+  shadow.replace(/(-?[\d.]+)px/g, (_, n: string) => `${+n * K}px`);
+
+/**
+ * The phone's shadow in the window's order (edge, near, far), so the one can
+ * turn into the other. It lives on the device itself, so it travels with it
+ * into the next slide's window as well.
+ */
+const PHONE_SHADOW = (() => {
+  const [far, near] = PHONE_BODY.shadow.split(/,(?![^(]*\))/);
+  return atPhoneSize(
+    [PHONE_BODY.edge, near, far].map((l) => l!.trim()).join(", "),
+  );
+})();
+
 /** Each part of the device, in each shape; the morph tweens between them. */
 const SHAPE = {
   device: {
@@ -123,6 +139,7 @@ const SHAPE = {
       height: DESK.h,
       borderRadius: DESK.radius,
       backgroundColor: "#ffffff",
+      boxShadow: BROWSER_SHADOW,
     },
     phone: {
       left: PHONE.x,
@@ -131,6 +148,7 @@ const SHAPE = {
       height: PHONE.h,
       borderRadius: PHONE.radius,
       backgroundColor: "#1f2329",
+      boxShadow: PHONE_SHADOW,
     },
   },
   screen: {
@@ -163,10 +181,6 @@ const SHAPE = {
     },
   },
 } as const;
-
-/** A shadow written in phone pixels, at the phone's size on the canvas. */
-const atPhoneSize = (shadow: string) =>
-  shadow.replace(/(-?[\d.]+)px/g, (_, n: string) => `${+n * K}px`);
 
 type CalloutId = RingId | "insecure";
 
@@ -620,17 +634,13 @@ export function OldTimetable({ step, active, flipId }: OldTimetableProps) {
         className="ot-device absolute"
         style={{ ...SHAPE.device.desktop }}
       >
-        {/* The window's edge and shadow; the phone's titanium body and its. */}
-        <div
-          className="ot-desk-chrome pointer-events-none absolute inset-0"
-          style={{ borderRadius: "inherit", boxShadow: BROWSER_SHADOW }}
-        />
+        {/* The phone's titanium body, with its bright edge. */}
         <div
           className="ot-phone-chrome pointer-events-none absolute inset-0"
           style={{
             borderRadius: "inherit",
             background: PHONE_BODY.background,
-            boxShadow: atPhoneSize(`${PHONE_BODY.edge}, ${PHONE_BODY.shadow}`),
+            boxShadow: atPhoneSize(PHONE_BODY.edge),
             opacity: 0,
           }}
         />
