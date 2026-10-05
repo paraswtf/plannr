@@ -93,6 +93,20 @@ export interface FlowNode {
 }
 
 /**
+ * A way round a flow's steps, for when people sometimes leave them out: the
+ * change goes from one node straight to a later one.
+ */
+export interface FlowSkip {
+  /** The ids of the node it leaves and the node it lands on. */
+  from: string;
+  to: string;
+  /** What leaving the steps out costs: "timetable out of sync". */
+  label?: ReactNode;
+  /** The glyph beside the label. Default "alert". */
+  icon?: IconName;
+}
+
+/**
  * Reach × severity: how many of the section's personas a problem touches,
  * times how much it hurts. The ranking slide sorts by this.
  */

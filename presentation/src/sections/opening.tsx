@@ -111,13 +111,14 @@ export const opening: SectionDef = {
     {
       id: "change-flow",
       title: "One change, passed by hand",
-      steps: 5,
+      steps: 6,
       notes: [
         "Let's follow one change through the system. A teacher wants to schedule an extra lecture. There is no way for them to do that themselves — so they have to ask the coordinator.",
-        "And they ask however they can — a call, a mail, in person, or they just send a student over. The coordinator then updates the timetable by hand.",
-        "Then they write the same change out again, as an email, because the timetable tells nobody that anything changed.",
-        "And the students check the timetable — if it was updated at all. For a last-minute change, sometimes only the mail goes out, and the timetable is never updated.",
-        "Four hand-offs, every single one done by a person. If any one of them slips, somebody walks into an empty room.",
+        "And they ask however they can — a call, a mail, in person, or they just send a student over. The coordinator then updates the timetable manually.",
+        "Then they announce the same change again, as a mail to the entire batch, because the timetable tells nobody that anything changed.",
+        "And sometimes the update never happens. For a last-minute change, the mail goes straight out — and now the timetable is out of sync.",
+        "So the students check the timetable — if it was updated at all.",
+        "Three human points of failure, and every one of them can easily be automated. If any one of them slips, somebody walks into an empty room.",
       ],
       render: ({ step }) => (
         <FlowDiagram
@@ -132,7 +133,7 @@ export const opening: SectionDef = {
             {
               id: "edit",
               actor: "Coordinator",
-              action: "Updates the timetable by hand",
+              action: "Updates the timetable manually",
               icon: "edit",
               wait: "via call, mail, in person or a student",
               waitIcon: "message",
@@ -140,7 +141,7 @@ export const opening: SectionDef = {
             {
               id: "mail",
               actor: "Coordinator",
-              action: "Writes the same change again, as a mail",
+              action: "Announces the change via mail to an entire batch",
               icon: "mail",
               wait: "if they remember",
               tone: "warn",
@@ -154,7 +155,13 @@ export const opening: SectionDef = {
               tone: "bad",
             },
           ]}
-          outcome="Four hand-offs, all done by people, and nothing notices when one is missed."
+          skip={{
+            from: "faculty",
+            to: "mail",
+            label: "timetable out of sync",
+            icon: "linkBroken",
+          }}
+          outcome="Three human points of failure that can be easily automated."
           step={step}
         />
       ),

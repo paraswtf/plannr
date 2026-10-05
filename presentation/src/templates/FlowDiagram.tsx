@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useId, useRef, type CSSProperties, type ReactNode } from "react";
 
-import type { FlowNode } from "~/content/types";
+import type { FlowNode, FlowSkip } from "~/content/types";
 import { useSteps } from "~/deck/useSteps";
 import { Icon, type IconName } from "~/ui/icon";
 import { SlideBody, SlideHeader } from "~/ui/layout";
@@ -17,10 +17,14 @@ export interface FlowDiagramProps {
   outcome?: ReactNode;
   /** The glyph beside the outcome. Default "alert". */
   outcomeIcon?: IconName;
+  /** A way round some of the steps, drawn dashed under the cards. */
+  skip?: FlowSkip;
   accent?: string;
   /**
-   * Node i arrives on step i (node 0 from the start); one more step shows the
-   * outcome. Steps = nodes.length + (outcome ? 1 : 0).
+   * Node i arrives on step i (node 0 from the start). A skip takes the step
+   * after the node it lands on, and every node after it moves back one. One
+   * more step shows the outcome.
+   * Steps = nodes.length + (skip ? 1 : 0) + (outcome ? 1 : 0).
    */
   step: number;
 }
@@ -34,9 +38,18 @@ const ARC_H = 176;
 const INSET = 72;
 const LIFT = 130;
 const HOP = 1.05;
+/** Room under the cards for a skip's arc and its label. */
+const SKIP_H = 80;
+const DIP = 56;
+/** A skip travels about twice as far as a hop. */
+const SKIP_HOP = 1.4;
 
 /** The hand-off lines: quiet slate, so the travelling token is what leads. */
 const ARC = "var(--fg-faint)";
+/** The pill of a wait or a skip that is friction rather than plain waiting. */
+const WARN_PILL = {
+  background: "color-mix(in srgb, var(--warn) 10%, var(--bg))",
+};
 
 /**
  * How a job gets done today, hop by hop: who passes what to whom, and how
@@ -47,7 +60,9 @@ const ARC = "var(--fg-faint)";
  * as it rises in. The lines are quiet slate and the token is the accent, so
  * the eye follows the change. A wait ("hours to a day") sits over the arc's
  * crest: quiet grey, or in the warn tone when the step it leads into is
- * friction (or worse); a step where it breaks is the accent card. The
+ * friction (or worse); a step where it breaks is the accent card. A skip, the
+ * way round that people sometimes take, runs dashed under the cards with its
+ * own token, and what it costs sits on it, under the steps it leaves out. The
  * outcome lands last, large, in the accent.
  */
 export function FlowDiagram({
@@ -56,10 +71,12 @@ export function FlowDiagram({
   nodes,
   outcome,
   outcomeIcon = "alert",
+  skip,
   accent,
   step,
 }: FlowDiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const mask = `fd-skip-${useId().replace(/[^\w-]/g, "")}`;
   const token = accent ?? "var(--accent)";
   const n = Math.max(1, nodes.length);
   const cardW = (WIDTH - (n - 1) * GAP) / n;
@@ -81,6 +98,23 @@ export function FlowDiagram({
       label: { x: (sx + ex) / 2, y: y - LIFT * 0.75 - 38 },
     };
   });
+
+  // A skip is a hop turned upside down: it leaves and lands where a hop
+  // would, but under the cards, dipping beneath the steps it leaves out.
+  const from = nodes.findIndex((node) => node.id === skip?.from);
+  const to = nodes.findIndex((node) => node.id === skip?.to);
+  const sx = left(from) + cardW - INSET;
+  const ex = left(to) + INSET;
+  const bypass =
+    skip && from >= 0 && to > from + 1
+      ? {
+          to,
+          d: `M${sx},10 C${sx},${10 + DIP} ${ex},${10 + DIP} ${ex},10`,
+          head: `M${ex - 11},24 L${ex},11 L${ex + 11},24`,
+          // Its label sits on the lowest point, under the steps left out.
+          at: { x: (sx + ex) / 2, y: 10 + DIP * 0.75 },
+        }
+      : null;
 
   useSteps(ref, step, (tl, mark) => {
     const root = ref.current;
@@ -151,6 +185,65 @@ export function FlowDiagram({
         at + HOP - 0.06,
       );
       mark();
+
+      // The skip is its own build, once the node it lands on is there.
+      if (bypass?.to !== arc.i) continue;
+      const skipAt = tl.duration();
+      const skipPath = one(".fd-skip-path");
+      const skipToken = one(".fd-skip-token");
+      const skipPill = one(".fd-skip-pill");
+      tl.set(skipPath, { opacity: 1 }, skipAt);
+      tl.fromTo(
+        one(".fd-skip-reveal"),
+        { drawSVG: "0%" },
+        { drawSVG: "100%", duration: SKIP_HOP, ease: "deck.morph" },
+        skipAt,
+      );
+      tl.fromTo(
+        skipToken,
+        { opacity: 0, scale: 0.4 },
+        { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" },
+        skipAt,
+      );
+      tl.to(
+        skipToken,
+        {
+          motionPath: {
+            path: skipPath as SVGPathElement,
+            align: skipPath as SVGPathElement,
+            alignOrigin: [0.5, 0.5],
+          },
+          duration: SKIP_HOP,
+          ease: "deck.morph",
+        },
+        skipAt,
+      );
+      tl.fromTo(
+        one(".fd-skip-head"),
+        { opacity: 0 },
+        { opacity: 1, duration: 0.2, ease: "power1.out" },
+        skipAt + SKIP_HOP - 0.12,
+      );
+      tl.to(
+        skipToken,
+        { scale: 0.2, opacity: 0, duration: 0.3, ease: "power2.in" },
+        skipAt + SKIP_HOP - 0.06,
+      );
+      // The label sits in the token's way, so it waits until it has passed.
+      if (skipPill) {
+        tl.from(
+          skipPill,
+          {
+            opacity: 0,
+            y: 14,
+            scale: 0.8,
+            duration: 0.6,
+            ease: "back.out(1.8)",
+          },
+          skipAt + SKIP_HOP - 0.15,
+        );
+      }
+      mark();
     }
     if (outcome) {
       const at = tl.duration();
@@ -181,7 +274,14 @@ export function FlowDiagram({
         ref={ref}
         className="flex min-h-0 flex-1 flex-col justify-center pt-4"
       >
-        <div className="relative" style={{ width: WIDTH, paddingTop: ARC_H }}>
+        <div
+          className="relative"
+          style={{
+            width: WIDTH,
+            paddingTop: ARC_H,
+            paddingBottom: bypass ? SKIP_H : 0,
+          }}
+        >
           <div className="flex items-stretch" style={{ gap: GAP }}>
             {nodes.map((node, i) => (
               <NodeCard key={node.id} node={node} index={i} width={cardW} />
@@ -254,10 +354,7 @@ export function FlowDiagram({
                     style={
                       (arc.node.tone ?? "neutral") === "neutral"
                         ? undefined
-                        : {
-                            background:
-                              "color-mix(in srgb, var(--warn) 10%, var(--bg))",
-                          }
+                        : WARN_PILL
                     }
                   >
                     <Icon name={arc.node.waitIcon ?? "clock"} size={24} />
@@ -265,6 +362,90 @@ export function FlowDiagram({
                   </span>
                 </span>
               ),
+          )}
+
+          {bypass && (
+            <div
+              className="pointer-events-none absolute bottom-0 left-0"
+              style={{ width: WIDTH, height: SKIP_H }}
+            >
+              <svg
+                aria-hidden
+                className="absolute top-0 left-0 overflow-visible"
+                width={WIDTH}
+                height={SKIP_H}
+                viewBox={`0 0 ${WIDTH} ${SKIP_H}`}
+              >
+                {/* A dashed line cannot be drawn on directly, so a solid copy
+                    is drawn on in a mask, uncovering the dashes behind it. */}
+                <mask
+                  id={mask}
+                  maskUnits="userSpaceOnUse"
+                  x={0}
+                  y={0}
+                  width={WIDTH}
+                  height={SKIP_H}
+                >
+                  <path
+                    className="fd-skip-reveal"
+                    d={bypass.d}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth={10}
+                    strokeLinecap="round"
+                  />
+                </mask>
+                <path
+                  className="fd-skip-path"
+                  d={bypass.d}
+                  fill="none"
+                  stroke={ARC}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeDasharray="8 8"
+                  mask={`url(#${mask})`}
+                  style={{ opacity: 0 }}
+                />
+                <path
+                  className="fd-skip-head"
+                  d={bypass.head}
+                  fill="none"
+                  stroke={ARC}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ opacity: 0 }}
+                />
+              </svg>
+              {skip?.label && (
+                <span
+                  className="absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: bypass.at.x, top: bypass.at.y }}
+                >
+                  <span
+                    className="fd-skip-pill text-warn flex items-center gap-2.5 rounded-[12px] px-4 py-2.5 text-[23px] leading-none font-medium whitespace-nowrap"
+                    style={WARN_PILL}
+                  >
+                    <Icon name={skip.icon ?? "alert"} size={24} />
+                    {skip.label}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+
+          {bypass && (
+            <span
+              className="fd-skip-token absolute top-0 left-0 flex h-14 w-14 items-center justify-center rounded-[16px]"
+              style={{
+                opacity: 0,
+                color: "#ffffff",
+                background: token,
+                boxShadow: "var(--shadow-2)",
+              }}
+            >
+              <Icon name="mail" size={28} />
+            </span>
           )}
         </div>
 
