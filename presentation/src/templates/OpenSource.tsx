@@ -5,8 +5,10 @@ import { useMemo, useRef, type ReactNode } from "react";
 
 import { useSteps } from "~/deck/useSteps";
 import { Icon, type IconName } from "~/ui/icon";
-import { Eyebrow, Glow, SAFE } from "~/ui/layout";
+import { Bezel } from "~/ui/frames";
+import { SAFE } from "~/ui/layout";
 import { Ph } from "~/ui/placeholder";
+import { Card, Chip } from "~/ui/surfaces";
 
 import { useEntrance } from "./_closing-motion";
 
@@ -26,33 +28,30 @@ export interface OpenSourceProps {
   description?: ReactNode;
   /** Its star count; a marked placeholder until the real number is in. */
   stars?: ReactNode;
-  /** Its main language, with a dot in that language's colour. */
+  /** Its main language. `color` is accepted but the dot is drawn in faint ink, so the slide keeps one accent. */
   language?: { name: string; color: string };
 }
 
-/** Brand colours for the four ways to help, left to right, top to bottom. */
-const ASK_COLORS = ["#c45fd6", "#ef4f6a", "#f2743c", "#f6a73b"];
-
 /* Canvas geometry. */
-const LEFT_W = 920;
+const LEFT_W = 900;
 const RIGHT_X = 1150;
 const RIGHT_W = 1920 - SAFE.x - RIGHT_X;
-const QR_PX = 440;
+const QR_PX = 400;
 const HEAD_H = 330;
 const HEAD_REST = SAFE.top + (1080 - SAFE.top - SAFE.bottom - HEAD_H) / 2 - 24;
-const ASKS_TOP = SAFE.top + HEAD_H + 40;
+const ASKS_TOP = SAFE.top + HEAD_H + 28;
 
 /**
  * The call to action: Plannr is open source, here is the repository, and
  * here is how you can help.
  *
- * The QR code is real and drawn as SVG from the `qrcode` package, modules on
- * a white quiet zone, printing in row by row as the slide opens. On the
+ * The QR code is real and drawn as SVG from the `qrcode` package, dark
+ * modules on a white plate held in a bezel, printing in row by row behind a
+ * scan line as the slide opens. The repository's card sits under it. On the
  * second build the ask travels up out of the middle of its column and the
- * four ways to help rise into the space it leaves.
+ * four ways to help rise into the space it leaves, as a list on hairlines.
  */
 export function OpenSource({
-  eyebrow,
   title,
   lede,
   repoUrl,
@@ -93,7 +92,11 @@ export function OpenSource({
     tl.fromTo(
       ".os-scan",
       { y: 0, opacity: 1 },
-      { y: QR_PX, duration: qr.rows.length * 0.022 + 0.1, ease: "none" },
+      {
+        y: QR_PX,
+        duration: qr.rows.length * 0.022 + 0.1,
+        ease: "none",
+      },
       0.55,
     );
     tl.to(".os-scan", { opacity: 0, duration: 0.3 }, ">-0.1");
@@ -127,6 +130,18 @@ export function OpenSource({
         0.45,
       );
       tl.fromTo(
+        ".os-ask-rule",
+        { scaleX: 0, transformOrigin: "0% 50%" },
+        {
+          scaleX: 1,
+          duration: 0.9,
+          ease: "deck.enter",
+          stagger: 0.09,
+          immediateRender: true,
+        },
+        0.5,
+      );
+      tl.fromTo(
         ".os-ask-icon",
         { scale: 0.4, rotate: -16 },
         {
@@ -147,8 +162,6 @@ export function OpenSource({
   return (
     <div ref={root} data-no-enter className="absolute inset-0">
       <div className="os-all absolute inset-0">
-        <Glow x="76%" y="48%" size={1300} />
-
         <header
           className="os-head absolute"
           style={{
@@ -159,8 +172,7 @@ export function OpenSource({
           }}
         >
           <div className="os-head-in flex flex-col">
-            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-            <h1 className="t-title mt-6 text-balance">{title}</h1>
+            <h1 className="t-title text-fg text-balance">{title}</h1>
             {lede && (
               <p className="t-lede text-muted mt-6 max-w-[42ch] text-balance">
                 {lede}
@@ -169,42 +181,31 @@ export function OpenSource({
           </div>
         </header>
 
-        <div
-          className="absolute grid grid-cols-2 gap-5"
+        <ul
+          className="absolute flex flex-col"
           style={{ left: SAFE.x, top: ASKS_TOP, width: LEFT_W }}
         >
-          {asks.map((a, i) => {
-            const color = ASK_COLORS[i % ASK_COLORS.length] ?? "#e8455e";
-            return (
-              <div
-                key={i}
-                className="os-ask bg-card relative flex h-[206px] flex-col overflow-hidden rounded-[26px] px-8 pt-7 pb-7"
-                style={{
-                  boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 22%, var(--line))`,
-                }}
-              >
-                <div className="flex items-center gap-4">
-                  <span
-                    className="os-ask-icon flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-[16px]"
-                    style={{
-                      color,
-                      background: `color-mix(in srgb, ${color} 16%, transparent)`,
-                      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 34%, transparent)`,
-                    }}
-                  >
-                    <Icon name={a.icon} size={28} stroke={2} />
-                  </span>
-                  <span className="font-display text-[34px] leading-none font-bold tracking-[-0.02em]">
-                    {a.title}
-                  </span>
-                </div>
-                <p className="text-muted mt-5 text-[25px] leading-[1.38] text-pretty">
-                  {a.body}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+          {asks.map((a, i) => (
+            <li
+              key={i}
+              className="os-ask relative grid grid-cols-[52px_176px_1fr] items-start gap-x-6 py-6"
+            >
+              <span
+                aria-hidden
+                className="os-ask-rule bg-line-strong absolute inset-x-0 top-0 h-px"
+              />
+              <span className="os-ask-icon bg-sunken text-fg flex h-[52px] w-[52px] items-center justify-center rounded-[12px]">
+                <Icon name={a.icon} size={28} />
+              </span>
+              <span className="font-display text-fg pt-[6px] text-[34px] leading-none font-semibold tracking-[-0.02em]">
+                {a.title}
+              </span>
+              <p className="text-muted pt-[4px] text-[25px] leading-[1.36] text-pretty">
+                {a.body}
+              </p>
+            </li>
+          ))}
+        </ul>
 
         {/* The code and the repository, centred in the right-hand column. */}
         <div
@@ -216,81 +217,75 @@ export function OpenSource({
             bottom: SAFE.bottom,
           }}
         >
-          <div className="flex flex-1 flex-col items-center justify-center gap-7">
-            <div
-              className="os-qr-card relative overflow-hidden rounded-[32px] bg-white"
-              style={{
-                boxShadow: "0 40px 120px -40px rgba(232, 69, 94, 0.45)",
-              }}
+          <div className="flex w-full flex-1 flex-col items-center justify-center gap-8">
+            <Bezel
+              className="os-qr-card w-full"
+              coreStyle={{ background: "#ffffff" }}
             >
-              <svg
-                width={QR_PX}
-                height={QR_PX}
-                viewBox={`0 0 ${qr.total} ${qr.total}`}
-                shapeRendering="crispEdges"
-                role="img"
-                aria-label={`QR code for ${repoUrl}`}
-                className="block"
-              >
-                <rect width={qr.total} height={qr.total} fill="#ffffff" />
-                {qr.rows.map((d, r) => (
-                  <path key={r} className="os-qr-row" d={d} fill="#0d1117" />
-                ))}
-              </svg>
-              <span
-                aria-hidden
-                className="os-scan pointer-events-none absolute inset-x-0 top-0 h-[6px] opacity-0"
-                style={{
-                  background: "var(--grad-brand-h)",
-                  boxShadow: "0 0 24px 4px rgba(232, 69, 94, 0.55)",
-                }}
-              />
-              <div className="flex items-center justify-center gap-3 pb-6 text-[#2c3135]">
-                <Icon name="link" size={24} stroke={2} />
+              <div className="relative mx-auto w-fit px-7 pt-7">
+                <svg
+                  width={QR_PX}
+                  height={QR_PX}
+                  viewBox={`0 0 ${qr.total} ${qr.total}`}
+                  shapeRendering="crispEdges"
+                  role="img"
+                  aria-label={`QR code for ${repoUrl}`}
+                  className="block"
+                >
+                  <rect width={qr.total} height={qr.total} fill="#ffffff" />
+                  {qr.rows.map((d, r) => (
+                    <path key={r} className="os-qr-row" d={d} fill="#10141b" />
+                  ))}
+                </svg>
+                <span
+                  aria-hidden
+                  className="os-scan pointer-events-none absolute inset-x-7 top-7 h-[3px] rounded-full opacity-0"
+                  style={{ background: "#c8305f" }}
+                />
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-1 pb-7 text-[#353d4a]">
+                <Icon name="link" size={26} />
                 <span className="t-mono text-[23px] font-medium">
                   {repoLabel}
                 </span>
               </div>
-            </div>
+            </Bezel>
 
-            <div
-              className="os-repo bg-card ring-strong w-full rounded-[26px] px-9 py-7"
-              style={{ maxWidth: RIGHT_W }}
-            >
+            <Card className="os-repo w-full px-9 py-7">
               <div className="flex items-center gap-4">
-                <span className="text-muted">
-                  <Icon name="book" size={30} stroke={1.75} />
+                <span className="text-muted inline-flex">
+                  <Icon name="book" size={32} />
                 </span>
                 <span className="font-display min-w-0 truncate text-[32px] leading-none tracking-[-0.02em]">
                   <span className="text-muted font-medium">{owner}</span>
                   <span className="text-faint mx-2">/</span>
-                  <span className="font-bold">{repo}</span>
+                  <span className="text-fg font-semibold">{repo}</span>
                 </span>
-                <span className="t-mono text-muted ml-auto shrink-0 rounded-full px-4 py-[5px] text-[22px] [box-shadow:inset_0_0_0_1.5px_var(--line-strong)]">
+                <Chip size={20} className="ml-auto shrink-0">
                   Public
-                </span>
+                </Chip>
               </div>
-              <p className="text-muted mt-4 text-[25px] leading-[1.35]">
+              <p className="text-body mt-4 text-[25px] leading-[1.35]">
                 {description}
               </p>
-              <div className="mt-5 flex items-center gap-7 text-[23px]">
-                <span className="text-muted inline-flex items-center gap-2.5">
+              <div className="text-muted mt-5 flex items-center gap-7 text-[23px]">
+                <span className="inline-flex items-center gap-2.5">
                   <span
-                    className="inline-block h-[14px] w-[14px] rounded-full"
-                    style={{ background: language.color }}
+                    aria-hidden
+                    className="bg-faint inline-block h-[14px] w-[14px] rounded-full"
                   />
                   {language.name}
                 </span>
-                <span className="text-muted inline-flex items-center gap-2">
-                  <Icon name="star" size={24} stroke={1.9} />
-                  <span className="t-mono">{stars ?? <Ph>48</Ph>}</span>
+                <span className="inline-flex items-center gap-2">
+                  <Icon name="star" size={24} />
+                  <span className="tabular">{stars ?? <Ph>48</Ph>}</span>
                 </span>
-                <span className="text-good ml-auto inline-flex items-center gap-2 rounded-full px-4 py-[5px] font-semibold [background:color-mix(in_srgb,var(--good)_14%,transparent)]">
-                  <Icon name="heart" size={22} stroke={2} />
+                <span className="ml-auto inline-flex items-center gap-2">
+                  <Icon name="heart" size={24} />
                   Open source
                 </span>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -325,7 +320,7 @@ function qrRows(text: string): { rows: string[]; total: number } {
   return { rows, total: size + QUIET * 2 };
 }
 
-/** "github.com/paraswtf/plannr" → ["paraswtf", "plannr"]. */
+/** "github.com/paraswtf/plannr" to ["paraswtf", "plannr"]. */
 function splitRepo(label: string): [string, string] {
   const parts = label
     .replace(/^https?:\/\//, "")

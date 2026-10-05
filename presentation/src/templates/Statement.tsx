@@ -4,7 +4,7 @@ import { useRef, type ReactNode } from "react";
 
 import { gsap } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
-import { Eyebrow, Glow, SlideBody } from "~/ui/layout";
+import { SlideBody } from "~/ui/layout";
 
 import {
   bottomIn,
@@ -14,6 +14,7 @@ import {
 } from "./_story-motion";
 
 export interface StatementProps {
+  /** Accepted and not drawn: the deck puts no label above a title. */
   eyebrow?: ReactNode;
   /** Big type. Wrap the phrase that carries it in <Grad>. */
   title: ReactNode;
@@ -22,7 +23,7 @@ export interface StatementProps {
   /** Lines that arrive one per build after the title: point i on step i + 1. */
   points?: ReactNode[];
   align?: "left" | "center";
-  /** Eyebrow dot and bullet colour. */
+  /** Ignored: the bar beside a point is always the deck's one accent. */
   accent?: string;
   step: number;
 }
@@ -36,30 +37,19 @@ export interface StatementProps {
  * statement up to make room for itself.
  */
 export function Statement({
-  eyebrow,
   title,
   body,
   points = [],
   align = "left",
-  accent,
   step,
 }: StatementProps) {
   const root = useRef<HTMLDivElement>(null);
   const center = align === "center";
-  const tone = accent ?? "var(--magenta)";
 
   useEntrance(
     root,
     (tl) => {
-      tl.from(".st-glow", { opacity: 0, duration: 1.4, ease: "power2.out" }, 0);
-      if (eyebrow) {
-        tl.from(
-          ".st-eyebrow",
-          { opacity: 0, y: 18, duration: 0.7, ease: "deck.enter" },
-          0.1,
-        );
-      }
-      tl.add(riseWords(root.current?.querySelector(".st-title") ?? null), 0.18);
+      tl.add(riseWords(root.current?.querySelector(".st-title") ?? null), 0.12);
       if (body) {
         tl.from(
           ".st-body",
@@ -130,25 +120,13 @@ export function Statement({
 
   return (
     <div ref={root} data-no-enter className="absolute inset-0">
-      <Glow
-        className="st-glow"
-        x={center ? "50%" : "22%"}
-        y="48%"
-        size={1400}
-        color={`color-mix(in srgb, ${tone} 16%, transparent)`}
-      />
       <SlideBody className={center ? "items-center text-center" : ""}>
         <div className="relative flex min-h-0 flex-1 flex-col justify-center">
           <div
             className={`st-block relative flex flex-col ${center ? "items-center" : ""}`}
           >
-            {eyebrow && (
-              <Eyebrow color={accent} className="st-eyebrow">
-                {eyebrow}
-              </Eyebrow>
-            )}
             <h1
-              className={`st-title t-display mt-10 max-w-[19ch] text-balance ${center ? "mx-auto" : ""}`}
+              className={`st-title t-display text-fg max-w-[19ch] text-balance ${center ? "mx-auto" : ""}`}
             >
               {title}
             </h1>
@@ -159,7 +137,7 @@ export function Statement({
             )}
             {points.length > 0 && (
               <ul
-                className={`mt-16 flex flex-col gap-8 ${center ? "items-center" : ""}`}
+                className={`mt-20 flex flex-col gap-8 ${center ? "items-center" : ""}`}
               >
                 {points.map((p, i) => (
                   <li
@@ -169,13 +147,12 @@ export function Statement({
                     {!center && (
                       <span
                         aria-hidden
-                        className="st-bar block w-1.25 shrink-0 origin-top rounded-full"
-                        style={{ background: tone }}
+                        className="st-bar bg-accent block w-1 shrink-0 origin-top rounded-full"
                       />
                     )}
                     <span
-                      className="st-text t-lede block py-1 text-pretty"
-                      style={{ fontSize: 40, lineHeight: 1.3 }}
+                      className="st-text t-lede text-body block py-1 text-pretty"
+                      style={{ fontSize: 42, lineHeight: 1.3 }}
                     >
                       {p}
                     </span>

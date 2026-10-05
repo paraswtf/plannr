@@ -6,8 +6,8 @@ import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
 import { useSteps } from "~/deck/useSteps";
 import { Icon } from "~/ui/icon";
-import { courseTone } from "~/ui/mock";
 import { Ph } from "~/ui/placeholder";
+import { Card } from "~/ui/surfaces";
 
 export interface WeekPatternProps {
   step: number;
@@ -24,11 +24,11 @@ const PAD = 14;
 const DAY_W = 34;
 const DAY_GAP = 6;
 const GRID_TOP = 52;
-const HOUR = 50;
-const HOURS = 8; // 09:00 – 17:00
+const HOUR = 46;
+const HOURS = 8; // 09:00 to 17:00
 const CARD_H = GRID_TOP + HOURS * HOUR + 14;
 
-/** [day 0–4, start hour, length in hours, course]: the same every week. */
+/** [day 0-4, start hour, length in hours, course]: the same every week. */
 const WEEK: [number, number, number, string][] = [
   [0, 9, 2, "Design Thinking"],
   [0, 11, 1, "Data Mining"],
@@ -60,6 +60,32 @@ const blockBox = (day: number, start: number, length: number) => ({
   height: length * HOUR - 4,
 });
 
+/*
+ * Colours the timeline tweens, as plain hex and rgb (GSAP interpolates these,
+ * not CSS variables). They match the tokens in globals.css.
+ */
+const ACCENT = "#c8305f";
+const ACCENT_SOFT = "rgba(200, 48, 95, 0.09)";
+const FAINT = "#8f97a6";
+const SHADOW_1 =
+  "0 1px 1px rgba(16, 24, 40, 0.04), 0 2px 8px -2px rgba(16, 24, 40, 0.06)";
+/** The callout's edge: a hairline, then the accent once the class is missed. */
+const CHIP_SHADOW = `inset 0 0 0 1px rgba(16, 24, 40, 0.08), ${SHADOW_1}`;
+const CHIP_SHADOW_MISSED = `inset 0 0 0 1.5px rgba(200, 48, 95, 0.45), ${SHADOW_1}`;
+
+/*
+ * The regular schedule is drawn in quiet slate tints, one per course, so the
+ * repeating pattern still reads while the accent stays for the extra class.
+ */
+const SLATES = [
+  { fill: "#dde1e8", ring: "#c3c9d4" },
+  { fill: "#e6e9ee", ring: "#ccd1da" },
+  { fill: "#d3d8e1", ring: "#b9c0cc" },
+] as const;
+const COURSES = [...new Set(WEEK.map(([, , , c]) => c))];
+const slateTone = (course: string) =>
+  SLATES[COURSES.indexOf(course) % SLATES.length]!;
+
 const extraBox = blockBox(EXTRA.day, EXTRA.start, 1);
 /** Centre of the extra class, across the whole box. */
 const EXTRA_X = EXTRA.week * (WEEK_W + WEEK_GAP) + extraBox.left + DAY_W / 2;
@@ -69,9 +95,10 @@ const EXTRA_X = EXTRA.week * (WEEK_W + WEEK_GAP) + extraBox.left + DAY_W / 2;
  * week that is different.
  *
  * Builds (steps = 3):
- *   0 — four ordinary weeks fill in, identical.
- *   1 — an extra class lands in week three, announced only by mail.
- *   2 — it is missed: the block turns red, with the share of students who missed one (a placeholder number).
+ *   0: four ordinary weeks fill in, identical.
+ *   1: an extra class lands in week three, announced only by mail.
+ *   2: it is missed: the block turns to the accent, with the share of
+ *      students who missed one (a placeholder number).
  */
 export function WeekPattern({ step, active }: WeekPatternProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -103,7 +130,7 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
         );
         tl.from(
           `[data-week="${w}"] .wk-label`,
-          { color: "rgba(255,255,255,0.4)", duration: 0.4, ease: "power2.out" },
+          { color: FAINT, duration: 0.4, ease: "power2.out" },
           w * 0.55,
         );
       }
@@ -121,7 +148,7 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
   );
 
   useSteps(root, step, (tl, mark) => {
-    // 1 — the extra class falls into week three, carrying its mail.
+    // 1: the extra class falls into week three, carrying its mail.
     tl.to(".wk-dim", { opacity: 0.38, duration: 0.6, ease: "power2.out" }, 0);
     tl.fromTo(
       ".wk-extra",
@@ -166,8 +193,8 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
       {
         scaleY: 1,
         transformOrigin: "50% 0%",
-        duration: 0.35,
-        ease: "power2.inOut",
+        duration: 0.4,
+        ease: "deck.enter",
       },
       "<0.1",
     );
@@ -179,7 +206,7 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
     );
     mark();
 
-    // 2 — and it is the one that gets missed.
+    // 2: and it is the one that gets missed.
     tl.to(".wk-extra-fill", {
       autoAlpha: 0,
       duration: 0.4,
@@ -207,10 +234,11 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
       { autoAlpha: 0, scale: 0.4, duration: 0.3, ease: "power2.in" },
       "<",
     );
-    tl.to(".wk-link", { backgroundColor: "var(--bad)", duration: 0.4 }, "<");
+    tl.to(".wk-link", { backgroundColor: ACCENT, duration: 0.4 }, "<");
+    tl.to(".wk-chip", { boxShadow: CHIP_SHADOW_MISSED, duration: 0.4 }, "<");
     tl.to(
-      ".wk-chip",
-      { boxShadow: "inset 0 0 0 1.5px rgba(255,93,93,0.7)", duration: 0.4 },
+      ".wk-chip-icon",
+      { backgroundColor: ACCENT_SOFT, color: ACCENT, duration: 0.4 },
       "<",
     );
     tl.fromTo(
@@ -235,25 +263,22 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
             className={`relative shrink-0 ${w === EXTRA.week ? "" : "wk-dim"}`}
             style={{ width: WEEK_W }}
           >
-            <div className="flex items-baseline justify-between px-1">
-              <span className="wk-label t-mono text-fg text-[24px] font-semibold">
+            <div className="flex items-baseline justify-between px-1.5">
+              <span className="wk-label font-display text-fg text-[26px] font-semibold tracking-[-0.02em]">
                 Week {w + 1}
               </span>
-              <span className="t-mono text-faint text-[20px]">{dates}</span>
+              <span className="t-label tabular text-muted">{dates}</span>
             </div>
-            <div
-              className="bg-card ring-hair relative mt-4 rounded-3xl"
-              style={{ height: CARD_H }}
-            >
+            <Card className="mt-4" style={{ height: CARD_H }}>
               {/* Day initials and the hour lines */}
               {["M", "T", "W", "T", "F"].map((d, i) => (
                 <span
                   key={i}
-                  className="t-mono text-faint absolute text-center text-[18px]"
+                  className="text-muted absolute text-center text-[20px] font-medium"
                   style={{
                     left: PAD + i * (DAY_W + DAY_GAP),
                     width: DAY_W,
-                    top: 16,
+                    top: 15,
                   }}
                 >
                   {d}
@@ -273,7 +298,7 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
               ))}
 
               {WEEK.map(([day, start, length, course], i) => {
-                const tone = courseTone(course);
+                const tone = slateTone(course);
                 return (
                   <span
                     key={i}
@@ -288,40 +313,31 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
               })}
 
               {w === EXTRA.week && <ExtraClass />}
-            </div>
+            </Card>
           </div>
         ))}
       </div>
 
-      {/* The label hangs from the extra class, under week three. */}
-      <div className="relative" style={{ height: 112 }}>
+      {/* The callout hangs from the extra class, under week three. */}
+      <div className="relative" style={{ height: 100 }}>
         <span
           className="wk-link absolute w-0.5 rounded-full"
           style={{
             left: EXTRA_X - 1,
             top: -(CARD_H - extraBox.top - extraBox.height) - 2,
             height: CARD_H - extraBox.top - extraBox.height + 40,
-            background: "var(--students)",
+            background: "rgba(200, 48, 95, 0.34)",
           }}
         />
         <div
-          className="wk-chip bg-raised absolute flex items-center gap-4 rounded-full py-3 pr-7 pl-3"
-          style={{
-            top: 38,
-            right: 0,
-            boxShadow:
-              "inset 0 0 0 1.5px color-mix(in srgb, var(--students) 55%, transparent)",
-          }}
+          className="wk-chip bg-raised absolute flex items-center gap-4 rounded-[22px] py-3 pr-7 pl-3"
+          style={{ top: 30, right: 0, boxShadow: CHIP_SHADOW }}
         >
           <span
-            className="flex h-12 w-12 items-center justify-center rounded-full"
-            style={{
-              background:
-                "color-mix(in srgb, var(--students) 18%, transparent)",
-              color: "var(--students)",
-            }}
+            className="wk-chip-icon bg-sunken text-body flex h-12 w-12 items-center justify-center rounded-[12px]"
+            style={{ backgroundColor: "#e7e9ee", color: "#353d4a" }}
           >
-            <Icon name="mail" size={26} stroke={2} />
+            <Icon name="mail" size={26} />
           </span>
           <span className="t-body text-fg whitespace-nowrap">
             Announced by email only
@@ -329,14 +345,11 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
         </div>
       </div>
 
-      <div className="wk-stat mt-10 flex items-center gap-8">
-        <span
-          className="t-h2 text-bad whitespace-nowrap"
-          style={{ fontSize: 72 }}
-        >
+      <div className="wk-stat mt-6 flex items-center gap-7">
+        <span className="font-display text-accent tabular text-[88px] leading-none font-semibold tracking-[-0.04em] whitespace-nowrap">
           <Ph>9 of 14</Ph>
         </span>
-        <span className="t-body text-muted max-w-[18ch] leading-snug">
+        <span className="t-body text-body max-w-[19ch] leading-snug">
           students missed an extra class this term
         </span>
       </div>
@@ -346,7 +359,6 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
 
 /** The extra class, in its slot, with everything its builds need. */
 function ExtraClass() {
-  const tone = courseTone(EXTRA.course);
   return (
     <div
       className="wk-extra absolute z-10"
@@ -354,27 +366,27 @@ function ExtraClass() {
     >
       <span
         className="wk-ripple absolute inset-0 rounded-[9px]"
-        style={{ boxShadow: "0 0 0 2px var(--students)", visibility: "hidden" }}
+        style={{ boxShadow: `0 0 0 2px ${ACCENT}`, visibility: "hidden" }}
       />
       <div className="wk-extra-body absolute inset-0">
         <span
           className="wk-extra-fill absolute inset-0 rounded-[9px]"
           style={{
-            background: tone.fill,
-            boxShadow: `inset 0 0 0 1.5px ${tone.ring}, 0 0 0 3px var(--bg-card), 0 0 0 5px var(--students), 0 0 26px 4px color-mix(in srgb, var(--students) 55%, transparent)`,
+            background: "#f3d6e0",
+            boxShadow: `inset 0 0 0 1.5px ${ACCENT}, 0 0 0 3px #fbfbfd, 0 0 0 5px ${ACCENT}, 0 8px 18px -8px rgba(16, 24, 40, 0.22)`,
           }}
         />
         <span
           className="wk-missed absolute inset-0 flex items-center justify-center rounded-[9px]"
           style={{
-            background: "rgba(255,93,93,0.26)",
-            outline: "2px dashed var(--bad)",
+            background: "rgba(200, 48, 95, 0.12)",
+            outline: `2px dashed ${ACCENT}`,
             outlineOffset: -2,
             visibility: "hidden",
           }}
         >
-          <span className="wk-cross text-bad flex">
-            <Icon name="x" size={28} stroke={3.2} />
+          <span className="wk-cross text-accent flex">
+            <Icon name="x" size={26} weight="bold" />
           </span>
         </span>
       </div>
@@ -383,13 +395,13 @@ function ExtraClass() {
         style={{
           right: -16,
           top: -16,
-          background: "var(--students)",
-          color: "#fff",
-          boxShadow: "0 0 0 3px var(--bg-card)",
+          background: ACCENT,
+          color: "#ffffff",
+          boxShadow: "0 0 0 3px #fbfbfd",
           visibility: "hidden",
         }}
       >
-        <Icon name="mail" size={17} stroke={2.2} />
+        <Icon name="mail" size={17} weight="bold" />
       </span>
     </div>
   );

@@ -18,6 +18,7 @@ import {
   GUTTER,
   hourLabel,
   HourGrid,
+  rangeLabel,
   Notice,
   PHONE_HEIGHT,
   SCREEN_H,
@@ -48,10 +49,10 @@ const TIME = "8:12";
  * A change finds the student, instead of the student finding the change.
  *
  * Builds (steps = 3):
- *   0 — lock screen, a Plannr notification: "Class moved — Design Thinking is now in Room 304".
- *   1 — open it: on the schedule, the class block moves from its old slot to the new one,
- *       and the change is already in their Google Calendar.
- *   2 — an extra class appears too, marked new — sent only to the division it is for.
+ *   0: lock screen, a Plannr notification: "Class moved. Design Thinking is now in Room 304".
+ *   1: open it: on the schedule, the class block moves from its old slot to the new one,
+ *      and the change is already in their Google Calendar.
+ *   2: an extra class appears too, marked new, sent only to the division it is for.
  *
  * The notification drops in by itself once the slide is on screen (at once in
  * the presenter's preview). The lock screen is a layer over the app: opening
@@ -119,9 +120,7 @@ export function PhoneChangeAlert({
     gsap.set(".ca-banner", { y: -170 });
     // The frame's home indicator: white on the lock screen, dark once the
     // light app is up. PhoneFrame draws it as the screen's last child.
-    const indicator =
-      ref.current?.querySelector("[data-enter]")?.parentElement
-        ?.lastElementChild;
+    const indicator = ref.current?.querySelector(".phone-home-indicator");
 
     // 1 — tap the notification; the lock screen slides away, the app rises,
     // and Design Thinking lifts out of 12:30 and travels up to 10am.
@@ -164,7 +163,7 @@ export function PhoneChangeAlert({
       ".ca-dt",
       {
         scale: 1.04,
-        boxShadow: `inset 0 0 0 1px ${DT.ring}, 0 18px 34px rgba(13,17,23,0.28)`,
+        boxShadow: `inset 0 0 0 1px ${DT.ring}, 0 18px 34px -8px rgba(16,24,40,0.3)`,
         duration: 0.25,
         ease: "power2.out",
       },
@@ -182,7 +181,7 @@ export function PhoneChangeAlert({
       ".ca-dt",
       {
         scale: 1,
-        boxShadow: `inset 0 0 0 1px ${DT.ring}, 0 0 0 0 rgba(13,17,23,0)`,
+        boxShadow: `inset 0 0 0 1px ${DT.ring}, 0 0 0 0 rgba(16,24,40,0)`,
         duration: 0.3,
         ease: "power2.inOut",
       },
@@ -246,7 +245,7 @@ export function PhoneChangeAlert({
               style={{ top: 62 }}
             >
               <div>
-                <div className="font-mono text-[12px] tracking-[0.06em] text-[rgba(44,49,53,0.55)] uppercase">
+                <div className="text-[13.5px] font-medium text-[rgba(44,49,53,0.58)]">
                   Tue 11 Aug
                 </div>
                 <div className="font-display text-[30px] leading-tight font-bold tracking-[-0.02em] text-[#0d1117]">
@@ -310,7 +309,7 @@ export function PhoneChangeAlert({
                 border: "1.5px dashed rgba(68,88,121,0.45)",
               }}
             >
-              Was here · {hourLabel(OLD.start)} · {OLD.room}
+              Was here at {hourLabel(OLD.start)} · {OLD.room}
             </div>
 
             {/* Design Thinking, drawn at its new place and started at its old one. */}
@@ -331,18 +330,17 @@ export function PhoneChangeAlert({
               </span>
               <span className="relative mt-[3px] block h-[14px] font-mono text-[11.5px] leading-[14px] text-[rgba(44,49,53,0.72)]">
                 <span className="ca-dt-old absolute inset-0 truncate">
-                  {hourLabel(OLD.start)} – {hourLabel(OLD.start + 1)} ·{" "}
-                  {OLD.room}
+                  {rangeLabel(OLD.start, OLD.start + 1)} · {OLD.room}
                 </span>
                 <span className="ca-dt-new absolute inset-0 truncate">
-                  {hourLabel(NEW.start)} – {hourLabel(NEW.start + 1)} ·{" "}
+                  {rangeLabel(NEW.start, NEW.start + 1)} ·{" "}
                   <b className="font-bold text-[#0d1117]">{NEW.room}</b>
                 </span>
               </span>
               <span className="mt-[3px] block truncate text-[11.5px] leading-[14px] text-[rgba(44,49,53,0.6)]">
                 Prof. Kulkarni
               </span>
-              <BlockTag className="ca-moved">MOVED</BlockTag>
+              <BlockTag className="ca-moved">Moved</BlockTag>
             </div>
 
             {/* The extra lecture, at 4pm. */}
@@ -359,7 +357,7 @@ export function PhoneChangeAlert({
                 boxShadow: `inset 0 0 0 1px ${courseTone("Data Mining").ring}, 0 0 0 2.5px var(--green)`,
               }}
             >
-              <BlockTag bg="var(--green)">NEW</BlockTag>
+              <BlockTag bg="var(--green)">New</BlockTag>
             </DayBlock>
 
             {/* Already in their own calendar. */}
@@ -394,7 +392,7 @@ export function PhoneChangeAlert({
                 style={{
                   background: "rgba(255,255,255,0.97)",
                   boxShadow:
-                    "0 14px 34px rgba(13,17,23,0.24), inset 0 0 0 1px rgba(68,88,121,0.14)",
+                    "0 18px 40px -12px rgba(16,24,40,0.3), inset 0 0 0 1px rgba(68,88,121,0.14)",
                 }}
               />
             </div>
@@ -405,11 +403,13 @@ export function PhoneChangeAlert({
             className="ca-lock absolute inset-0 z-40 overflow-hidden text-white"
             style={{
               background: [
-                "radial-gradient(110% 60% at 15% 0%, rgba(122,46,143,0.9), transparent 62%)",
-                "radial-gradient(90% 55% at 100% 30%, rgba(201,48,108,0.55), transparent 65%)",
-                "radial-gradient(120% 55% at 50% 108%, rgba(242,116,60,0.75), transparent 62%)",
-                "radial-gradient(80% 50% at 0% 85%, rgba(232,69,94,0.5), transparent 65%)",
-                "#0d1117",
+                // The phone's wallpaper, in the brand's colours: bright enough
+                // to sit on a light stage, deep enough for white type.
+                "radial-gradient(120% 60% at 0% 0%, rgba(122,46,143,0.95), transparent 62%)",
+                "radial-gradient(100% 55% at 100% 38%, rgba(201,48,108,0.8), transparent 66%)",
+                "radial-gradient(130% 55% at 50% 112%, rgba(246,167,59,0.9), transparent 62%)",
+                "radial-gradient(90% 50% at 0% 82%, rgba(232,69,94,0.75), transparent 66%)",
+                "linear-gradient(180deg, #4b1f66 0%, #82295f 52%, #b8404c 100%)",
               ].join(", "),
             }}
           >
@@ -457,7 +457,7 @@ export function PhoneChangeAlert({
                 time="now"
                 body={
                   <>
-                    Design Thinking is now in <b>Room 304</b> — and up to{" "}
+                    Design Thinking is now in <b>Room 304</b>, and up to{" "}
                     <b>10am</b> today.
                   </>
                 }
@@ -469,7 +469,7 @@ export function PhoneChangeAlert({
               style={{
                 left: 46,
                 bottom: 50,
-                background: "rgba(13,17,23,0.38)",
+                background: "rgba(13,17,23,0.26)",
               }}
             >
               <Icon name="zap" size={22} stroke={2} />
@@ -479,22 +479,10 @@ export function PhoneChangeAlert({
               style={{
                 right: 46,
                 bottom: 50,
-                background: "rgba(13,17,23,0.38)",
+                background: "rgba(13,17,23,0.26)",
               }}
             >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#fff"
-                strokeWidth="2"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.8l1.6-2.2h6.2L16.7 7h2.8A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
-                <circle cx="12" cy="12.8" r="3.6" />
-              </svg>
+              <Icon name="camera" size={24} color="#ffffff" weight="regular" />
             </span>
           </div>
 

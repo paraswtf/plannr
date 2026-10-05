@@ -30,6 +30,40 @@ export function hourLabel(hour: number): string {
     : `${h12}:${String(m).padStart(2, "0")}${suffix}`;
 }
 
+/**
+ * A class's hours, as the room should read them: "9-10am", "11:15am-12:15pm".
+ * A plain hyphen for the range; the suffix once when both ends share it.
+ */
+export function rangeLabel(start: number, end: number): string {
+  const a = hourLabel(start);
+  const b = hourLabel(end);
+  const sameHalf = start < 12 === end < 12;
+  return sameHalf ? `${a.slice(0, -2)}-${b}` : `${a}-${b}`;
+}
+
+/**
+ * Metadata joined by middle dots, "Design Thinking · Faculty", with the dot
+ * given room: in the proportional face a plain " · " closes up to a speck.
+ * Mono lines keep the plain string.
+ */
+export function Meta({ text }: { text: string }) {
+  const parts = text.split(" · ");
+  return (
+    <span>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && (
+            <span aria-hidden className="mx-[0.4em] opacity-55">
+              ·
+            </span>
+          )}
+          {part}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** Where a day is drawn: its top on the screen, the hours it spans, px per hour. */
 export interface DayFrame {
   top: number;
@@ -82,8 +116,8 @@ export function HourGrid({ frame }: { frame: DayFrame }) {
 }
 
 /**
- * One class on a day, placed by its hours. The app's block — course colour,
- * hairline ring, title then time and room in mono — a touch larger than the
+ * One class on a day, placed by its hours. The app's block (course colour,
+ * hairline ring, title then time and room in mono), a touch larger than the
  * app's own type, so it survives being projected.
  */
 export function DayBlock({
@@ -144,13 +178,11 @@ export function DayBlock({
       <span
         className={`mt-[3px] block truncate font-mono text-[11.5px] leading-[14px] text-[rgba(44,49,53,0.72)] ${timeClassName ?? ""}`}
       >
-        {[`${hourLabel(start)} – ${hourLabel(end)}`, room]
-          .filter(Boolean)
-          .join(" · ")}
+        {[rangeLabel(start, end), room].filter(Boolean).join(" · ")}
       </span>
       {detail && roomy && (
         <span className="mt-[3px] block truncate text-[11.5px] leading-[14px] text-[rgba(44,49,53,0.6)]">
-          {detail}
+          {typeof detail === "string" ? <Meta text={detail} /> : detail}
         </span>
       )}
       {children}
@@ -158,7 +190,7 @@ export function DayBlock({
   );
 }
 
-/** A small capsule label on a block's top-right corner: NEXT, MOVED, NEW, TEST. */
+/** A small label on a block's top-right corner: Next, Moved, New, Test. */
 export function BlockTag({
   children,
   bg = "#0d1117",
@@ -172,7 +204,7 @@ export function BlockTag({
 }) {
   return (
     <span
-      className={`absolute top-[7px] right-[7px] rounded-full px-2 py-[3px] font-mono text-[10px] leading-none font-bold tracking-[0.06em] text-white ${className ?? ""}`}
+      className={`absolute top-[7px] right-[7px] rounded-[7px] px-2 py-[4px] text-[11.5px] leading-none font-semibold text-white ${className ?? ""}`}
       style={{ background: bg, ...style }}
     >
       {children}
@@ -195,9 +227,9 @@ export function Finger({ className }: { className: string }) {
         marginLeft: -27,
         marginTop: -27,
         opacity: 0,
-        background: "rgba(13,17,23,0.24)",
+        background: "rgba(16,24,40,0.22)",
         boxShadow:
-          "inset 0 0 0 2.5px rgba(255,255,255,0.9), 0 8px 22px rgba(13,17,23,0.28)",
+          "inset 0 0 0 2.5px rgba(255,255,255,0.92), 0 8px 22px -6px rgba(16,24,40,0.3)",
       }}
     />
   );
@@ -225,8 +257,8 @@ export function Toast({
       <div
         className="flex items-center gap-2.5 rounded-full py-2.5 pr-5 pl-3 text-[14.5px] font-semibold whitespace-nowrap text-white"
         style={{
-          background: "rgba(13,17,23,0.92)",
-          boxShadow: "0 10px 28px rgba(13,17,23,0.28)",
+          background: "rgba(13,17,23,0.9)",
+          boxShadow: "0 14px 30px -10px rgba(16,24,40,0.38)",
         }}
       >
         {children}
@@ -258,7 +290,7 @@ export function CalendarGlyph({ size = 22 }: { size?: number }) {
 
 /**
  * A Plannr notification, as iOS draws one: MockNotification's look, with
- * type a size up — on these slides the notification is the message.
+ * type a size up: on these slides the notification is the message.
  */
 export function Notice({
   title,
@@ -283,7 +315,7 @@ export function Notice({
       style={{
         background: "rgba(245,246,248,0.9)",
         backdropFilter: "blur(20px)",
-        boxShadow: "0 12px 34px rgba(0,0,0,0.22)",
+        boxShadow: "0 18px 40px -14px rgba(16,24,40,0.34)",
         ...style,
       }}
     >

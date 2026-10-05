@@ -81,7 +81,15 @@ export function ImageSlot({
         </div>
       )}
       {shown && credit && (
-        <span className="t-mono absolute right-3 bottom-3 rounded-md bg-black/55 px-2 py-1 text-[13px] text-white/80">
+        // An attribution, not a label: plain small type on a soft fade at the
+        // image's foot, never a pill.
+        <span
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end px-4 pt-10 pb-3 text-[13px] text-white/85"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(16,20,27,0.42), rgba(16,20,27,0))",
+          }}
+        >
           {credit}
         </span>
       )}

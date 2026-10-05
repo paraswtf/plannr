@@ -4,6 +4,7 @@ import { useRef, type ReactNode } from "react";
 
 import { gsap } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
+import { Bezel } from "~/ui/frames";
 import { ImageSlot } from "~/ui/placeholder";
 
 import {
@@ -27,18 +28,18 @@ export interface QuotePortraitProps {
   step: number;
 }
 
-/** The portrait's width; it bleeds off the left edge and fades into the stage. */
-const PORTRAIT_W = 900;
-/** Pulled off the left edge a little, so the photo's edge dies before the type. */
-const PORTRAIT_SHIFT = -70;
+/** The portrait's plate: a tall frame on the left, the full height of the canvas's middle. */
+const PORTRAIT = { left: 128, top: 124, width: 600, height: 784 } as const;
+/** Where the quote's column starts. */
+const QUOTE_LEFT = 856;
 
 /**
  * A portrait, a quote set large, and what we took from it.
  *
- * Made for a slide without the deck's chrome: the photo runs the full height
- * off the left edge and dissolves into the stage. The quote rises a word at a
- * time as the slide arrives; on the build, it lifts to make room for our
- * reading of it.
+ * Made for a slide without the deck's chrome: the photo stands on the left in
+ * a double bezel, settling into its frame as the slide arrives, its credit in
+ * plain small type at its foot. The quote rises a word at a time; on the
+ * build, it lifts to make room for our reading of it.
  */
 export function QuotePortrait({
   image,
@@ -57,12 +58,12 @@ export function QuotePortrait({
     (tl) => {
       tl.from(
         ".qp-photo",
-        { opacity: 0, duration: 1.3, ease: "power2.out" },
+        { opacity: 0, y: 48, duration: 1.1, ease: "deck.enter" },
         0,
       );
       tl.from(
         ".qp-photo-img",
-        { scale: 1.08, xPercent: -2, duration: 2.6, ease: "power3.out" },
+        { scale: 1.12, yPercent: 2, duration: 2.6, ease: "power3.out" },
         0,
       );
       tl.from(
@@ -106,7 +107,7 @@ export function QuotePortrait({
       tl.to(block, { y: 0, duration: 1, ease: "deck.morph" });
       tl.to(
         ".qp-said",
-        { opacity: 0.6, duration: 0.8, ease: "power2.out" },
+        { opacity: 0.5, duration: 0.8, ease: "power2.out" },
         0.1,
       );
       tl.fromTo(
@@ -138,59 +139,40 @@ export function QuotePortrait({
       data-no-enter
       className="group absolute inset-0 overflow-hidden"
     >
-      {/* The portrait, bleeding off the left edge and fading into the stage. */}
-      <div
-        className="qp-photo absolute inset-y-0 overflow-hidden"
-        style={{ width: PORTRAIT_W, left: PORTRAIT_SHIFT }}
-      >
-        <div className="qp-photo-img absolute inset-0">
-          <ImageSlot
-            src={image?.src}
-            alt={image?.alt}
-            position={image?.position}
-            label={imageLabel ?? "Portrait"}
-            radius={0}
-            className="h-full w-full"
-          />
-        </div>
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(13,17,23,0) 26%, rgba(13,17,23,0.78) 56%, var(--bg) 82%), linear-gradient(0deg, var(--bg) 0%, rgba(13,17,23,0) 26%), linear-gradient(180deg, rgba(13,17,23,0.5) 0%, rgba(13,17,23,0) 18%)",
-          }}
-        />
+      {/* The portrait, in a bezel, settling into its frame. */}
+      <div className="qp-photo absolute" style={PORTRAIT}>
+        <Bezel className="h-full w-full">
+          <div className="qp-photo-img absolute inset-0">
+            <ImageSlot
+              src={image?.src}
+              alt={image?.alt}
+              position={image?.position}
+              label={imageLabel ?? "Portrait"}
+              radius={0}
+              className="h-full w-full"
+            />
+          </div>
+        </Bezel>
+        {image?.credit && (
+          <p className="qp-credit text-faint absolute top-full left-2 mt-4 hidden text-[15px] leading-snug group-has-[.qp-photo_img]:block">
+            {image.credit}
+          </p>
+        )}
       </div>
-
-      {/* A breath of the brand's warmth behind the words. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute"
-        style={{
-          left: 1300,
-          top: 540,
-          width: 1400,
-          height: 1400,
-          transform: "translate(-50%, -50%)",
-          background:
-            "radial-gradient(circle at center, rgba(232,69,94,0.14) 0%, transparent 60%)",
-        }}
-      />
 
       <div
         className="absolute inset-y-0 right-[128px] flex items-center"
-        style={{ left: 840 }}
+        style={{ left: QUOTE_LEFT }}
       >
         <div className="qp-block relative flex w-full flex-col">
           <div className="qp-said flex flex-col">
             <span
               aria-hidden
-              className="qp-mark grad-text font-display block self-start leading-none font-bold"
+              className="qp-mark font-display text-faint/55 block self-start leading-none font-semibold"
               style={{
-                fontSize: 220,
-                height: 120,
-                marginLeft: -8,
+                fontSize: 180,
+                height: 96,
+                marginLeft: -6,
                 letterSpacing: "-0.04em",
               }}
             >
@@ -205,13 +187,20 @@ export function QuotePortrait({
           </div>
           <div className="qp-attr mt-12 flex flex-col">
             <span
-              className="qp-rule mb-7 block h-[3px] w-[64px] origin-left rounded-full"
-              style={{ background: "var(--grad-brand-h)" }}
+              className="qp-rule bg-fg mb-7 block h-[2px] w-[48px] origin-left rounded-full"
+              aria-hidden
             />
-            <p className="t-h3 font-semibold">{author}</p>
-            {role && <p className="t-small text-muted mt-2">{role}</p>}
-            {source && (
-              <p className="t-mono text-faint mt-4 text-[22px] tracking-[0.04em]">
+            <p className="font-display text-fg text-[30px] leading-tight font-semibold tracking-[-0.015em]">
+              {author}
+            </p>
+            {(role ?? source) && (
+              <p className="t-label text-muted mt-3">
+                {role}
+                {role && source && (
+                  <span aria-hidden className="text-faint mx-2.5">
+                    ·
+                  </span>
+                )}
                 {source}
               </p>
             )}
@@ -232,12 +221,6 @@ export function QuotePortrait({
           )}
         </div>
       </div>
-
-      {image?.credit && (
-        <p className="qp-credit t-mono absolute bottom-[34px] left-[44px] hidden text-[15px] text-white/45 group-has-[.qp-photo_img]:block">
-          {image.credit}
-        </p>
-      )}
     </div>
   );
 }

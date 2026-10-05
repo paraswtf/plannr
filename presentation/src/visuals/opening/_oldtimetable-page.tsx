@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 /**
  * The page inside OldTimetable's browser: an MRBS day view, drawn the way the
  * college's install draws it — a navy banner, a row of links, and a rooms-by-
@@ -6,7 +8,8 @@
  *
  * Classes carry the hooks OldTimetable animates:
  *   .ot-band, .ot-nav, .ot-thead, .ot-rows, .ot-bars, .ot-progress,
- *   .ot-status (with .ot-status-wait / .ot-status-data), .ot-dim,
+ *   .ot-status (with .ot-status-wait / .ot-status-data), .ot-dim (with its
+ *   .ot-hole-<id> openings, see HOLES),
  *   .ot-done (the "everything loaded" bubble the step-1 callout points at)
  */
 
@@ -164,9 +167,32 @@ function Link({ children, bold }: { children: string; bold?: boolean }) {
   );
 }
 
+/**
+ * The parts of the page a callout rings, in page pixels. Under the callouts
+ * the page is washed back, except through these, which OldTimetable opens
+ * (`.ot-hole-<callout id>`) as each callout lands.
+ */
+export const HOLES = [
+  {
+    id: "one-page",
+    x: PAGE.timeW,
+    y: PAGE.gridTop,
+    w: PAGE.width - PAGE.bar - PAGE.timeW,
+    h: PAGE.headH,
+  },
+  {
+    id: "tiny-type",
+    x: PAGE.timeW + PINNED.col * PAGE.colW,
+    y: PAGE.gridTop + PAGE.headH + PINNED.row * PAGE.rowH,
+    w: PAGE.colW,
+    h: PINNED.span * PAGE.rowH,
+  },
+] as const;
+
 export function MrbsPage() {
   const { width, height, bandH, gridTop, headH, rowH, timeW, colW, rows, bar } =
     PAGE;
+  const maskId = `ot-wash-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const viewW = width - bar;
   const viewH = height - bar;
   return (
@@ -429,11 +455,45 @@ export function MrbsPage() {
         </div>
       </div>
 
-      {/* Dims the page under the callouts */}
-      <div
+      {/*
+        Washes the page back towards the stage under the callouts, with a
+        hole for each thing a callout rings, so what it points at stays in
+        full colour while the rest of the page steps back.
+      */}
+      <svg
         className="ot-dim pointer-events-none absolute inset-0"
-        style={{ background: "rgba(13,17,23,0.46)", opacity: 0 }}
-      />
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ opacity: 0 }}
+        aria-hidden
+      >
+        <defs>
+          <mask id={maskId} maskUnits="userSpaceOnUse">
+            <rect width={width} height={height} fill="#fff" />
+            {HOLES.map((h) => (
+              <rect
+                key={h.id}
+                className={`ot-hole-${h.id}`}
+                x={h.x}
+                y={h.y}
+                width={h.w}
+                height={h.h}
+                rx={4}
+                fill="#000"
+                style={{ opacity: 0 }}
+              />
+            ))}
+          </mask>
+        </defs>
+        <rect
+          width={width}
+          height={height}
+          fill="#f2f3f6"
+          fillOpacity={0.66}
+          mask={`url(#${maskId})`}
+        />
+      </svg>
 
       {/* The page's own scrollbars: short thumbs, a very big page */}
       <div

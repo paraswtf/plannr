@@ -90,7 +90,7 @@ export function Touch({ className }: { className: string }) {
         marginTop: -23,
         background: "rgba(68,88,121,0.38)",
         boxShadow:
-          "inset 0 0 0 2.5px rgba(255,255,255,0.9), 0 6px 18px rgba(13,17,23,0.28)",
+          "inset 0 0 0 2.5px rgba(255,255,255,0.9), 0 6px 18px -4px rgba(16,24,40,0.3)",
         visibility: "hidden",
       }}
     />
@@ -195,7 +195,7 @@ export function DesktopPage() {
         className="flex h-[56px] items-center justify-between px-5"
         style={{ background: "#2b4a6f", color: "#fff" }}
       >
-        <span className="text-[22px] font-bold">SICSR — Timetable</span>
+        <span className="text-[22px] font-bold">SICSR Timetable</span>
         <span className="flex gap-5 text-[14px] underline opacity-90">
           <span>Day</span>
           <span>Week</span>
@@ -298,7 +298,7 @@ export function DesktopPage() {
           top: target.y - ROW_H / 2 - 4,
           width: ROOM_W + 8,
           height: ROW_H + 8,
-          boxShadow: "0 0 0 4px #ff5d73, 0 0 24px 6px rgba(255,93,115,0.45)",
+          boxShadow: "0 0 0 4px #c8305f, 0 0 0 12px rgba(200,48,95,0.16)",
           visibility: "hidden",
         }}
       />
@@ -371,8 +371,8 @@ export function BrowserApp() {
             a<span className="text-[19px]">A</span>
           </span>
           <span className="flex items-center gap-1.5 text-[15px] text-[#0d1117]">
-            <span className="text-[rgba(44,49,53,0.55)]">Not Secure —</span>{" "}
-            time-table.sicsr.ac.in
+            <span className="text-[rgba(44,49,53,0.55)]">Not Secure</span>
+            <span>time-table.sicsr.ac.in</span>
           </span>
           <Icon name="rotate" size={18} stroke={2} color="#0d1117" />
           <span className="op-progress absolute inset-x-0 bottom-0 h-[3px]">
@@ -425,7 +425,7 @@ const MAILS = [
     initial: "A",
     colour: "#4c7bd9",
     at: "Sep 21",
-    subject: "Revised timetable — Semester V",
+    subject: "Revised timetable: Semester V",
     snippet: "The timetable has been revised with effect from Monday…",
     unread: false,
   },
@@ -474,8 +474,8 @@ export function MailApp() {
               <span
                 className="op-hit-bg absolute inset-x-2 inset-y-0.5 rounded-[16px]"
                 style={{
-                  background: "#fff3f5",
-                  boxShadow: "inset 0 0 0 2px #ff5d73",
+                  background: "rgba(200,48,95,0.06)",
+                  boxShadow: "inset 0 0 0 2px #c8305f",
                   visibility: "hidden",
                 }}
               />

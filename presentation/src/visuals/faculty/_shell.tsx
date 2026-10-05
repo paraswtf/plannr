@@ -16,11 +16,11 @@ import { Icon, type IconName } from "~/ui/icon";
 /**
  * What the three faculty demos share: one browser window, the same size and
  * in the same place on all three slides, so it holds still while the page
- * inside it changes — and the Plannr web app's top bar inside it.
+ * inside it changes, and the Plannr web app's top bar inside it.
  *
  * The window fills the 960 × 844 box. Everything in a page is laid out in the
  * page's own pixels (PAGE) and drawn ZOOM times larger, like a browser zoomed
- * to 120% — so app-sized text still reads from the back of the room.
+ * to 120%, so app-sized text still reads from the back of the room.
  */
 
 export const FRAME = { width: 960, height: 760 } as const;
@@ -59,7 +59,7 @@ export type GroupId = keyof typeof GROUP_TONES;
 export const CARD: CSSProperties = {
   background: "#ffffff",
   borderRadius: 16,
-  boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 2px 10px rgba(13,17,23,0.05)`,
+  boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 1px 1px rgba(16,24,40,0.03), 0 4px 14px -6px rgba(16,24,40,0.08)`,
 };
 
 const TABS: { label: string; icon: IconName }[] = [
@@ -138,10 +138,7 @@ export function FacultyBrowser({
           <span className="ml-auto flex items-center gap-2.5">
             <span className="flex flex-col items-end leading-tight">
               <span className="text-[14px] font-semibold">{user}</span>
-              <span
-                className="font-mono text-[11px]"
-                style={{ color: INK.muted }}
-              >
+              <span className="text-[12px]" style={{ color: INK.muted }}>
                 {role}
               </span>
             </span>
@@ -232,7 +229,7 @@ export function Cursor({
           stroke="#0d1117"
           strokeWidth="1.6"
           strokeLinejoin="round"
-          style={{ filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.3))" }}
+          style={{ filter: "drop-shadow(0 3px 5px rgba(16,24,40,0.28))" }}
         />
       </svg>
     </div>
@@ -270,7 +267,10 @@ export function click(
   tl.to(cursor, { scale: 1, duration: 0.16, ease: "power2.out" }, "<0.09");
 }
 
-/** The app's toast: a dark pill at the bottom of the page. */
+/**
+ * The app's toast, as Plannr's own toaster draws it: a white card with a
+ * hairline and a soft shadow, rising from the bottom of the page.
+ */
 export function Toast({
   icon = "checkCircle",
   children,
@@ -285,16 +285,22 @@ export function Toast({
   return (
     <div
       data-toast
-      className={`absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full py-3 pr-6 pl-4 text-[18px] font-semibold whitespace-nowrap text-white ${className ?? ""}`}
+      className={`absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-[14px] py-3 pr-5 pl-3.5 text-[17px] font-semibold whitespace-nowrap ${className ?? ""}`}
       style={{
         bottom: 18,
         transform: "translateY(110px)",
-        background: "#1b222c",
-        boxShadow: "0 14px 34px rgba(13,17,23,0.32)",
+        background: "#ffffff",
+        color: INK.title,
+        boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 2px 4px rgba(16,24,40,0.04), 0 18px 40px -14px rgba(16,24,40,0.28)`,
         ...style,
       }}
     >
-      <Icon name={icon} size={22} stroke={2.2} color="#7cc46a" />
+      <span
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
+        style={{ background: "rgba(78,125,58,0.13)", color: INK.green }}
+      >
+        <Icon name={icon} size={19} stroke={2.2} />
+      </span>
       {children}
     </div>
   );

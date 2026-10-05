@@ -2,11 +2,12 @@
 
 import { useRef, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import type { Research } from "~/content/types";
 import type { StakeholderId } from "~/deck/types";
 import { useSteps } from "~/deck/useSteps";
+import { Bezel } from "~/ui/frames";
 import { SlideBody, SlideHeader } from "~/ui/layout";
+import { Chip } from "~/ui/surfaces";
 
 import { countUp, useArrival } from "./_research-motion";
 
@@ -22,26 +23,26 @@ export interface InterviewSummaryProps {
 }
 
 /** How much the numbers shrink to make room for the quotes. */
-const MAX_SHRINK = 0.72;
+const MAX_SHRINK = 0.7;
 
 /**
  * Who we spoke to, how, and three things they said.
  *
- * On arrival the numbers count up in the stakeholder's colour (a number in a
- * <Ph> counts too; anything that is not a number just rises in) and the
- * methods follow as chips, all centred in the space. On the build the block
- * travels up out of the way and the three quotes rise in beneath it.
+ * On arrival the numbers count up in ink, each over a hairline that draws
+ * across (a number in a <Ph> counts too; anything that is not a number just
+ * rises in), and the methods follow as chips, all centred in the space. On
+ * the build the block travels up out of the way and the quotes rise in
+ * beneath it: the first one leads, large, in a bezel; the other two stand
+ * beside it as quieter lines.
  */
 export function InterviewSummary({
-  stakeholder,
-  eyebrow,
   title,
   research,
   step,
   active = true,
 }: InterviewSummaryProps) {
-  const color = STAKEHOLDERS[stakeholder].color;
   const ref = useRef<HTMLDivElement>(null);
+  const [lead, ...rest] = research.quotes;
 
   useArrival(ref, { active, step }, (tl) => {
     const root = ref.current;
@@ -50,11 +51,21 @@ export function InterviewSummary({
     root.querySelectorAll(".is-stat").forEach((stat, i) => {
       const at = 0.3 + i * 0.14;
       tl.from(
-        stat.querySelector(".is-num"),
-        { y: 40, opacity: 0, duration: 0.8, ease: "deck.enter" },
-        at,
+        stat.querySelector(".is-rule"),
+        {
+          scaleX: 0,
+          duration: 1.1,
+          ease: "deck.enter",
+          transformOrigin: "0% 50%",
+        },
+        at - 0.1,
       );
       const num = stat.querySelector(".is-num");
+      tl.from(
+        num,
+        { y: 48, opacity: 0, duration: 0.85, ease: "deck.enter" },
+        at,
+      );
       const restore =
         num && countUp(tl, num, { duration: 1.5, ease: "power3.out" }, at);
       if (restore) restores.push(restore);
@@ -69,9 +80,8 @@ export function InterviewSummary({
       {
         y: 18,
         opacity: 0,
-        scale: 0.94,
         duration: 0.6,
-        ease: "back.out(1.6)",
+        ease: "deck.enter",
         stagger: 0.08,
       },
       0.85,
@@ -100,96 +110,105 @@ export function InterviewSummary({
       {
         y: 0,
         scale: shrink,
-        duration: 0.95,
-        ease: "power3.inOut",
+        duration: 1,
+        ease: "deck.morph",
         transformOrigin: "0% 0%",
       },
       0,
     );
-    const cards = quotes.querySelectorAll(".is-quote");
     tl.from(
-      cards,
-      { y: 140, opacity: 0, duration: 0.95, ease: "deck.enter", stagger: 0.12 },
+      quotes.querySelector(".is-lead"),
+      { y: 160, opacity: 0, duration: 1, ease: "deck.enter" },
       0.5,
     );
     tl.from(
-      quotes.querySelectorAll(".is-mark"),
+      quotes.querySelectorAll(".is-quote"),
+      { y: 120, opacity: 0, duration: 0.95, ease: "deck.enter", stagger: 0.12 },
+      0.66,
+    );
+    tl.from(
+      quotes.querySelector(".is-mark"),
       {
-        scale: 0.3,
+        y: 24,
+        scale: 0.5,
         opacity: 0,
-        duration: 0.7,
-        ease: "back.out(2)",
-        stagger: 0.12,
-        transformOrigin: "0% 70%",
+        duration: 0.75,
+        ease: "back.out(1.8)",
+        transformOrigin: "0% 100%",
       },
-      0.75,
+      0.8,
     );
     mark();
   });
 
   return (
     <SlideBody>
-      <SlideHeader
-        eyebrow={eyebrow}
-        eyebrowColor={color}
-        title={title}
-        titleClassName="max-w-none!"
-      />
+      <SlideHeader title={title} titleClassName="max-w-none!" />
       <div ref={ref} className="relative mt-14 min-h-0 flex-1">
         <div
           className="is-block absolute inset-x-0 top-0"
           style={{ transformOrigin: "0% 0%" }}
         >
-          <div className="flex gap-24">
+          <div className="flex gap-20">
             {research.stats.map((s, i) => (
-              <div key={i} className="is-stat flex min-w-75 flex-col">
+              <div key={i} className="is-stat flex w-[360px] flex-col">
+                <span className="is-rule bg-line-strong block h-px w-full" />
                 <span
-                  className="is-num t-hero inline-block self-start tabular-nums"
-                  style={{ color, fontSize: 160, lineHeight: 0.9 }}
+                  className="is-num font-display text-fg mt-7 inline-block self-start font-semibold tabular-nums"
+                  style={{
+                    fontSize: 156,
+                    lineHeight: 0.9,
+                    letterSpacing: "-0.05em",
+                  }}
                 >
                   {s.value}
                 </span>
-                <span className="is-label t-body text-muted mt-4 inline-block">
+                <span className="is-label t-body text-muted mt-5 inline-block">
                   {s.label}
                 </span>
               </div>
             ))}
           </div>
-          <div className="mt-14 flex flex-wrap gap-3.5">
+          <div className="mt-14 flex flex-wrap gap-3">
             {research.methods.map((m, i) => (
-              <span
-                key={i}
-                className="is-chip bg-raised ring-hair inline-flex items-center gap-3 rounded-full py-3 pr-6 pl-5 text-[24px] leading-none"
-              >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: color }}
-                />
-                <span className="text-fg/85">{m}</span>
-              </span>
+              <Chip key={i} size={24} className="is-chip">
+                {m}
+              </Chip>
             ))}
           </div>
         </div>
 
-        <div className="is-quotes absolute inset-x-0 bottom-0 grid grid-cols-3 gap-7">
-          {research.quotes.map((q, i) => (
-            <figure
-              key={i}
-              className="is-quote bg-card ring-hair relative flex flex-col rounded-[28px] px-10 pt-9 pb-9"
-            >
-              <QuoteMark color={color} />
-              <blockquote className="mt-6 text-[30px] leading-[1.36] tracking-[-0.005em] text-pretty">
-                {q.text}
-              </blockquote>
-              <figcaption className="text-muted mt-auto flex items-center gap-3 pt-7 text-[24px] leading-tight">
-                <span
-                  className="h-0.5 w-6 shrink-0 rounded-full"
-                  style={{ background: color }}
-                />
-                {q.who}
-              </figcaption>
-            </figure>
-          ))}
+        <div className="is-quotes absolute inset-x-0 bottom-0 flex items-stretch gap-16">
+          {lead && (
+            <Bezel className="is-lead w-[920px] shrink-0">
+              <figure className="flex h-full flex-col px-12 pt-11 pb-10">
+                <QuoteMark />
+                <blockquote className="font-display text-fg mt-7 text-[40px] leading-[1.24] font-medium tracking-[-0.02em] text-pretty">
+                  {lead.text}
+                </blockquote>
+                <figcaption className="t-small text-muted mt-auto pt-8">
+                  {lead.who}
+                </figcaption>
+              </figure>
+            </Bezel>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col justify-end gap-10 pb-2">
+            {rest.map((q, i) => (
+              <figure
+                key={i}
+                className="is-quote border-line-strong flex flex-col border-t pt-7"
+              >
+                <blockquote className="text-body text-[28px] leading-[1.38] text-pretty">
+                  <span className="text-faint">&ldquo;</span>
+                  {q.text}
+                  <span className="text-faint">&rdquo;</span>
+                </blockquote>
+                <figcaption className="t-small text-muted mt-4">
+                  {q.who}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       </div>
     </SlideBody>
@@ -197,15 +216,15 @@ export function InterviewSummary({
 }
 
 /** A heavy opening quote mark, drawn so it reads as one in any font. */
-function QuoteMark({ color }: { color: string }) {
+function QuoteMark() {
   return (
     <svg
       aria-hidden
-      className="is-mark block"
-      width={64}
-      height={50}
+      className="is-mark text-accent block"
+      width={52}
+      height={41}
       viewBox="0 0 32 25"
-      fill={color}
+      fill="currentColor"
     >
       <path d="M0 25V15.2C0 7.6 4.1 2.4 11.9 0l1.5 3.6C9.1 5.3 7 8 6.8 11.6h6.1V25H0Z" />
       <path d="M18.6 25V15.2C18.6 7.6 22.7 2.4 30.5 0L32 3.6c-4.3 1.7-6.4 4.4-6.6 8h6.1V25H18.6Z" />

@@ -28,7 +28,6 @@ export const approach: SectionDef = {
       ],
       render: ({ step }) => (
         <NumberedPoints
-          eyebrow="Our approach"
           title="How we did the research."
           points={[
             {
@@ -43,7 +42,7 @@ export const approach: SectionDef = {
             },
             {
               title: "Their day, not our app",
-              body: "We asked how they live — never what they'd like us to build.",
+              body: "We asked how they live, never what they'd like us to build.",
               icon: "message",
             },
             {
@@ -66,7 +65,6 @@ export const approach: SectionDef = {
       ],
       render: ({ step }) => (
         <StakeholderMap
-          eyebrow="Who we studied"
           title={
             <>
               Four people use the timetable. <Grad>Not one.</Grad>
@@ -87,10 +85,9 @@ export const approach: SectionDef = {
       ],
       render: ({ step }) => (
         <QuestionsBoard
-          eyebrow="What we asked"
           title={
             <>
-              We asked about their day — <Grad>not about the app.</Grad>
+              We asked about their day, <Grad>not about the app.</Grad>
             </>
           }
           asked={[
@@ -148,10 +145,9 @@ export const approach: SectionDef = {
         "With that said — here's Sonal, to take you through everything we learned from students.",
       render: ({ step }) => (
         <StakeholderMap
-          eyebrow="First up"
           title="The people who read it most."
           highlight="students"
-          caption="Over to Sonal — students."
+          caption="Over to Sonal, for students."
           step={step}
         />
       ),

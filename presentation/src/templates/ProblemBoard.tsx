@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import type { Problem } from "~/content/types";
 import type { StakeholderId } from "~/deck/types";
 import { SlideBody, SlideHeader } from "~/ui/layout";
@@ -15,8 +14,20 @@ export interface ProblemBoardProps {
   step: number;
 }
 
-/** Warm paper, a few shades of it, so the wall does not look printed. */
-const PAPER = ["#ffe08c", "#ffd27e", "#ffe6a6", "#ffcf96"] as const;
+/**
+ * Pale butter paper, a few shades of it so the wall does not look printed.
+ * Kept soft and a little cool so it sits on the slate-grey stage rather than
+ * glowing against it.
+ */
+const PAPER = ["#fbeeb4", "#f8e7a3", "#fcf1c3", "#f6e8ad"] as const;
+/** Ink on paper: the stage's ink, a touch warmer. */
+const PAPER_INK = "#23242a";
+/**
+ * Lifted off the wall: a contact shadow, a long soft fall tinted with the
+ * stage's slate (never black), and a faint curl at the foot of the paper.
+ */
+const PAPER_SHADOW =
+  "0 1px 1px rgba(16, 24, 40, 0.06), 0 12px 22px -12px rgba(16, 24, 40, 0.22), 0 30px 50px -30px rgba(16, 24, 40, 0.24), inset 0 -16px 22px -18px rgba(110, 90, 30, 0.2)";
 /** Hand-placed, not random: the same wall every time the slide is shown. */
 const TILT = [-2.4, 1.6, -0.9, 2.2, 1.3, -1.9, 2.6, -1.3, 0.8, -2.1] as const;
 const DROP = [0, 18, -4, 12, -10, 8, -16, 6, 14, -8] as const;
@@ -24,9 +35,14 @@ const TAPE_TILT = [-4, 3, 6, -2, -6, 4, -3, 5, -5, 2] as const;
 
 /** The size every note shares, in canvas px. */
 export const NOTE = { w: 372, h: 236, gap: 52 } as const;
+/**
+ * A wall of six or fewer goes three to a row, with larger notes, so it still
+ * spans the content width rather than leaving a third of the slide empty.
+ */
+const NOTE_LARGE = { w: 488, h: 262, gap: 76 } as const;
 
 /**
- * Everything people told us, as notes on a wall — unsorted on purpose.
+ * Everything people told us, as notes on a wall, unsorted on purpose.
  *
  * Each note carries flip id `${stakeholder}-problem-${id}`: the next slide,
  * ProblemRanking, turns the same notes into ranked rows. The note's tilt is
@@ -38,19 +54,19 @@ export function ProblemBoard({
   title,
   problems,
 }: ProblemBoardProps) {
-  const color = STAKEHOLDERS[stakeholder].color;
   // Four to a row reads as a wall; six or fewer sit better three to a row.
   const perRow = problems.length <= 6 ? 3 : 4;
+  const note = perRow === 3 ? NOTE_LARGE : NOTE;
   return (
     <SlideBody>
-      <SlideHeader eyebrow={eyebrow} eyebrowColor={color} title={title} />
-      <div className="flex min-h-0 flex-1 items-center justify-center pt-6">
+      <SlideHeader eyebrow={eyebrow} title={title} />
+      <div className="flex min-h-0 flex-1 items-center pt-6">
         <div
-          className="flex flex-wrap justify-center"
+          className="flex flex-wrap"
           style={{
-            columnGap: NOTE.gap,
-            rowGap: NOTE.gap + 8,
-            width: perRow * NOTE.w + (perRow - 1) * NOTE.gap,
+            columnGap: note.gap,
+            rowGap: note.gap + 8,
+            width: perRow * note.w + (perRow - 1) * note.gap,
           }}
         >
           {problems.map((p, i) => (
@@ -59,15 +75,14 @@ export function ProblemBoard({
               data-flip-id={`${stakeholder}-problem-${p.id}`}
               className="relative flex shrink-0 flex-col justify-center"
               style={{
-                width: NOTE.w,
-                height: NOTE.h,
+                width: note.w,
+                height: note.h,
                 marginTop: DROP[i % DROP.length],
                 padding: "34px 34px 30px",
-                borderRadius: 6,
+                borderRadius: 4,
                 background: PAPER[i % PAPER.length],
-                color: "#2a2210",
-                boxShadow:
-                  "0 26px 44px -18px rgba(0,0,0,0.7), 0 3px 8px rgba(0,0,0,0.28), inset 0 -10px 18px -12px rgba(120,80,0,0.28)",
+                color: PAPER_INK,
+                boxShadow: PAPER_SHADOW,
                 transform: `rotate(${TILT[i % TILT.length]}deg)`,
               }}
             >
@@ -79,8 +94,9 @@ export function ProblemBoard({
                 style={{
                   marginLeft: -62,
                   transform: `rotate(${TAPE_TILT[i % TAPE_TILT.length]}deg)`,
-                  background: "rgba(255, 255, 255, 0.34)",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
+                  background: "rgba(255, 255, 255, 0.58)",
+                  boxShadow:
+                    "inset 0 0 0 1px rgba(16, 24, 40, 0.05), 0 1px 2px rgba(16, 24, 40, 0.08)",
                   backdropFilter: "blur(1px)",
                 }}
               />

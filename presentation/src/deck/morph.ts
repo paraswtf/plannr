@@ -56,6 +56,8 @@ interface RunMorph {
   to: HTMLElement;
   /** Other places a partner may live, such as the deck's top bar. */
   extraScopes: Element[];
+  /** Reduced motion: nothing travels, the slides just cross-fade, quickly. */
+  dissolve?: boolean;
   onComplete: () => void;
 }
 
@@ -65,6 +67,7 @@ export function runMorph({
   from,
   to,
   extraScopes,
+  dissolve = false,
   onComplete,
 }: RunMorph): gsap.core.Timeline {
   const lookup = (capture?.state.idLookup ?? {}) as Record<
@@ -96,6 +99,12 @@ export function runMorph({
   gsap.set(to, { autoAlpha: 1, pointerEvents: "auto" });
   gsap.set(from, { pointerEvents: "none" });
   if (replaced.length > 0) gsap.set(replaced, { visibility: "hidden" });
+
+  if (dissolve) {
+    tl.to(from, { autoAlpha: 0, duration: 0.25, ease: "power1.out" }, 0);
+    tl.from(to, { autoAlpha: 0, duration: 0.3, ease: "power1.out" }, 0);
+    return tl;
+  }
 
   if (capture && travellers.length > 0) {
     tl.add(

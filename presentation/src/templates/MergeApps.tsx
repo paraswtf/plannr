@@ -5,9 +5,9 @@ import { useId, useRef, type ReactNode } from "react";
 import { gsap } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
 import type { IconName } from "~/ui/icon";
-import { Eyebrow, Glow, SAFE } from "~/ui/layout";
+import { SAFE } from "~/ui/layout";
 
-import { useEntrance } from "./_closing-motion";
+import { ACCENT, useEntrance } from "./_closing-motion";
 
 export interface MergeAppsProps {
   eyebrow?: ReactNode;
@@ -78,11 +78,15 @@ const GLYPH = {
   cap: "M2 74L84 40L166 74L128 89.76V132C128 146 108 156 84 156C60 156 40 146 40 132V89.76Z",
 };
 
-/** Where each glyph starts, and what it looks like as an app. */
-const LOOK: Record<Glyph, { tint: string; stops: [string, string] }> = {
-  timetable: { tint: "#6d8fd3", stops: ["#7c9cdc", "#4a68a6"] },
-  moodle: { tint: "#f8a03a", stops: ["#ffc064", "#f5861d"] },
-  email: { tint: "#ff6b81", stops: ["#ff8293", "#e2405b"] },
+/**
+ * What each glyph looks like as an app. The three apps people juggle today
+ * are drawn in greys, three steps of the stage's slate, so the only colour
+ * in the picture is the one they become: the Plannr mark.
+ */
+const LOOK: Record<Glyph, { stops: [string, string] }> = {
+  timetable: { stops: ["#7c8596", "#4f5868"] },
+  moodle: { stops: ["#a4abb8", "#7a8393"] },
+  email: { stops: ["#8f97a6", "#626b7b"] },
 };
 
 function glyphFor(icon: IconName, index: number): Glyph {
@@ -96,7 +100,7 @@ function glyphFor(icon: IconName, index: number): Glyph {
 const LOCAL = { cx: 84, cy: 97 };
 const TILE = 260;
 const TILE_Y = 572;
-const SPREAD = 470;
+const SPREAD = 390;
 const GLYPH_SCALE = 0.86;
 const MARK_H = 330;
 const MARK_SCALE = MARK_H / 194;
@@ -121,18 +125,13 @@ const transformOf = (t: { x: number; y: number; s: number }) =>
  *
  * Build 0 sets the three apps out as tiles. Build 1 lets the tiles go: the
  * three glyphs travel to the middle, and as they travel each one morphs
- * (MorphSVG) into its piece of the mark — the grid and its class become the
- * mark's base and stem, the envelope its top bar, the cap its bright block —
- * changing into the mark's own gradients on the way. The pieces lock
- * together with a pulse, and the tagline rises underneath.
+ * (MorphSVG) into its piece of the mark (the grid and its class become the
+ * mark's base and stem, the envelope its top bar, the cap its bright block),
+ * changing from grey into the mark's own gradients on the way. The pieces
+ * lock together with a pulse of one accent ring, and the tagline rises
+ * underneath.
  */
-export function MergeApps({
-  eyebrow,
-  title,
-  apps,
-  tagline,
-  step,
-}: MergeAppsProps) {
+export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
   const root = useRef<HTMLDivElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const shown = apps.slice(0, 3);
@@ -163,7 +162,7 @@ export function MergeApps({
   const pieceStops: [string, string][] = [
     LOOK.timetable.stops,
     LOOK.email.stops,
-    ["#eef3ff", "#c5d3f0"],
+    ["#f4f5f8", "#d6dae1"],
     LOOK.moodle.stops,
   ];
 
@@ -310,7 +309,7 @@ export function MergeApps({
         "m+=0.3",
       );
 
-      // They lock together: a beat of scale, a ring, a bloom of light.
+      // They lock together: a beat of scale and one ring going out.
       const lockOrigin = `${MARK_CENTRE.x} ${MARK_CENTRE.y}`;
       tl.to(
         ".ma-lock",
@@ -343,18 +342,6 @@ export function MergeApps({
         "m+=1.32",
       );
       tl.fromTo(
-        ".ma-glow",
-        { opacity: 0, scale: 0.6 },
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 1.4,
-          ease: "power2.out",
-          immediateRender: true,
-        },
-        "m+=1.1",
-      );
-      tl.fromTo(
         ".ma-tagline",
         { y: 44, opacity: 0 },
         {
@@ -374,22 +361,16 @@ export function MergeApps({
   return (
     <div ref={root} data-no-enter className="absolute inset-0">
       <div className="ma-all absolute inset-0">
-        <div className="ma-glow absolute inset-0">
-          <Glow x="50%" y={`${(MARK_CENTRE.y / 1080) * 100}%`} size={1300} />
-        </div>
-
         <header
           className="absolute"
           style={{ left: SAFE.x, top: SAFE.top, right: SAFE.x }}
         >
           <div className="ma-head-in flex flex-col">
-            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-            <h1 className="t-title mt-6 text-balance">{title}</h1>
+            <h1 className="t-title text-fg text-balance">{title}</h1>
           </div>
         </header>
 
         {shown.map((a, i) => {
-          const look = LOOK[glyphs[i] ?? "timetable"];
           return (
             <div key={i}>
               <div
@@ -402,10 +383,10 @@ export function MergeApps({
                 }}
               >
                 <div
-                  className={`ma-tile-in-${i} bg-card h-full w-full rounded-[60px]`}
+                  className={`ma-tile-in-${i} bg-raised h-full w-full rounded-[58px]`}
                   style={{
-                    background: `linear-gradient(160deg, color-mix(in srgb, ${look.tint} 14%, var(--bg-card)), var(--bg-card) 70%)`,
-                    boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${look.tint} 26%, var(--line)), 0 30px 80px -30px color-mix(in srgb, ${look.tint} 40%, transparent)`,
+                    boxShadow:
+                      "inset 0 0 0 1px var(--line), inset 0 1px 0 #ffffff, var(--shadow-2)",
                   }}
                 />
               </div>
@@ -418,7 +399,9 @@ export function MergeApps({
                 }}
               >
                 <div className={`ma-label-in-${i} flex flex-col items-center`}>
-                  <span className="t-h3">{a.name}</span>
+                  <span className="font-display text-fg text-[36px] leading-[1.1] font-semibold tracking-[-0.02em]">
+                    {a.name}
+                  </span>
                   <span className="text-muted mt-2 text-[26px] leading-[1.35] text-balance">
                     {a.does}
                   </span>
@@ -452,11 +435,6 @@ export function MergeApps({
                 <stop offset="1" stopColor={pieceStops[k]?.[1]} />
               </linearGradient>
             ))}
-            <linearGradient id={`${uid}-ring`} x1="0" y1="0" x2="1" y2="1">
-              <stop stopColor="#c9306c" />
-              <stop offset="0.6" stopColor="#f2743c" />
-              <stop offset="1" stopColor="#f6a73b" />
-            </linearGradient>
           </defs>
 
           <circle
@@ -464,8 +442,8 @@ export function MergeApps({
             cx={MARK_CENTRE.x}
             cy={MARK_CENTRE.y}
             r={MARK_H * 0.64}
-            stroke={`url(#${uid}-ring)`}
-            strokeWidth={3}
+            stroke={ACCENT}
+            strokeWidth={2.5}
             style={{ opacity: 0 }}
           />
 
@@ -489,13 +467,13 @@ export function MergeApps({
         </svg>
 
         <p
-          className="ma-tagline font-display absolute text-center"
+          className="ma-tagline font-display text-fg absolute text-center"
           style={{
             left: SAFE.x,
             right: SAFE.x,
             top: MARK_CENTRE.y + MARK_H / 2 + 56,
             fontSize: 60,
-            fontWeight: 700,
+            fontWeight: 600,
             lineHeight: 1.05,
             letterSpacing: "-0.03em",
           }}
@@ -514,14 +492,14 @@ function GlyphDetail({ glyph, piece }: { glyph: Glyph; piece: number }) {
       <g className="ma-detail">
         <path
           d="M26 18H142C155.255 18 166 28.7452 166 42V56H2V42C2 28.7452 12.7452 18 26 18Z"
-          fill="#2f4a82"
+          fill="#3a414d"
         />
-        <circle cx="22" cy="37" r="5" fill="#9fb6e6" />
-        <circle cx="38" cy="37" r="5" fill="#9fb6e6" opacity="0.55" />
+        <circle cx="22" cy="37" r="5" fill="#c9ced8" />
+        <circle cx="38" cy="37" r="5" fill="#c9ced8" opacity="0.55" />
         <path
           d="M43 56V176M84 56V176M125 56V176M2 96H166M2 136H166"
-          stroke="#203560"
-          strokeOpacity="0.55"
+          stroke="#2a303a"
+          strokeOpacity="0.45"
           strokeWidth="2.5"
         />
         <rect
@@ -581,14 +559,14 @@ function GlyphDetail({ glyph, piece }: { glyph: Glyph; piece: number }) {
         <path d="M2 74L84 40L166 74L84 108Z" fill="#ffffff" opacity="0.2" />
         <path
           d="M84 74L146 88V126"
-          stroke="#7a3a06"
-          strokeOpacity="0.7"
+          stroke="#3a414d"
+          strokeOpacity="0.75"
           strokeWidth="6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx="146" cy="132" r="9" fill="#7a3a06" opacity="0.7" />
-        <circle cx="84" cy="74" r="7" fill="#7a3a06" opacity="0.7" />
+        <circle cx="146" cy="132" r="9" fill="#3a414d" opacity="0.75" />
+        <circle cx="84" cy="74" r="7" fill="#3a414d" opacity="0.75" />
       </g>
     );
   }

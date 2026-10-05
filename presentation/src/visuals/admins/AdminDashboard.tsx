@@ -249,12 +249,12 @@ export function AdminDashboard({ step, active, flipId }: AdminDashboardProps) {
     tl.to(".chart-card", {
       width: CHART_W.narrow,
       duration: 0.8,
-      ease: "power3.inOut",
+      ease: "deck.morph",
     });
     tl.fromTo(
       ".feed-card",
       { x: SIDE.w + 60 },
-      { x: 0, duration: 0.8, ease: "power3.inOut" },
+      { x: 0, duration: 0.8, ease: "deck.morph" },
       "<",
     );
     const t0 = 0.75;
@@ -265,7 +265,7 @@ export function AdminDashboard({ step, active, flipId }: AdminDashboardProps) {
       below.forEach((b, j) => {
         tl.to(
           `.fi-${b.key}`,
-          { y: (j + 1) * ITEM_H, duration: 0.45, ease: "power2.inOut" },
+          { y: (j + 1) * ITEM_H, duration: 0.45, ease: "deck.morph" },
           at,
         );
       });
@@ -300,12 +300,12 @@ export function AdminDashboard({ step, active, flipId }: AdminDashboardProps) {
     tl.to(".feed-card", {
       height: FEED_H.short,
       duration: 0.7,
-      ease: "power3.inOut",
+      ease: "deck.morph",
     });
     tl.fromTo(
       ".health-card",
       { y: HEALTH.h + 40 },
-      { y: 0, duration: 0.75, ease: "power3.inOut" },
+      { y: 0, duration: 0.75, ease: "deck.morph" },
       "<0.05",
     );
     tl.fromTo(

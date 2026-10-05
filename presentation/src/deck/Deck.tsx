@@ -26,7 +26,7 @@ import type { DeckSlide, Theme } from "./types";
 
 export const THEME_BG: Record<Theme, string> = {
   dark: "#0d1117",
-  light: "#eef0f3",
+  light: "#f2f3f6",
 };
 
 /** A slide on screen. `key` is new each time a slide arrives, so it remounts. */
@@ -81,15 +81,23 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [blackout, setBlackout] = useState(false);
   const [instant, setInstant] = useState(false);
+  // Honour the system's "reduce motion": slides then dissolve instead of
+  // travelling, and builds land at once. `M` (or ?motion=full) overrides it.
+  const [reduced, setReduced] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const backdrop = useRef<HTMLDivElement>(null);
   const curtain = useRef<HTMLDivElement>(null);
   const chrome = useRef<HTMLDivElement>(null);
   const layers = useRef(new Map<number, HTMLDivElement>());
   const keys = useRef(1);
-  const pending = useRef<{ capture: MorphCapture | null } | null>(null);
+  const pending = useRef<{
+    capture: MorphCapture | null;
+    dissolve: boolean;
+  } | null>(null);
   const transition = useRef<gsap.core.Timeline | null>(null);
   const opened = useRef(false);
+  const toastEl = useRef<HTMLDivElement>(null);
 
   const byId = useMemo(() => new Map(slides.map((s) => [s.id, s])), [slides]);
 
@@ -117,16 +125,21 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
       pending.current = quick
         ? null
         : {
-            capture: captureMorph(
-              [from, chrome.current].filter((el): el is HTMLDivElement => !!el),
-            ),
+            capture: reduced
+              ? null
+              : captureMorph(
+                  [from, chrome.current].filter(
+                    (el): el is HTMLDivElement => !!el,
+                  ),
+                ),
+            dissolve: reduced,
           };
       setView({
         current: { index: i, step: s, key: keys.current++ },
         leaving: quick ? null : settled.current,
       });
     },
-    [slides, finish, instant, setView],
+    [slides, finish, instant, reduced, setView],
   );
 
   const next = useCallback(() => {
@@ -149,6 +162,12 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
     const speed = Number(params.get("speed"));
     if (speed > 0) gsap.globalTimeline.timeScale(speed);
     if (params.has("instant")) setInstant(true);
+    const motion = params.get("motion");
+    setReduced(
+      motion === "reduced" ||
+        (motion !== "full" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+    );
     if (params.get("placeholders") === "hidden") {
       document.documentElement.dataset.placeholders = "hidden";
     }
@@ -181,6 +200,7 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
     }
     const tl = runMorph({
       capture: job.capture,
+      dissolve: job.dissolve,
       from,
       to,
       extraScopes: chrome.current ? [chrome.current] : [],
@@ -311,6 +331,13 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
         case ".":
           setBlackout((b) => !b);
           break;
+        case "m":
+        case "M":
+          setReduced((r) => {
+            setToast(r ? "Full motion" : "Reduced motion");
+            return !r;
+          });
+          break;
         case "h":
         case "H": {
           const root = document.documentElement;
@@ -373,18 +400,33 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
     { dependencies: [blackout] },
   );
 
+  useGSAP(
+    () => {
+      if (!toast) return;
+      gsap
+        .timeline({ onComplete: () => setToast(null) })
+        .fromTo(
+          toastEl.current,
+          { autoAlpha: 0, y: 8 },
+          { autoAlpha: 1, y: 0, duration: 0.25, ease: "power2.out" },
+        )
+        .to(toastEl.current, { autoAlpha: 0, duration: 0.3 }, "+=1.2");
+    },
+    { dependencies: [toast] },
+  );
+
   const current = view ? slides[view.current.index]! : null;
   const shown: { s: Shown; active: boolean }[] = [];
   if (view?.leaving) shown.push({ s: view.leaving, active: false });
   if (view) shown.push({ s: view.current, active: true });
 
   return (
-    <DeckRuntimeProvider value={{ instant }}>
+    <DeckRuntimeProvider value={{ instant: instant || reduced }}>
       <div
         ref={backdrop}
         className="fixed inset-0"
         style={{
-          background: THEME_BG.dark,
+          background: THEME_BG.light,
           cursor: panel ? "auto" : undefined,
         }}
       >
@@ -404,10 +446,20 @@ export function Deck({ slides }: { slides: DeckSlide[] }) {
           {current && <Chrome ref={chrome} slide={current} slides={slides} />}
         </ScaledCanvas>
 
+        <div aria-hidden className="deck-grain z-20" />
         <div
           ref={curtain}
           className="pointer-events-none invisible fixed inset-0 z-30 bg-black opacity-0"
         />
+        {toast && (
+          <div
+            ref={toastEl}
+            role="status"
+            className="pointer-events-none invisible fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-xl bg-[#10141b] px-4 py-2 text-[14px] font-medium text-white opacity-0"
+          >
+            {toast}
+          </div>
+        )}
       </div>
 
       {current && view && panel === "notes" && (

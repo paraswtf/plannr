@@ -1,14 +1,13 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import { useSteps } from "~/deck/useSteps";
 import type { StakeholderId } from "~/deck/types";
 import { Icon, type IconName } from "~/ui/icon";
-import { Eyebrow, Glow, SAFE } from "~/ui/layout";
+import { SAFE } from "~/ui/layout";
 
-import { useEntrance } from "./_closing-motion";
+import { ACCENT, useEntrance } from "./_closing-motion";
 
 export interface Finding {
   /** Whose research it came from; omit for one that cuts across everyone. */
@@ -31,34 +30,30 @@ export interface FindingsProps {
   step: number;
 }
 
-/* Canvas geometry. The row of cards sits under the title, then rises into
- * the title's place on the last build to make room for the conclusion. */
+/* Canvas geometry. The four findings sit under the title as columns on a
+ * shared rule, then rise into the title's place on the last build to make
+ * room for the conclusion. */
 const CANVAS_W = 1920;
 const CONTENT_W = CANVAS_W - SAFE.x * 2;
-const GAP = 28;
-const CARD_TOP = 404;
-const CARD_H = 404;
-const RAISED_TOP = SAFE.top;
+const GAP = 56;
+const CARD_TOP = 420;
+const CARD_H = 380;
+const RAISED_TOP = SAFE.top + 8;
 const LIFT = RAISED_TOP - CARD_TOP;
-const JOIN_Y = RAISED_TOP + CARD_H + 124;
-const CONCLUSION_TOP = JOIN_Y + 46;
+const JOIN_Y = RAISED_TOP + CARD_H + 118;
+const CONCLUSION_TOP = JOIN_Y + 48;
 
 /**
  * What the research added up to, stakeholder by stakeholder.
  *
- * A card in each stakeholder's colour rises in per build. On the last build
- * the title steps out, the row travels up into its place, a line runs from
- * every card into one point, and the conclusion arrives under it, large.
+ * Four columns hang from one hairline, so the row reads as four from the
+ * first build. Each finding rises into its column as its rule fills in ink.
+ * On the last build the title steps out, the row travels up into its place,
+ * a line runs from every column into one point (the accent: the thing that
+ * connects them), and the conclusion arrives under it, large.
  */
-export function Findings({
-  eyebrow,
-  title,
-  findings,
-  conclusion,
-  step,
-}: FindingsProps) {
+export function Findings({ title, findings, conclusion, step }: FindingsProps) {
   const root = useRef<HTMLDivElement>(null);
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const n = Math.max(1, findings.length);
   const cardW = (CONTENT_W - GAP * (n - 1)) / n;
   const centres = findings.map(
@@ -83,13 +78,29 @@ export function Findings({
     });
     tl.from(
       ".fd-slot",
-      { opacity: 0, duration: 0.8, ease: "power1.out", stagger: 0.06 },
+      {
+        scaleX: 0,
+        transformOrigin: "0% 50%",
+        duration: 0.9,
+        ease: "deck.enter",
+        stagger: 0.06,
+      },
       0.2,
     );
     tl.from(
       ".fd-card-in-0",
       { y: 70, opacity: 0, duration: 0.95, ease: "deck.enter" },
       0.25,
+    );
+    tl.from(
+      ".fd-card-in-0 .fd-fill",
+      {
+        scaleX: 0,
+        transformOrigin: "0% 50%",
+        duration: 0.9,
+        ease: "deck.enter",
+      },
+      0.35,
     );
   });
 
@@ -113,6 +124,17 @@ export function Findings({
           at,
         );
         tl.fromTo(
+          `.fd-card-${i} .fd-fill`,
+          { scaleX: 0, transformOrigin: "0% 50%" },
+          {
+            scaleX: 1,
+            duration: 0.9,
+            ease: "deck.enter",
+            immediateRender: true,
+          },
+          `${at}+=0.1`,
+        );
+        tl.fromTo(
           `.fd-card-${i} .fd-icon`,
           { scale: 0.4, rotate: -20 },
           {
@@ -134,14 +156,19 @@ export function Findings({
         "c",
       );
       tl.to(".fd-row", { y: LIFT, duration: 1, ease: "deck.morph" }, "c+=0.1");
+      tl.to(
+        ".fd-slots",
+        { y: LIFT, duration: 1, ease: "deck.morph" },
+        "c+=0.1",
+      );
       tl.fromTo(
         ".fd-join",
         { drawSVG: "0% 0%", opacity: 0 },
         {
           drawSVG: "0% 100%",
           opacity: 1,
-          duration: 0.75,
-          ease: "power2.inOut",
+          duration: 0.8,
+          ease: "power3.out",
           stagger: 0.06,
           immediateRender: true,
         },
@@ -171,17 +198,6 @@ export function Findings({
         },
         "c+=1.4",
       );
-      tl.fromTo(
-        ".fd-glow",
-        { opacity: 0 },
-        {
-          opacity: 1,
-          duration: 1.4,
-          ease: "power2.out",
-          immediateRender: true,
-        },
-        "c+=1.3",
-      );
       mark();
     },
     [findings.length, Boolean(conclusion)],
@@ -190,45 +206,37 @@ export function Findings({
   return (
     <div ref={root} data-no-enter className="absolute inset-0">
       <div className="fd-all absolute inset-0">
-        {conclusion && (
-          <div className="fd-glow absolute inset-0">
-            <Glow
-              x="50%"
-              y={`${((CONCLUSION_TOP + 80) / 1080) * 100}%`}
-              size={1500}
-            />
-          </div>
-        )}
-
         <header
           className="fd-head absolute"
           style={{ left: SAFE.x, top: SAFE.top, width: CONTENT_W }}
         >
           <div className="fd-head-in flex flex-col">
-            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-            <h1 className="t-title mt-6 max-w-[22ch] text-balance">{title}</h1>
+            <h1 className="t-title text-fg max-w-[22ch] text-balance">
+              {title}
+            </h1>
           </div>
         </header>
+
+        {/* The empty rule over each column, so the row reads as four from
+            the first build; each finding fills its rule in ink. */}
+        <div
+          className="fd-slots absolute"
+          style={{ left: SAFE.x, top: CARD_TOP, width: CONTENT_W }}
+        >
+          {findings.map((_, i) => (
+            <span
+              key={i}
+              aria-hidden
+              className="fd-slot bg-line-strong absolute top-0 h-[2px]"
+              style={{ left: i * (cardW + GAP), width: cardW }}
+            />
+          ))}
+        </div>
 
         <div
           className="fd-row absolute"
           style={{ left: SAFE.x, top: CARD_TOP, width: CONTENT_W }}
         >
-          {/* Empty slots, so the row reads as four from the first build. */}
-          {findings.map((_, i) => (
-            <div
-              key={`slot-${i}`}
-              aria-hidden
-              className="fd-slot absolute top-0 rounded-[28px]"
-              style={{
-                left: i * (cardW + GAP),
-                width: cardW,
-                height: CARD_H,
-                outline: "2px dashed var(--line)",
-                outlineOffset: -2,
-              }}
-            />
-          ))}
           {findings.map((f, i) => (
             <div
               key={i}
@@ -236,7 +244,7 @@ export function Findings({
               style={{ left: i * (cardW + GAP), width: cardW, height: CARD_H }}
             >
               <div className={`fd-card-in-${i} h-full`}>
-                <FindingCard finding={f} />
+                <FindingColumn finding={f} />
               </div>
             </div>
           ))}
@@ -252,27 +260,18 @@ export function Findings({
               fill="none"
               aria-hidden
             >
-              <defs>
-                <linearGradient id={`${uid}-knot`} x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="#c9306c" />
-                  <stop offset="1" stopColor="#f6a73b" />
-                </linearGradient>
-              </defs>
-              {findings.map((f, i) => {
+              {findings.map((_, i) => {
                 const x = centres[i] ?? mid;
-                const y0 = RAISED_TOP + CARD_H + 14;
+                const y0 = RAISED_TOP + CARD_H + 10;
                 return (
                   <path
                     key={i}
                     className="fd-join"
                     d={`M${x} ${y0} C${x} ${y0 + 62} ${mid} ${JOIN_Y - 58} ${mid} ${JOIN_Y}`}
-                    strokeWidth={3}
+                    stroke={ACCENT}
+                    strokeOpacity={0.55}
+                    strokeWidth={2.5}
                     strokeLinecap="round"
-                    style={{
-                      stroke: f.stakeholder
-                        ? STAKEHOLDERS[f.stakeholder].color
-                        : "var(--fg-muted)",
-                    }}
                   />
                 );
               })}
@@ -280,19 +279,19 @@ export function Findings({
                 className="fd-knot"
                 cx={mid}
                 cy={JOIN_Y}
-                r={9}
-                fill={`url(#${uid}-knot)`}
+                r={8}
+                fill={ACCENT}
               />
             </svg>
 
             <p
-              className="fd-conclusion font-display absolute text-center text-balance [&_.grad-text]:inline-block"
+              className="fd-conclusion font-display text-fg absolute text-center text-balance [&_.grad-text]:inline-block"
               style={{
                 left: SAFE.x,
                 width: CONTENT_W,
                 top: CONCLUSION_TOP,
                 fontSize: 84,
-                fontWeight: 700,
+                fontWeight: 600,
                 lineHeight: 1.04,
                 letterSpacing: "-0.035em",
               }}
@@ -306,49 +305,23 @@ export function Findings({
   );
 }
 
-function FindingCard({ finding }: { finding: Finding }) {
-  const s = finding.stakeholder ? STAKEHOLDERS[finding.stakeholder] : undefined;
-  const color = s?.color ?? "var(--fg)";
+/** One finding: its rule, its icon, the claim and the evidence. */
+function FindingColumn({ finding }: { finding: Finding }) {
   return (
-    <div
-      className="bg-card relative flex h-full flex-col overflow-hidden rounded-[28px] p-9"
-      style={{
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 22%, var(--line))`,
-      }}
-    >
+    <div className="relative flex h-full flex-col">
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[180px]"
-        style={{
-          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 13%, transparent), transparent)`,
-        }}
+        className="fd-fill bg-fg absolute inset-x-0 top-0 h-[2px]"
       />
-      <span
-        aria-hidden
-        className="absolute top-0 left-9 h-[4px] w-[64px] rounded-b-full"
-        style={{ background: color }}
-      />
-      <div className="relative flex items-center gap-4">
-        <span
-          className="fd-icon flex h-[56px] w-[56px] items-center justify-center rounded-[16px]"
-          style={{
-            color,
-            background: `color-mix(in srgb, ${color} 16%, transparent)`,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 34%, transparent)`,
-          }}
-        >
-          <Icon name={finding.icon} size={30} stroke={2} />
+      <div className="mt-9 flex items-center">
+        <span className="fd-icon bg-sunken text-fg flex h-[56px] w-[56px] items-center justify-center rounded-[12px]">
+          <Icon name={finding.icon} size={30} />
         </span>
-        {s && (
-          <span className="t-eyebrow" style={{ color }}>
-            {s.title}
-          </span>
-        )}
       </div>
-      <h2 className="font-display relative mt-7 text-[36px] leading-[1.14] font-semibold tracking-[-0.02em] text-balance">
+      <h2 className="font-display text-fg mt-8 text-[36px] leading-[1.14] font-semibold tracking-[-0.02em] text-pretty!">
         {finding.title}
       </h2>
-      <p className="text-muted relative mt-4 text-[26px] leading-[1.42] text-pretty">
+      <p className="text-muted mt-4 text-[26px] leading-[1.42] text-pretty">
         {finding.body}
       </p>
     </div>

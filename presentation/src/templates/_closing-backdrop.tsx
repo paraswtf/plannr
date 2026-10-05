@@ -5,13 +5,14 @@ import { useRef } from "react";
 import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
 
-import { BRAND, seeded } from "./_closing-motion";
+import { ACCENT, BRAND, seeded } from "./_closing-motion";
 
 /**
  * The bookends' backdrop: a week of class blocks laid on a tilted plane,
  * each day's column drifting slowly upward at its own pace, like a timetable
- * scrolling by in the dark. Quiet on purpose — it is masked away from the
- * type and kept to a few brand colours among many plain blocks.
+ * scrolling past on a desk. Quiet on purpose: pale paper blocks with a
+ * hairline, a few touched with slate and fewer still with the accent, and
+ * masked away from the type so it never competes with it.
  *
  * Drifts only while the slide is `active`; stands still in `instant` mode.
  */
@@ -21,14 +22,8 @@ const COL_W = 196;
 const GAP = 20;
 const BLOCKS_PER_COL = 9;
 
-const TONES = [
-  BRAND.violet,
-  BRAND.berry,
-  BRAND.magenta,
-  BRAND.coral,
-  BRAND.amber,
-  BRAND.slate,
-] as const;
+/* Mostly slate, the app's own class colour; the accent now and then. */
+const TONES = [BRAND.slate, BRAND.slate, BRAND.slate, ACCENT] as const;
 
 interface Block {
   h: number;
@@ -47,7 +42,7 @@ function buildColumns(seed: number): Block[][] {
       return {
         h: heights[Math.floor(rnd() * heights.length)] ?? 136,
         tone:
-          r < 0.46 ? (TONES[Math.floor(rnd() * TONES.length)] ?? null) : null,
+          r < 0.3 ? (TONES[Math.floor(rnd() * TONES.length)] ?? null) : null,
         w1: 0.5 + rnd() * 0.32,
         w2: 0.26 + rnd() * 0.2,
       };
@@ -76,7 +71,7 @@ export function TimetableDrift({
         // The strip holds the column twice; one period is one copy and a gap.
         const period = (strip.offsetHeight + GAP) / 2;
         const start = -period * ((i * 0.29) % 1);
-        // 9–15 canvas px a second: slow enough to read as calm, never still.
+        // 9-15 canvas px a second: slow enough to read as calm, never still.
         const speed = 9 + ((i * 37) % 7);
         gsap.fromTo(
           strip,
@@ -123,7 +118,7 @@ export function TimetableDrift({
             height: 2300,
             transform: "perspective(2400px) rotateX(38deg) rotateZ(-24deg)",
             transformOrigin: "50% 50%",
-            opacity: variant === "cover" ? 0.62 : 0.42,
+            opacity: variant === "cover" ? 0.9 : 0.7,
           }}
         >
           {columns.map((blocks, c) => (
@@ -149,25 +144,28 @@ export function TimetableDrift({
 
 function DriftBlock({ block }: { block: Block }) {
   const { h, tone, w1, w2 } = block;
-  const fill = tone
-    ? `linear-gradient(160deg, color-mix(in srgb, ${tone} 30%, transparent), color-mix(in srgb, ${tone} 14%, transparent))`
-    : "rgba(255,255,255,0.035)";
+  // Paper blocks on the light ground: raised white, a hairline, the softest
+  // shadow. A toned block is only washed with its colour, never filled.
+  const fill = tone ? `color-mix(in srgb, ${tone} 7%, #fbfbfd)` : "#fbfbfd";
   const ring = tone
-    ? `color-mix(in srgb, ${tone} 46%, transparent)`
-    : "rgba(255,255,255,0.08)";
+    ? `color-mix(in srgb, ${tone} 20%, transparent)`
+    : "rgba(16, 24, 40, 0.07)";
+  const bar = tone
+    ? `color-mix(in srgb, ${tone} 22%, transparent)`
+    : "rgba(16, 24, 40, 0.08)";
   return (
     <div
       className="relative shrink-0 overflow-hidden rounded-[22px]"
       style={{
         height: h,
         background: fill,
-        boxShadow: `inset 0 0 0 1.5px ${ring}`,
+        boxShadow: `inset 0 0 0 1px ${ring}, 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 24px -14px rgba(16, 24, 40, 0.12)`,
       }}
     >
       {tone && (
         <span
           className="absolute top-[14px] bottom-[14px] left-[12px] w-[5px] rounded-full"
-          style={{ background: tone, opacity: 0.85 }}
+          style={{ background: tone, opacity: 0.45 }}
         />
       )}
       <span
@@ -175,14 +173,15 @@ function DriftBlock({ block }: { block: Block }) {
         style={{
           width: `${w1 * 100}%`,
           maxWidth: COL_W - 52,
-          background: tone ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)",
+          background: bar,
         }}
       />
       <span
         className="absolute top-[46px] left-[30px] h-[10px] rounded-full"
         style={{
           width: `${w2 * 100}%`,
-          background: tone ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.06)",
+          background: tone ? bar : "rgba(16, 24, 40, 0.05)",
+          opacity: 0.7,
         }}
       />
     </div>

@@ -110,10 +110,6 @@ export const STAKEHOLDER_ORDER: StakeholderId[] = [
   "admins",
 ];
 
-/** The colour a speaker is drawn in: their stakeholder's. */
-export const speakerColor = (id: SpeakerId) =>
-  STAKEHOLDERS[TEAM[id].owns].color;
-
 export const COLLEGE = {
   name: "Symbiosis Institute of Computer Studies and Research",
   short: "SICSR",

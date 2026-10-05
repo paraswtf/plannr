@@ -256,7 +256,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
       ".file-art",
       {
         scale: 1.08,
-        boxShadow: "0 22px 40px rgba(0,0,0,0.45)",
+        boxShadow: "0 24px 44px -10px rgba(16,24,40,0.34)",
         duration: 0.2,
         ease: "power2.out",
       },
@@ -270,7 +270,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
         curviness: 1.1,
       },
       duration: 1.05,
-      ease: "power2.inOut",
+      ease: "deck.morph",
     });
     // The zone wakes up as the file crosses into it.
     tl.to(".zone-live", { opacity: 1, duration: 0.3 }, "<0.55");
@@ -279,7 +279,11 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
     tl.to(".cur-a .cur-svg", { scale: 1, duration: 0.15 });
     tl.to(
       ".file-art",
-      { scale: 1, boxShadow: "0 8px 18px rgba(0,0,0,0.22)", duration: 0.2 },
+      {
+        scale: 1,
+        boxShadow: "0 10px 22px -8px rgba(16,24,40,0.26)",
+        duration: 0.2,
+      },
       "<",
     );
     tl.to(
@@ -301,7 +305,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
         height: BAR_H,
         backgroundColor: "#ffffff",
         duration: 0.7,
-        ease: "power3.inOut",
+        ease: "deck.morph",
       },
       "fold",
     );
@@ -310,7 +314,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
     tl.set(".zone-ring", { opacity: 1 }, "fold");
     tl.to(
       ".zone-live",
-      { opacity: 0, duration: 0.5, ease: "power1.inOut" },
+      { opacity: 0, duration: 0.5, ease: "power2.out" },
       "fold+=0.15",
     );
     tl.to(
@@ -321,13 +325,13 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
         scale: SLOT.k,
         transformOrigin: "0 0",
         duration: 0.7,
-        ease: "power3.inOut",
+        ease: "deck.morph",
       },
       "fold",
     );
     tl.to(
       ".file-art",
-      { boxShadow: "0 0 0 rgba(0,0,0,0)", duration: 0.5 },
+      { boxShadow: "0 0 0 0 rgba(16,24,40,0)", duration: 0.5 },
       "fold+=0.2",
     );
     tl.to(".zone-folded", { opacity: 1, duration: 0.35 }, "fold+=0.45");
@@ -361,10 +365,10 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
   useSteps(ref, step, (tl, mark) => {
     // ── Build 1: the diff. A column opens for the marks, the removed row
     // slides back in, every touched row is tinted, the bar shows the totals.
-    tl.to(".cells", { x: GUTTER, duration: 0.5, ease: "power3.inOut" });
+    tl.to(".cells", { x: GUTTER, duration: 0.5, ease: "deck.morph" });
     tl.to(
       ".row-r3",
-      { height: ROW_H, duration: 0.5, ease: "power3.inOut" },
+      { height: ROW_H, duration: 0.5, ease: "deck.morph" },
       "<0.1",
     );
     tl.fromTo(
@@ -435,7 +439,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
         x: APPLY_AT.x - 6,
         y: APPLY_AT.y - 4,
         duration: 0.7,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
       "<",
     );
@@ -454,7 +458,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
         scaleX: 1,
         transformOrigin: "0% 50%",
         duration: 0.8,
-        ease: "power1.inOut",
+        ease: "power2.out",
       },
       "<",
     );
@@ -472,18 +476,14 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
     tl.addLabel("settle", ">");
     tl.to(
       ".row-r3",
-      { height: 0, duration: 0.5, ease: "power3.inOut" },
+      { height: 0, duration: 0.5, ease: "deck.morph" },
       "settle",
     );
     tl.to(".row-tint", { opacity: 0, duration: 0.5 }, "settle");
     tl.to(".chg-hl", { opacity: 0, duration: 0.4 }, "settle");
-    tl.to(".was", { width: 0, duration: 0.5, ease: "power3.inOut" }, "settle");
+    tl.to(".was", { width: 0, duration: 0.5, ease: "deck.morph" }, "settle");
     tl.to(".row-mark", { opacity: 0, scale: 0.4, duration: 0.3 }, "settle");
-    tl.to(
-      ".cells",
-      { x: 0, duration: 0.5, ease: "power3.inOut" },
-      "settle+=0.1",
-    );
+    tl.to(".cells", { x: 0, duration: 0.5, ease: "deck.morph" }, "settle+=0.1");
     tl.to(".progress", { opacity: 0, duration: 0.3 }, "settle+=0.1");
     tl.to(
       ".r-diff",
@@ -677,7 +677,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
             {COLS.map((c) => (
               <span
                 key={c.key}
-                className="font-mono text-[13px] font-semibold tracking-[0.08em] text-[rgba(44,49,53,0.5)] uppercase"
+                className="text-[14.5px] font-semibold text-[rgba(44,49,53,0.58)]"
                 style={{ width: c.w }}
               >
                 {c.label}
@@ -708,7 +708,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
           className="toast flex items-center gap-3 rounded-full py-2.5 pr-5 pl-3 text-[15.5px] font-semibold text-white"
           style={{
             background: "#0d1117",
-            boxShadow: "0 16px 36px rgba(13,17,23,0.35)",
+            boxShadow: "0 16px 36px -12px rgba(16,24,40,0.4)",
             transform: "translateY(90px)",
           }}
         >
@@ -857,10 +857,7 @@ function DraggedFile() {
       <div className="file absolute inset-0">
         <SheetIcon />
       </div>
-      <span
-        className="file-name absolute top-1/2 right-full mr-4 -translate-y-1/2 rounded-md px-2.5 py-1 font-mono text-[22px] leading-[1.2] whitespace-nowrap text-white/85"
-        style={{ background: "rgba(68,88,121,0.35)" }}
-      >
+      <span className="file-name t-small text-body absolute top-1/2 right-full mr-5 -translate-y-1/2 font-medium whitespace-nowrap">
         {FILE_NAME}
       </span>
       <Cursor className="cur-a" style={{ opacity: 0 }} />
@@ -875,7 +872,7 @@ function SheetIcon() {
       className="file-art relative h-full w-full rounded-lg"
       style={{
         background: "#ffffff",
-        boxShadow: "0 8px 18px rgba(0,0,0,0.22)",
+        boxShadow: "0 10px 22px -8px rgba(16,24,40,0.26)",
       }}
     >
       <svg

@@ -225,7 +225,7 @@ export function LectureLog({ step, active, flipId }: LectureLogProps) {
         >
           <div>
             <div
-              className="font-mono text-[12.5px] tracking-[0.08em] uppercase"
+              className="text-[14px] leading-[18px] font-semibold"
               style={{ color: INK.muted }}
             >
               October 2026
@@ -448,7 +448,7 @@ export function LectureLog({ step, active, flipId }: LectureLogProps) {
           </div>
           <span
             data-minus
-            className="absolute rounded-full px-2.5 py-1 font-mono text-[13.5px] font-bold opacity-0"
+            className="absolute rounded-[8px] px-2.5 py-1 font-mono text-[13.5px] font-bold opacity-0"
             style={{
               left: 128,
               top: 70,
@@ -512,10 +512,10 @@ export function LectureLog({ step, active, flipId }: LectureLogProps) {
           }}
         >
           <div
-            className="absolute top-[16px] left-[18px] font-mono text-[12px] tracking-[0.1em] uppercase"
+            className="absolute top-[15px] left-[18px] text-[13.5px] leading-[17px] font-semibold"
             style={{ color: INK.muted }}
           >
-            This week & next
+            This week and next
           </div>
           {[
             { date: "Thu 22 Oct", key: "dm" as const, status: "taken" },
@@ -597,15 +597,15 @@ export function LectureLog({ step, active, flipId }: LectureLogProps) {
             transform: `translateX(${SIDE.w + 40}px)`,
             background: "#ffffff",
             borderRadius: 16,
-            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 24px 50px rgba(13,17,23,0.22)`,
+            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 2px 4px rgba(16,24,40,0.04), 0 22px 48px -16px rgba(16,24,40,0.28)`,
           }}
         >
           <div
             data-statement-row
-            className="font-mono text-[12px] tracking-[0.1em] uppercase"
+            className="text-[13.5px] leading-[17px] font-semibold"
             style={{ color: INK.muted }}
           >
-            Statement · Oct 2026
+            Statement · October 2026
           </div>
           <div data-statement-row className="mt-2 flex items-center gap-3">
             <span
@@ -655,8 +655,8 @@ export function LectureLog({ step, active, flipId }: LectureLogProps) {
             {(
               [
                 ["Lectures", <Ph key="n">12</Ph>],
-                ["Per lecture", <Ph key="r">₹ —</Ph>],
-                ["Amount", <Ph key="a">₹ —</Ph>],
+                ["Per lecture", <Ph key="r">₹ …</Ph>],
+                ["Amount", <Ph key="a">₹ …</Ph>],
               ] as const
             ).map(([label, value]) => (
               <div

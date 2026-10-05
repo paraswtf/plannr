@@ -41,7 +41,7 @@ export function useEntrance(
             {
               opacity: 1,
               duration: 0.6,
-              ease: "power1.inOut",
+              ease: "power2.out",
               clearProps: "opacity",
             },
           );

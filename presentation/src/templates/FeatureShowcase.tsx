@@ -2,24 +2,26 @@
 
 import { useRef, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import { rankProblems, type Feature, type Problem } from "~/content/types";
 import type { StakeholderId } from "~/deck/types";
 import { useSteps } from "~/deck/useSteps";
-import { Eyebrow, SlideBody } from "~/ui/layout";
+import { SlideBody } from "~/ui/layout";
 
 import { TEXT_TONE } from "./_problem-tone";
 
 export interface FeatureShowcaseProps {
   stakeholder: StakeholderId;
   feature: Feature;
-  /** 1-based position among the section's features: "Feature 02". */
+  /**
+   * 1-based position among the section's features. No longer drawn (the deck
+   * does not number things as decoration); kept so call sites compile.
+   */
   number: number;
   /** The problems it answers, shown as small chips under the points. */
   solves?: Problem[];
   /**
    * The demo, given the same `step`: usually a visual from src/visuals in a
-   * PhoneFrame or BrowserFrame. It gets a 960 × 844 box (the same box as
+   * PhoneFrame or BrowserFrame. It gets a 960 x 844 box (the same box as
    * VisualSlide's "side" layout), centred.
    */
   visual: ReactNode;
@@ -35,7 +37,7 @@ const VISUAL = { w: 960, h: 844 } as const;
 
 /**
  * One feature, sold: name, promise, three benefits, and the thing itself
- * working beside them. This is the marketing half of the deck — write the
+ * working beside them. This is the marketing half of the deck: write the
  * points as benefits, not as specs.
  *
  * The title carries flip id `${stakeholder}-feature-${feature.id}`, shared
@@ -46,15 +48,12 @@ const VISUAL = { w: 960, h: 844 } as const;
 export function FeatureShowcase({
   stakeholder,
   feature,
-  number,
   solves = [],
   visual,
   side = "right",
   step,
 }: FeatureShowcaseProps) {
   const root = useRef<HTMLDivElement>(null);
-  const color = STAKEHOLDERS[stakeholder].color;
-
   // Point 0 is lit on arrival; each build after that lights the next one,
   // and the ones before it stay lit.
   useSteps(root, step, (tl, mark) => {
@@ -95,10 +94,9 @@ export function FeatureShowcase({
       className="flex shrink-0 flex-col justify-center"
       style={{ width: TEXT_W, maxHeight: VISUAL.h }}
     >
-      <Eyebrow color={color}>Feature {String(number).padStart(2, "0")}</Eyebrow>
       <h1
         data-flip-id={`${stakeholder}-feature-${feature.id}`}
-        className={`t-title mt-6 self-start text-balance ${TEXT_TONE[stakeholder]}`}
+        className={`t-title self-start text-balance ${TEXT_TONE[stakeholder]}`}
       >
         {feature.name}
       </h1>
@@ -109,7 +107,7 @@ export function FeatureShowcase({
       <ul className="mt-10 flex flex-col gap-[22px]">
         {feature.points.map((p, i) => (
           <li key={i} data-fs-point={i} className="flex items-start gap-5">
-            <Check color={color} lit={i === 0} />
+            <Check lit={i === 0} />
             <span
               className="fs-text text-fg text-[27px] leading-[1.32] text-pretty"
               style={{ opacity: i === 0 ? 1 : 0.32 }}
@@ -122,7 +120,9 @@ export function FeatureShowcase({
 
       {chips.length > 0 && (
         <div className="mt-11">
-          <p className="t-eyebrow text-faint">Solves</p>
+          <p className="text-muted text-[22px] leading-[1.2] font-medium">
+            Solves
+          </p>
           <div
             className={`mt-4 flex flex-wrap ${chips.length > 3 ? "gap-2.5" : "gap-3"}`}
           >
@@ -130,8 +130,8 @@ export function FeatureShowcase({
               <span
                 key={p.id}
                 data-flip-id={`${stakeholder}-problem-${p.id}`}
-                className="bg-card ring-hair text-muted inline-block text-[22px] leading-[1.25]"
-                style={{ padding: "8px 18px", borderRadius: 999 }}
+                className="bg-sunken text-body inline-block text-[22px] leading-[1.25] font-medium"
+                style={{ padding: "9px 16px", borderRadius: 12 }}
               >
                 {p.text}
               </span>
@@ -171,7 +171,7 @@ export function FeatureShowcase({
 }
 
 /** A round check that draws itself when its point is reached. */
-function Check({ color, lit }: { color: string; lit: boolean }) {
+function Check({ lit }: { lit: boolean }) {
   return (
     <svg
       width={36}
@@ -190,13 +190,21 @@ function Check({ color, lit }: { color: string; lit: boolean }) {
         strokeWidth={2}
         opacity={lit ? 0 : 1}
       />
-      <circle className="fs-disc" cx={18} cy={18} r={17} fill={color} />
+      <circle
+        className="fs-disc"
+        cx={18}
+        cy={18}
+        r={17}
+        // Ink, not the accent: the feature's name is the one accented thing
+        // on this slide; a lit point is state, not emphasis.
+        fill="var(--fg)"
+      />
       <path
         className="fs-tick"
         d="M11 18.5l4.6 4.6L25.5 13"
         fill="none"
-        stroke="var(--ink-0)"
-        strokeWidth={3}
+        stroke="#ffffff"
+        strokeWidth={2.6}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

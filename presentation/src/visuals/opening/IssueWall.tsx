@@ -167,8 +167,8 @@ export function IssueWall({
       {
         scale: 0.92,
         y: 24,
-        opacity: 0.18,
-        filter: "blur(7px)",
+        opacity: 0.22,
+        filter: "blur(8px)",
         duration: 0.8,
         ease: "power3.inOut",
       },
@@ -199,31 +199,23 @@ export function IssueWall({
         }}
       >
         <div className="absolute inset-0 overflow-hidden">
-          <ul className="absolute inset-x-0 bottom-0 flex flex-wrap-reverse content-start justify-center gap-x-4 gap-y-4.5 pb-2">
+          <ul className="absolute inset-x-0 bottom-0 mx-auto flex max-w-[1360px] flex-wrap-reverse content-start justify-center gap-x-4 gap-y-4.5 pb-2">
             {issues.map((issue, i) => (
               <li
                 key={i}
-                className="iw-chip bg-card flex h-23 items-center gap-5 rounded-[26px] pr-9 pl-4"
+                className="iw-chip bg-raised flex h-21 items-center gap-4 rounded-[12px] pr-8 pl-6"
                 style={{
                   boxShadow:
-                    "inset 0 0 0 1px var(--line-strong), 0 14px 30px rgba(0,0,0,0.35)",
+                    "inset 0 0 0 1px var(--line-strong), var(--shadow-2)",
                   visibility: "hidden",
                 }}
               >
-                <span
-                  className="flex h-15 w-15 shrink-0 items-center justify-center rounded-[18px]"
-                  style={{
-                    background: "rgba(255,93,93,0.13)",
-                    color: "#ff7d7d",
-                  }}
-                >
-                  <Icon
-                    name={icons?.[i] ?? iconFor(issue, i)}
-                    size={30}
-                    stroke={2}
-                  />
-                </span>
-                <span className="font-body text-fg text-[30px] font-medium tracking-[-0.01em] whitespace-nowrap">
+                <Icon
+                  name={icons?.[i] ?? iconFor(issue, i)}
+                  size={32}
+                  className="text-muted"
+                />
+                <span className="font-body text-fg text-[29px] font-medium tracking-[-0.01em] whitespace-nowrap">
                   {issue}
                 </span>
               </li>
@@ -235,7 +227,7 @@ export function IssueWall({
       {rootCause && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <p
-            className="iw-cause font-display text-fg max-w-345 text-center text-[92px] leading-[1.02] font-bold tracking-[-0.035em] text-balance"
+            className="iw-cause font-display text-fg max-w-345 text-center text-[96px] leading-[1.02] font-semibold tracking-[-0.04em] text-balance"
             style={{ opacity: 0 }}
           >
             {rootCause}

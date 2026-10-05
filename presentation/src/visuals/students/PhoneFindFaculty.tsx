@@ -9,7 +9,7 @@ import { PhoneFrame, StatusBar } from "~/ui/frames";
 import { Icon } from "~/ui/icon";
 import { courseTone, LIVE } from "~/ui/mock";
 
-import { Finger, PHONE_HEIGHT, SCREEN_W } from "./_phone-kit";
+import { Finger, Meta, PHONE_HEIGHT, SCREEN_W } from "./_phone-kit";
 
 export interface PhoneFindFacultyProps {
   step: number;
@@ -88,21 +88,21 @@ const HER_DAY: {
     from: "10:00",
     to: "11:00",
     title: "Design Thinking",
-    where: "BCA-B · Room 304",
+    where: "BCA-B, Room 304",
     past: true,
   },
   {
     from: "11:30",
     to: "12:30",
     title: "Design Thinking",
-    where: "BCA-A · Room 301",
+    where: "BCA-A, Room 301",
     live: true,
   },
   {
     from: "12:45",
     to: "2:00",
     title: "Design Thinking",
-    where: "BBA(IT)-A · Lab 2",
+    where: "BBA(IT)-A, Lab 2",
   },
 ];
 
@@ -113,9 +113,9 @@ const FREE_GAP = 84;
  * Find any teacher by name, and see where they are now.
  *
  * Builds (steps = 3):
- *   0 — a name being typed; the keyboard steps aside and the matches come up.
- *   1 — tap her name: her page pushes in — where she is now, and her day.
- *   2 — when she is next free: the card slides out, her free afternoon draws in.
+ *   0: a name being typed; the keyboard steps aside and the matches come up.
+ *   1: tap her name: her page pushes in (where she is now, and her day).
+ *   2: when she is next free: the card slides out, her free afternoon draws in.
  *
  * Build 0 plays by itself once the slide is on screen (at once in the
  * presenter's preview, or when arriving on a later build). Opening a result
@@ -325,8 +325,8 @@ export function PhoneFindFaculty({
             style={{ background: "var(--paper)" }}
           >
             <div className="absolute inset-x-0 px-5" style={{ top: 62 }}>
-              <div className="font-mono text-[12px] tracking-[0.06em] text-[rgba(44,49,53,0.55)] uppercase">
-                People · rooms · courses
+              <div className="text-[13.5px] font-medium text-[rgba(44,49,53,0.58)]">
+                People, rooms, courses
               </div>
               <div className="font-display text-[30px] leading-tight font-bold tracking-[-0.02em] text-[#0d1117]">
                 Find
@@ -410,7 +410,9 @@ export function PhoneFindFaculty({
               className="ff-results absolute inset-x-4"
               style={{ top: RESULTS_TOP }}
             >
-              <Label>People · 3</Label>
+              <Label>
+                <Meta text="People · 3" />
+              </Label>
               {RESULTS.map((r, i) => (
                 <div
                   key={r.initials}
@@ -438,7 +440,7 @@ export function PhoneFindFaculty({
                       {r.rest}
                     </span>
                     <span className="mt-0.5 block truncate text-[13.5px] text-[rgba(44,49,53,0.6)]">
-                      {r.role}
+                      <Meta text={r.role} />
                     </span>
                   </span>
                   <span className="flex shrink-0 flex-col items-end font-mono">
@@ -457,7 +459,9 @@ export function PhoneFindFaculty({
               ))}
 
               <div className="mt-3">
-                <Label>Courses · 2</Label>
+                <Label>
+                  <Meta text="Courses · 2" />
+                </Label>
               </div>
               <Card>
                 {COURSES.map((c, i) => (
@@ -519,7 +523,7 @@ export function PhoneFindFaculty({
             className="ff-profile absolute inset-0"
             style={{
               background: "var(--paper)",
-              boxShadow: "-12px 0 30px rgba(13,17,23,0.12)",
+              boxShadow: "-14px 0 34px -6px rgba(16,24,40,0.14)",
             }}
           >
             <div
@@ -548,7 +552,7 @@ export function PhoneFindFaculty({
                   Prof. Kulkarni
                 </span>
                 <span className="mt-0.5 block text-[14.5px] text-[rgba(44,49,53,0.62)]">
-                  Design Thinking · Faculty
+                  <Meta text="Design Thinking · Faculty" />
                 </span>
               </span>
             </div>
@@ -561,12 +565,12 @@ export function PhoneFindFaculty({
                 left: 14,
                 right: 14,
                 padding: "16px 20px 18px",
-                boxShadow: `inset 0 0 0 1.5px ${LIVE.ring}, 0 8px 24px rgba(220,56,72,0.12)`,
+                boxShadow: `inset 0 0 0 1.5px ${LIVE.ring}, 0 12px 28px -12px rgba(16,24,40,0.22)`,
               }}
             >
               <div className="flex items-center justify-between">
                 <span
-                  className="flex items-center gap-2 font-mono text-[12.5px] font-bold tracking-[0.08em]"
+                  className="flex items-center gap-2 text-[14px] font-bold"
                   style={{ color: "var(--red)" }}
                 >
                   <span className="relative flex h-[10px] w-[10px]">
@@ -579,7 +583,7 @@ export function PhoneFindFaculty({
                       style={{ background: "var(--red)" }}
                     />
                   </span>
-                  NOW
+                  Now
                 </span>
                 <span className="font-mono text-[13px] font-semibold text-[rgba(44,49,53,0.7)]">
                   until 12:30
@@ -589,7 +593,7 @@ export function PhoneFindFaculty({
                 Room 301
               </div>
               <div className="mt-2.5 text-[16px] text-[rgba(44,49,53,0.72)]">
-                BCA-A · Design Thinking
+                <Meta text="BCA-A · Design Thinking" />
               </div>
             </div>
 
@@ -607,7 +611,7 @@ export function PhoneFindFaculty({
             >
               <Icon name="clock" size={20} stroke={2.1} color="var(--green)" />
               <span className="flex-1 text-[17px] font-bold text-[#2f5a20]">
-                Free at 2:00 PM
+                Free at 2:00pm
               </span>
               <span className="font-mono text-[12.5px] font-semibold text-[#2f5a20]/75">
                 in 2h 08m
@@ -619,7 +623,9 @@ export function PhoneFindFaculty({
               style={{ top: 440, left: 14, right: 14 }}
             >
               <div className="px-1.5">
-                <Label>Her day · Tue 11 Aug</Label>
+                <Label>
+                  <Meta text="Her day · Tue 11 Aug" />
+                </Label>
               </div>
               {HER_DAY.map((c) => {
                 const tone = c.live ? LIVE : DT;
@@ -641,7 +647,7 @@ export function PhoneFindFaculty({
                         {c.title}
                       </span>
                       <span className="mt-0.5 block font-mono text-[11.5px] text-[rgba(44,49,53,0.72)]">
-                        {c.from} – {c.to} · {c.where}
+                        {c.from}-{c.to} · {c.where}
                       </span>
                     </span>
                   </div>
@@ -674,7 +680,7 @@ export function PhoneFindFaculty({
 
 function Label({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-2 px-1 font-mono text-[11.5px] font-semibold tracking-[0.08em] text-[rgba(44,49,53,0.5)] uppercase">
+    <div className="mb-2 px-1 text-[13.5px] font-semibold text-[rgba(44,49,53,0.55)]">
       {children}
     </div>
   );

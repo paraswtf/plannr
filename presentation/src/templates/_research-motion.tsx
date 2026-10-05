@@ -2,8 +2,33 @@
 
 import { useRef, type RefObject } from "react";
 
-import { gsap, useGSAP } from "~/deck/gsap";
+import { CustomEase, gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
+
+/**
+ * The curve a playhead crosses a day on: it leaves its start gently, runs
+ * through the middle of the day and takes a long settle into the evening.
+ * Asymmetric on purpose (never a plain ease-in-out).
+ */
+export const SWEEP_EASE = "research.sweep";
+CustomEase.create(SWEEP_EASE, "M0,0 C0.38,0.02 0.22,1 1,1");
+
+/**
+ * When a sweep on SWEEP_EASE reaches fraction `p` of its distance, as a
+ * fraction of its duration. Lets things pop exactly as the playhead passes.
+ */
+export function sweepTimeAt(p: number) {
+  const ease = gsap.parseEase(SWEEP_EASE);
+  const target = Math.min(1, Math.max(0, p));
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (ease(mid) < target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 
 /**
  * What a slide does on arrival, before any build: numbers counting up, the

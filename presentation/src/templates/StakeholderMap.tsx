@@ -11,10 +11,11 @@ import { Avatar } from "~/ui/people";
 import {
   cardShadow,
   IconTile,
+  INK,
   OwnerChip,
   Slot,
+  StakePhoto,
   SUBTITLE_MEASURE,
-  tintBackground,
   TitleLines,
   useLockedSlots,
 } from "./_stakeholder-parts";
@@ -22,7 +23,7 @@ import {
 export interface StakeholderMapProps {
   eyebrow?: ReactNode;
   title?: ReactNode;
-  /** Bring one card forward and dim the rest: used to hand over. */
+  /** Lift one card forward and quieten the rest: used to hand over. */
   highlight?: StakeholderId;
   /** A line under the cards: "Over to Ravya." */
   caption?: ReactNode;
@@ -36,27 +37,40 @@ export interface StakeholderMapProps {
   step: number;
 }
 
-/** Card geometry on the canvas. Four of these fill the 1664px content box. */
-const CARD = { height: 480, gap: 56, pad: 36, lift: 22 } as const;
+/**
+ * Card geometry on the canvas. Four of these fill the 1664px content box.
+ * Each card is the tray of a double bezel: an 8px rim around the photo plate,
+ * so the plate's radius is the card's minus the rim.
+ */
+const CARD = {
+  height: 532,
+  gap: 48,
+  rim: 8,
+  radius: 30,
+  photo: 196,
+  lift: 22,
+} as const;
 /** Type sizes on the card; the opener grows each of them. */
 export const MAP_SIZES = {
-  icon: 40,
-  title: 50,
+  icon: 20,
+  title: 46,
   subtitle: 22,
-  owner: 26,
+  owner: 24,
 } as const;
 
 /**
- * The four stakeholders as four cards: icon, title, subtitle and who studied
- * them. This slide recurs before every stakeholder section, highlighting the
- * next one, and its cards morph into that section's opener.
+ * The four stakeholders as four cards: photo, icon, title, subtitle and who
+ * studied them. This slide recurs before every stakeholder section, lifting
+ * the next one, and its cards morph into that section's opener.
  *
  * Flip ids, per stakeholder `s` (shared with SectionOpener):
- * `stake-${s}-card` (the card's box), `stake-${s}-icon`, `stake-${s}-title`,
- * `stake-${s}-subtitle`, `stake-${s}-owner` (the researcher's chip).
+ * `stake-${s}-card` (the card's box), `stake-${s}-photo` (the photo plate),
+ * `stake-${s}-icon`, `stake-${s}-title`, `stake-${s}-subtitle`,
+ * `stake-${s}-owner` (the researcher's chip).
  *
- * Every visible piece of a card travels, so nothing on the highlighted card
- * vanishes when it grows into the opener.
+ * Every visible piece of a card travels, so nothing on the lifted card
+ * vanishes when it grows into the opener: the card becomes the opener's
+ * sheet and its photo becomes the opener's photo panel.
  */
 export function StakeholderMap({
   eyebrow,
@@ -123,7 +137,7 @@ export function StakeholderMap({
         </div>
         {caption && (
           <div className="mt-14 flex items-center gap-5">
-            {captionPerson && <Avatar person={captionPerson} size={60} />}
+            {captionPerson && <Avatar person={captionPerson} size={56} />}
             <p className="t-lede text-fg">{caption}</p>
           </div>
         )}
@@ -149,74 +163,75 @@ function Card({
     <div className="relative" style={{ height: CARD.height }}>
       <div
         data-flip-id={`stake-${id}-card`}
-        className="bg-card absolute inset-x-0 flex flex-col overflow-hidden"
+        className="bg-card absolute inset-x-0 flex flex-col"
         style={{
           top: lit ? -CARD.lift : 0,
           height: CARD.height,
-          padding: CARD.pad,
-          borderRadius: 28,
-          opacity: state === "dim" ? 0.42 : 1,
+          padding: CARD.rim,
+          borderRadius: CARD.radius,
           boxShadow: cardShadow(id, lit ? "lit" : "plain"),
         }}
       >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit]"
-          style={{
-            background: tintBackground(
-              id,
-              lit ? 1 : state === "even" ? 0.6 : 0.35,
-            ),
-          }}
-        />
-        <Slot className="relative">
-          <IconTile
+        <Slot>
+          <StakePhoto
             stakeholder={id}
-            size={MAP_SIZES.icon}
-            flipId={`stake-${id}-icon`}
+            flipId={`stake-${id}-photo`}
+            quiet={state === "dim"}
+            radius={CARD.radius - CARD.rim}
+            style={{ width: "100%", height: CARD.photo }}
           />
         </Slot>
-        <Slot className="relative mt-auto">
-          <h2
-            data-flip-id={`stake-${id}-title`}
-            className="font-display font-bold"
-            style={{
-              fontSize: MAP_SIZES.title,
-              lineHeight: 0.98,
-              letterSpacing: "-0.035em",
-            }}
-          >
-            <TitleLines text={s.title} />
-          </h2>
-        </Slot>
-        {/* Two lines tall on every card, so the four titles share a baseline. */}
-        <Slot
-          className="relative mt-3"
-          style={{ minHeight: MAP_SIZES.subtitle * 1.36 * 2 }}
-        >
-          <p
-            data-flip-id={`stake-${id}-subtitle`}
-            className="text-muted"
-            style={{
-              fontSize: MAP_SIZES.subtitle,
-              lineHeight: 1.36,
-              maxWidth: SUBTITLE_MEASURE,
-            }}
-          >
-            {s.subtitle}
-          </p>
-        </Slot>
-        {owners && (
-          <Slot className="relative mt-7">
-            <OwnerChip
+        <div className="flex min-h-0 flex-1 flex-col px-[22px] pt-6 pb-[18px]">
+          <Slot>
+            <IconTile
               stakeholder={id}
-              size={MAP_SIZES.owner}
-              flipId={`stake-${id}-owner`}
-              data-owner={id}
-              aria-label={`Researched by ${TEAM[s.owner].name}`}
+              size={MAP_SIZES.icon}
+              flipId={`stake-${id}-icon`}
             />
           </Slot>
-        )}
+          <Slot className="mt-auto">
+            <h2
+              data-flip-id={`stake-${id}-title`}
+              className="font-display font-semibold"
+              style={{
+                fontSize: MAP_SIZES.title,
+                lineHeight: 1,
+                letterSpacing: "-0.03em",
+                color: INK.fg,
+              }}
+            >
+              <TitleLines text={s.title} />
+            </h2>
+          </Slot>
+          {/* Two lines tall on every card, so the four titles share a baseline. */}
+          <Slot
+            className="mt-2.5"
+            style={{ minHeight: MAP_SIZES.subtitle * 1.36 * 2 }}
+          >
+            <p
+              data-flip-id={`stake-${id}-subtitle`}
+              style={{
+                fontSize: MAP_SIZES.subtitle,
+                lineHeight: 1.36,
+                maxWidth: SUBTITLE_MEASURE,
+                color: INK.muted,
+              }}
+            >
+              {s.subtitle}
+            </p>
+          </Slot>
+          {owners && (
+            <Slot className="mt-5">
+              <OwnerChip
+                stakeholder={id}
+                size={MAP_SIZES.owner}
+                flipId={`stake-${id}-owner`}
+                data-owner={id}
+                aria-label={`Researched by ${TEAM[s.owner].name}`}
+              />
+            </Slot>
+          )}
+        </div>
       </div>
     </div>
   );

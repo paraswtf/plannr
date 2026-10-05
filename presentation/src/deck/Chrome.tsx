@@ -2,22 +2,23 @@
 
 import { forwardRef, useRef, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import { SpeakerChip } from "~/ui/people";
 
 import { gsap, useGSAP } from "./gsap";
 import type { DeckSlide, SectionId } from "./types";
 
-/** A section's colour: its stakeholder's, or the brand gradient for ours. */
-export function sectionColor(id: SectionId): string {
-  return id in STAKEHOLDERS
-    ? STAKEHOLDERS[id as keyof typeof STAKEHOLDERS].color
-    : "var(--grad-brand-h)";
+/**
+ * A section's colour. The deck has one accent, so every section shares it;
+ * kept as a function so the presenter's tools have one place to ask.
+ */
+export function sectionColor(_id: SectionId): string {
+  return "var(--accent)";
 }
 
 /**
- * The deck's frame: the mark and section top-left, the speaker top-right,
- * the slide count and a progress line along the bottom.
+ * The deck's frame: the mark and section top-left, the speaker top-right and
+ * a progress line along the bottom. Nothing else: no slide numbers (the
+ * audience does not need them; the presenter view has them) and no colour.
  *
  * It sits on the canvas above the slides, so it scales with them. The mark
  * in the corner is not drawn here but by each slide (see SlideFrame), so that
@@ -49,28 +50,17 @@ export const Chrome = forwardRef<
         <div className="absolute top-[44px] left-[115px] flex h-[40px] items-center gap-5">
           <span className="bg-line h-[26px] w-px" />
           <SwapIn swapKey={slide.section.id}>
-            <span className="flex items-center gap-3">
-              <span
-                className="h-[10px] w-[10px] rounded-full"
-                style={{ background: sectionColor(slide.section.id) }}
-              />
-              <span className="font-display text-fg text-[22px] font-semibold tracking-[-0.01em]">
-                {slide.section.title}
-              </span>
+            <span className="font-display text-muted text-[21px] font-medium tracking-[-0.01em]">
+              {slide.section.title}
             </span>
           </SwapIn>
         </div>
 
         <div className="absolute top-[42px] right-[64px] flex h-[44px] items-center">
           <SwapIn swapKey={slide.speaker}>
-            <SpeakerChip person={slide.speaker} size={40} label="Presenting" />
+            <SpeakerChip person={slide.speaker} size={38} />
           </SwapIn>
         </div>
-
-        <span className="t-mono text-faint absolute right-[64px] bottom-[30px] text-[16px]">
-          {String(slide.index + 1).padStart(2, "0")}
-          <span className="opacity-60"> / {slides.length}</span>
-        </span>
 
         <Progress slide={slide} slides={slides} />
       </div>
@@ -146,7 +136,7 @@ function Progress({
   return (
     <div
       ref={root}
-      className="absolute inset-x-[64px] bottom-[16px] flex h-[4px] gap-[6px]"
+      className="absolute inset-x-[64px] bottom-[18px] flex h-[3px] gap-[6px]"
     >
       {sections.map((section) => (
         <span
@@ -156,11 +146,8 @@ function Progress({
         >
           <span
             data-progress={section.id}
-            className="absolute inset-0 origin-left rounded-full"
-            style={{
-              background: sectionColor(section.id),
-              transform: "scaleX(0)",
-            }}
+            className="bg-fg absolute inset-0 origin-left rounded-full opacity-70"
+            style={{ transform: "scaleX(0)" }}
           />
         </span>
       ))}

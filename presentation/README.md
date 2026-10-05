@@ -1,12 +1,16 @@
-# Presenting Plannr — the deck
+# Presenting Plannr: the deck
 
 The design thinking presentation for Plannr, built as a small web app on the
 same stack as Plannr itself: Next.js (App Router), TypeScript, Tailwind v4 and
-Plannr's own design tokens, fonts and icons. Every animation is GSAP, and slides
-change with **morph transitions** (Keynote's Magic Move, built on GSAP Flip):
-anything that appears on two slides in a row travels from one to the other.
+Plannr's own fonts and mark. Every animation is GSAP, and slides change with
+**morph transitions** (Keynote's Magic Move, built on GSAP Flip): anything that
+appears on two slides in a row travels from one to the other.
 
-It is a separate app from Plannr — its own `package.json`, its own build — so
+The look is a light keynote with one accent colour. **[DESIGN.md](DESIGN.md)**
+has the rules every slide follows (read it before designing a new slide); they
+come from the three design skills in `.agents/skills/`.
+
+It is a separate app from Plannr (its own `package.json`, its own build), so
 nothing here touches the product.
 
 ## Running it
@@ -41,6 +45,7 @@ npx serve out        # or open it from any static host
 | `F` | Full screen |
 | `B` | Black the screen out |
 | `H` | Hide the placeholder marks |
+| `M` | Reduced motion on or off (slides dissolve, builds land at once) |
 | `?` | The list of keys |
 
 **Presenter view.** Press `P` and drag the new window to your laptop screen; put
@@ -96,7 +101,7 @@ src/
   sections/   the talk: slide order, data and speaker notes (edit these)
   templates/  slide layouts shared by every section (problems, ranking, …)
   visuals/    the bespoke animated pictures (the old site, phone demos, …)
-  ui/         Plannr's look: icons, mark, device frames, app mock-up pieces
+  ui/         icons (Phosphor), mark, device frames, Bezel, Card, Chip, mock-up pieces
   content/    the team, the stakeholders and the data shapes
   deck/       the engine: canvas, navigation, morphs, builds, presenter view
 ```
@@ -142,7 +147,7 @@ useSteps(ref, step, (tl, mark) => {
 ### Morphs
 
 Give an element the same `data-flip-id` on two consecutive slides and it
-travels between them — position, size, colour, radius and type size — while
+travels between them (position, size, colour, radius and type size) while
 everything else dissolves. The deck uses this on purpose throughout:
 
 | From | To | Flip id |

@@ -108,7 +108,7 @@ const DAYS: DayLane[] = [
       },
       {
         at: "15:00",
-        label: "“Is it still on?” — again",
+        label: "“Is it still on?”, again",
         icon: "message",
         tone: "bad",
       },
@@ -191,11 +191,11 @@ const FEATURES: Feature[] = [
     id: "edit-once",
     name: "Edit once. Everyone knows.",
     tagline:
-      "Save a change, and the students and teachers it affects are told — by Plannr, not by you.",
+      "Save a change, and the students and teachers it affects are told. By Plannr, not by you.",
     points: [
       "Drag a class to its new slot, and save",
       "Exactly the people affected are notified",
-      "See who's seen it — no reply-all",
+      "See who's seen it, without a reply-all",
     ],
     solves: ["twice", "seen", "questions"],
     icon: "send",
@@ -206,7 +206,7 @@ const FEATURES: Feature[] = [
     tagline: "Rooms, teachers and groups are checked as you place a class.",
     points: [
       "Rooms, teachers and groups checked as you drag",
-      "A warning before a clash is saved — not a call after",
+      "A warning before a clash is saved, not a call after",
       "Clash-free alternatives, offered on the spot",
     ],
     solves: ["clash", "rooms"],
@@ -218,7 +218,7 @@ const FEATURES: Feature[] = [
     tagline:
       "Faculty requests arrive in one queue, not in calls, chats and mails.",
     points: [
-      "Extra lectures, room changes, cancellations — one queue",
+      "Extra lectures, room changes, cancellations: one queue",
       "Approve, and it's on the timetable",
       "Everyone affected is told as you approve",
     ],
@@ -251,7 +251,7 @@ export const coordinators: SectionDef = {
             position: "50% 55%",
           }}
           number="03"
-          lede="The people who make the timetable — and remake it, every time something changes."
+          lede="The people who make the timetable, and remake it every time something changes."
           step={step}
         />
       ),
@@ -266,7 +266,6 @@ export const coordinators: SectionDef = {
       ],
       render: ({ step }) => (
         <Statement
-          eyebrow="Why coordinators"
           accent="var(--coordinators)"
           title={
             <>
@@ -293,7 +292,6 @@ export const coordinators: SectionDef = {
         <InterviewSummary
           active={active}
           stakeholder="coordinators"
-          eyebrow="Coordinators · Research"
           title="A week at the coordinator's desk."
           research={RESEARCH}
           step={step}
@@ -313,7 +311,6 @@ export const coordinators: SectionDef = {
       ],
       render: ({ step }) => (
         <FlowDiagram
-          eyebrow="Coordinators · Today"
           title="One change, done four times."
           accent="var(--coordinators)"
           nodes={[
@@ -363,7 +360,6 @@ export const coordinators: SectionDef = {
         <DayTimeline
           active={active}
           stakeholder="coordinators"
-          eyebrow="Coordinators · Their days"
           title="A day spent repeating itself."
           lanes={DAYS}
           from={8}
@@ -380,7 +376,6 @@ export const coordinators: SectionDef = {
       render: ({ step }) => (
         <ProblemBoard
           stakeholder="coordinators"
-          eyebrow="Coordinators · What we heard"
           title="Everything they told us."
           problems={PROBLEMS}
           step={step}
@@ -400,7 +395,6 @@ export const coordinators: SectionDef = {
       render: ({ step }) => (
         <ProblemRanking
           stakeholder="coordinators"
-          eyebrow="Coordinators · Ranking"
           title="What hurts most."
           problems={PROBLEMS}
           personas={PERSONAS}
@@ -420,7 +414,6 @@ export const coordinators: SectionDef = {
       render: ({ step }) => (
         <SolutionMap
           stakeholder="coordinators"
-          eyebrow="Coordinators · Solutions"
           title="One answer for each."
           problems={TOP}
           features={FEATURES}
@@ -522,10 +515,9 @@ export const coordinators: SectionDef = {
         "That's coordinators. And behind every one of us are the people who keep the system itself running. Over to Paras.",
       render: ({ step }) => (
         <StakeholderMap
-          eyebrow="Next"
           title="That's coordinators."
           highlight="admins"
-          caption="Over to Paras — system admins."
+          caption="Over to Paras, for system admins."
           step={step}
         />
       ),

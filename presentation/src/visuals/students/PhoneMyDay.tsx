@@ -14,6 +14,7 @@ import {
   type DayFrame,
   Finger,
   HourGrid,
+  Meta,
   PHONE_HEIGHT,
   SCREEN_H,
   SCREEN_W,
@@ -56,9 +57,9 @@ const TODAY_BTN = { x: 336, y: 92 };
  * colours, the next one lit.
  *
  * Builds (steps = 3):
- *   0 — today's classes, the next one picked out.
- *   1 — swipe to tomorrow: the day actually slides across (real travel, not a cross-fade).
- *   2 — the "now" line and a next-class card: room, teacher, minutes until it starts.
+ *   0: today's classes, the next one picked out.
+ *   1: swipe to tomorrow: the day actually slides across (real travel, not a cross-fade).
+ *   2: the "now" line and a next-class card: room, teacher, minutes until it starts.
  *
  * Today and tomorrow are two panes on one rail, header and timeline both: a
  * swipe translates the rail, so the whole day travels under the finger.
@@ -248,7 +249,7 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                 className={`md-chip-${i} relative flex flex-col items-center justify-center`}
                 style={{ width: CHIP_W, color: i === 1 ? "#ffffff" : INK }}
               >
-                <span className="font-mono text-[11px] tracking-[0.06em] uppercase opacity-70">
+                <span className="text-[12px] font-medium opacity-70">
                   {day.d}
                 </span>
                 <span className="font-display text-[20px] leading-tight font-bold">
@@ -289,7 +290,7 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                     zIndex: 2,
                   }}
                 >
-                  <BlockTag bg="var(--slate)">NEXT</BlockTag>
+                  <BlockTag bg="var(--slate)">Next</BlockTag>
                 </DayBlock>
                 <DayBlock
                   frame={DAY}
@@ -355,12 +356,12 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                   frame={DAY}
                   start={11}
                   end={12}
-                  title="Data Mining — unit test"
+                  title="Data Mining: unit test"
                   course="Data Mining"
                   room="Lab 2"
-                  detail="Units 1–3 · bring your ID"
+                  detail="Units 1-3 · bring your ID"
                 >
-                  <BlockTag bg="var(--red)">TEST</BlockTag>
+                  <BlockTag bg="var(--red)">Test</BlockTag>
                 </DayBlock>
                 <DayBlock
                   frame={DAY}
@@ -392,7 +393,7 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                     }}
                   >
                     <Icon name="file" size={14} stroke={2} />
-                    Due 3:30pm · Web Tech project
+                    <Meta text="Due 3:30pm · Web Tech project" />
                   </span>
                   <span
                     className="ml-2 h-0 flex-1"
@@ -406,7 +407,7 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
           {/* Offline, and it does not matter. */}
           <Toast className="md-offline" style={{ top: 714 }}>
             <Icon name="wifiOff" size={17} stroke={2} />
-            Offline · your week is saved
+            <Meta text="Offline · your week is saved" />
           </Toast>
 
           {/* The next class, everything you need to get there. */}
@@ -418,12 +419,12 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
               top: 620,
               padding: "15px 18px 16px",
               boxShadow:
-                "inset 0 0 0 1px rgba(68,88,121,0.2), 0 -6px 30px rgba(13,17,23,0.16)",
+                "inset 0 0 0 1px rgba(68,88,121,0.18), 0 -10px 34px -8px rgba(16,24,40,0.2)",
             }}
           >
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[11.5px] font-semibold tracking-[0.08em] text-[rgba(44,49,53,0.55)]">
-                NEXT CLASS · 10AM
+              <span className="text-[13.5px] font-semibold text-[rgba(44,49,53,0.6)]">
+                <Meta text="Next class · 10am" />
               </span>
               <span
                 className="rounded-full px-2.5 py-[4px] font-mono text-[13px] font-bold text-white"
@@ -467,7 +468,7 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
 function DayTitle({ date, title }: { date: string; title: string }) {
   return (
     <div className="shrink-0 px-5 pt-2" style={{ width: SCREEN_W }}>
-      <div className="font-mono text-[12px] tracking-[0.06em] text-[rgba(44,49,53,0.55)] uppercase">
+      <div className="text-[13.5px] font-medium text-[rgba(44,49,53,0.58)]">
         {date}
       </div>
       <div className="font-display text-[30px] leading-tight font-bold tracking-[-0.02em] text-[#0d1117]">

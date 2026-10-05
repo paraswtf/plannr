@@ -32,14 +32,13 @@ export const closing: SectionDef = {
       ],
       render: ({ step }) => (
         <Findings
-          eyebrow="What we found"
           title="Four weeks, four kinds of people, one finding."
           findings={[
             {
               stakeholder: "students",
               icon: "bell",
               title: "Students need the right information, in time.",
-              body: "Most of it exists — it just reaches them by mail, late, or not at all.",
+              body: "Most of it exists. It just reaches them by mail, late, or not at all.",
             },
             {
               stakeholder: "faculty",
@@ -51,7 +50,7 @@ export const closing: SectionDef = {
               stakeholder: "coordinators",
               icon: "refresh",
               title: "Coordinators do every change twice.",
-              body: "Once in the timetable, once in a mail — and can't tell who saw it.",
+              body: "Once in the timetable, once in a mail, and they can't tell who saw it.",
             },
             {
               stakeholder: "admins",
@@ -62,8 +61,8 @@ export const closing: SectionDef = {
           ]}
           conclusion={
             <>
-              One source of truth —{" "}
-              <Grad>that tells people when it changes.</Grad>
+              One source of truth,{" "}
+              <Grad brand>that tells people when it changes.</Grad>
             </>
           }
           step={step}
@@ -80,7 +79,6 @@ export const closing: SectionDef = {
       ],
       render: ({ step }) => (
         <MergeApps
-          eyebrow="What we combined"
           title="Three apps in. One out."
           apps={[
             { name: "Timetable", does: "Classes and rooms", icon: "grid" },
@@ -111,7 +109,6 @@ export const closing: SectionDef = {
       ],
       render: ({ step }) => (
         <Roadmap
-          eyebrow="Future scope"
           title="What we're building next."
           phases={[
             {
@@ -159,20 +156,19 @@ export const closing: SectionDef = {
       ],
       render: ({ step }) => (
         <OpenSource
-          eyebrow="We need your help"
           title={
             <>
               Build it <Grad>with us.</Grad>
             </>
           }
-          lede="Plannr is open source. If you design, code, test — or just have opinions about the timetable — there's a place for you."
+          lede="Plannr is open source. If you design, code or test, or just have opinions about the timetable, there's a place for you."
           repoUrl={PROJECT.repoUrl}
           repoLabel={PROJECT.repo}
           asks={[
             {
               icon: "code",
               title: "Code",
-              body: "Next.js, TypeScript and Postgres — with issues for first-timers",
+              body: "Next.js, TypeScript and Postgres, with issues for first-timers",
             },
             {
               icon: "sparkles",
@@ -201,13 +197,12 @@ export const closing: SectionDef = {
         "Before we finish: this project is funded by Rivant, as part of its contribution to the open-source community. At Rivant we build things that are used by people — and every one of them starts the way this one did: by watching how people actually work. And of course — Sonal, Ravya, Tanisha: thank you.",
       render: ({ step }) => (
         <Credits
-          eyebrow="Credits"
           title="Built by students. Backed by Rivant."
           sponsor={{
             name: "Rivant",
             line: "Plannr is funded by Rivant, as part of its contribution to the open-source community.",
             about:
-              "We build things that are used by people — and every one starts by watching how they work.",
+              "We build things that are used by people, and every one starts by watching how they work.",
           }}
           team={["paras", "sonal", "ravya", "tanisha"]}
           step={step}

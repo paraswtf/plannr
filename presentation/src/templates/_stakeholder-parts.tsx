@@ -2,13 +2,14 @@
 
 import {
   useLayoutEffect,
+  useState,
   type CSSProperties,
   type HTMLAttributes,
   type ReactNode,
   type RefObject,
 } from "react";
 
-import { speakerColor, STAKEHOLDERS, TEAM } from "~/content/team";
+import { STAKEHOLDERS, TEAM } from "~/content/team";
 import type { SpeakerId, StakeholderId } from "~/deck/types";
 import { Icon } from "~/ui/icon";
 
@@ -23,8 +24,9 @@ import { Icon } from "~/ui/icon";
  * would jump to its new value on the first frame.
  *
  * The travelling box's own inline styles, on the other hand, must be plain
- * px and rgb(): GSAP tweens from the inline value, and it cannot read an
- * `em` width or a `var(--…)` colour (the icon came out 32px and black).
+ * px and hex/rgb: GSAP tweens from the inline value, and it cannot read an
+ * `em` width or a `var(--…)` colour (the icon came out 32px and black). The
+ * constants below mirror the tokens in globals.css for exactly that reason.
  *
  * And each travelling piece sits in a <Slot>: a box locked to the piece's
  * landed size. The morph resizes the piece in flight, and without the slot
@@ -32,21 +34,88 @@ import { Icon } from "~/ui/icon";
  * over the growing title).
  */
 
+/** The stage's tokens as plain values, for inline styles on travellers. */
+export const INK = {
+  fg: "#10141b",
+  body: "#353d4a",
+  muted: "#5f6878",
+  faint: "#8f97a6",
+  raised: "#fbfbfd",
+  accent: "#c8305f",
+} as const;
+
 /**
- * The stakeholder colours as RGB, mirroring the --students, --faculty, … tokens
- * in globals.css. Shadows and tints are written as rgba() rather than
- * color-mix() because the morph can interpolate the one and not the other.
+ * The card's edge and elevation, as three shadow layers in every state (a
+ * hairline ring, then two soft drops) so the morph can tween between them
+ * number by number. Mirrors --line / --accent-line and --shadow-1/2/3.
+ */
+const SHADOW = {
+  /** Resting: a hairline and --shadow-1. */
+  plain:
+    "inset 0 0 0 1px rgba(16, 24, 40, 0.08), 0 1px 1px rgba(16, 24, 40, 0.04), 0 2px 8px -2px rgba(16, 24, 40, 0.06)",
+  /** The card being handed over to: an accent hairline, lifted on --shadow-3. */
+  lit: "inset 0 0 0 1.5px rgba(200, 48, 95, 0.5), 0 6px 16px -8px rgba(16, 24, 40, 0.16), 0 44px 96px -32px rgba(16, 24, 40, 0.34)",
+  /** The opener's sheet: a hairline on --shadow-2. */
+  panel:
+    "inset 0 0 0 1px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04), 0 18px 48px -18px rgba(16, 24, 40, 0.2)",
+} as const;
+
+export function cardShadow(
+  _stakeholder: StakeholderId,
+  state: "plain" | "lit" | "panel",
+) {
+  return SHADOW[state];
+}
+
+/**
+ * Kept for old imports. The stakeholders no longer have colours of their own
+ * (DESIGN.md): every one of them resolves to the single accent.
  */
 export const STAKE_RGB: Record<StakeholderId, string> = {
-  students: "255, 93, 115",
-  faculty: "246, 167, 59",
-  coordinators: "193, 116, 214",
-  admins: "134, 163, 214",
+  students: "200, 48, 95",
+  faculty: "200, 48, 95",
+  coordinators: "200, 48, 95",
+  admins: "200, 48, 95",
 };
-
 export const rgba = (id: StakeholderId, alpha: number) =>
   `rgba(${STAKE_RGB[id]}, ${alpha})`;
 export const rgb = (id: StakeholderId) => `rgb(${STAKE_RGB[id]})`;
+
+/** Kept for old imports: the coloured wash is gone, so this paints nothing. */
+export function tintBackground(_id: StakeholderId, _strength = 1) {
+  return "none";
+}
+
+/**
+ * Each stakeholder's photo, the same file and crop on the map card and on the
+ * section opener, so the picture itself can travel between them. (The
+ * opener's `photo` prop, set in the section file, carries the credit.)
+ */
+export const STAKE_PHOTO: Record<
+  StakeholderId,
+  { src: string; alt: string; position: string }
+> = {
+  students: {
+    src: "/images/stakeholders/students.jpg",
+    alt: "Students checking their phones in a lecture hall",
+    position: "50% 40%",
+  },
+  faculty: {
+    src: "/images/stakeholders/faculty.jpg",
+    alt: "A lecturer teaching a class",
+    position: "50% 30%",
+  },
+  coordinators: {
+    src: "/images/stakeholders/coordinators.jpg",
+    alt: "A coordinator's desk: notes, keyboard and tablet",
+    position: "50% 55%",
+  },
+  admins: {
+    src: "/images/stakeholders/admins.jpg",
+    alt: "Server racks",
+    position: "40% 50%",
+  },
+};
 
 /**
  * A box that keeps the size of what it holds, so a travelling element can be
@@ -65,7 +134,7 @@ export function Slot({
   return (
     <div
       data-lock
-      className={`flex shrink-0 items-start justify-start [&>*]:shrink-0 ${className ?? ""}`}
+      className={`flex shrink-0 items-start justify-start *:shrink-0 ${className ?? ""}`}
       style={style}
     >
       {children}
@@ -116,30 +185,101 @@ export function useLockedSlots(root: RefObject<HTMLElement | null>) {
   }, [root]);
 }
 
-/** The coloured wash on a card and on the opener panel: identical in both. */
-export function tintBackground(id: StakeholderId, strength = 1) {
-  return `linear-gradient(158deg, ${rgba(id, 0.22 * strength)} 0%, ${rgba(id, 0.08 * strength)} 46%, ${rgba(id, 0.02 * strength)} 100%)`;
-}
-
 /**
- * A card's edge and glow. Every state has the same two shadows so the morph
- * can tween between them number by number.
+ * The stakeholder's photo as a bezel plate: the inner half of a double bezel
+ * whose tray is the card (on the map) or the sheet (on the opener), so its
+ * radius is the tray's minus the 8px rim and the curves stay concentric.
+ *
+ * It is one travelling element on both slides. The picture inside is laid out
+ * with object-fit, so as the morph reshapes the plate from the card's wide
+ * strip to the opener's tall panel the crop changes continuously.
  */
-export function cardShadow(
-  id: StakeholderId,
-  state: "plain" | "lit" | "panel",
-) {
-  switch (state) {
-    case "lit":
-      return `inset 0 0 0 2px ${rgba(id, 0.9)}, 0 36px 110px -18px ${rgba(id, 0.5)}`;
-    case "panel":
-      return `inset 0 0 0 2px ${rgba(id, 0.42)}, 0 36px 110px -18px ${rgba(id, 0.16)}`;
-    default:
-      return `inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 36px 110px -18px ${rgba(id, 0)}`;
-  }
+export function StakePhoto({
+  stakeholder,
+  src,
+  alt,
+  position,
+  credit,
+  quiet = false,
+  radius = 22,
+  flipId,
+  className,
+  style,
+  ...rest
+}: {
+  stakeholder: StakeholderId;
+  src?: string;
+  alt?: string;
+  position?: string;
+  /** Plain small type at the photo's foot (the licence asks for it). */
+  credit?: string;
+  /** Greyed back, for the cards that are not being talked about. */
+  quiet?: boolean;
+  radius?: number;
+  flipId?: string;
+  className?: string;
+  style?: CSSProperties;
+} & Omit<HTMLAttributes<HTMLDivElement>, "children" | "style">) {
+  const fallback = STAKE_PHOTO[stakeholder];
+  const file = src ?? fallback.src;
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = failed !== file;
+  return (
+    <div
+      {...rest}
+      data-flip-id={flipId}
+      className={`relative overflow-hidden ${className ?? ""}`}
+      style={{ borderRadius: radius, backgroundColor: "#e7e9ee", ...style }}
+    >
+      {shown ? (
+        // A plain <img>: the deck is a static export with images served as-is.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={file}
+          alt={alt ?? fallback.alt}
+          onError={() => setFailed(file)}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{
+            objectPosition: position ?? fallback.position,
+            filter: quiet ? "grayscale(1) contrast(0.94)" : undefined,
+            opacity: quiet ? 0.84 : 1,
+          }}
+        />
+      ) : (
+        <div className="text-faint absolute inset-0 flex items-center justify-center">
+          <Icon
+            name={STAKEHOLDERS[stakeholder].icon}
+            weight="light"
+            style={{ width: "30%", height: "30%" }}
+          />
+        </div>
+      )}
+      {/* The plate's own edge: a hairline and a lit top lip, over the photo. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit]"
+        style={{
+          boxShadow:
+            "inset 0 0 0 1px rgba(16, 24, 40, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.35)",
+        }}
+      />
+      {shown && credit && (
+        <span
+          data-photo-credit
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end px-5 pt-12 pb-4 text-[15px] text-white/90"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(16,20,27,0.4), rgba(16,20,27,0))",
+          }}
+        >
+          {credit}
+        </span>
+      )}
+    </div>
+  );
 }
 
-/** The stakeholder's icon on a tinted tile. Size it with the `size` (font-size) prop. */
+/** The stakeholder's icon on a quiet tile. Size it with the `size` (font-size) prop. */
 export function IconTile({
   stakeholder,
   size,
@@ -161,22 +301,25 @@ export function IconTile({
         fontSize: size,
         width: size * 2,
         height: size * 2,
-        borderRadius: Math.round(size * 0.56),
-        color: rgb(stakeholder),
-        backgroundColor: rgba(stakeholder, 0.14),
-        boxShadow: `inset 0 0 0 1px ${rgba(stakeholder, 0.34)}`,
+        borderRadius: Math.round(size * 0.6),
+        color: INK.fg,
+        backgroundColor: "#eceef2",
+        boxShadow: "inset 0 0 0 1px rgba(16, 24, 40, 0.06)",
       }}
     >
       <Icon
         name={s.icon}
-        stroke={1.6}
-        style={{ width: "1.05em", height: "1.05em" }}
+        weight="light"
+        style={{ width: "1.1em", height: "1.1em" }}
       />
     </span>
   );
 }
 
-/** An Avatar measured in em, so it scales with the chip it sits in. */
+/**
+ * An Avatar measured in em, so it scales with the chip it sits in: the same
+ * rounded square as the deck's Avatar.
+ */
 export function EmAvatar({
   person,
   size = 1.6,
@@ -185,16 +328,16 @@ export function EmAvatar({
   size?: number;
 }) {
   const p = TEAM[person];
-  const color = speakerColor(person);
   return (
     <span
-      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full"
+      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden"
       style={{
         width: `${size}em`,
         height: `${size}em`,
-        background: `color-mix(in srgb, ${color} 22%, var(--bg-raised))`,
-        boxShadow: `inset 0 0 0 ${size * 0.04}em color-mix(in srgb, ${color} 70%, transparent)`,
-        color,
+        borderRadius: "30%",
+        background: "#e3e6ec",
+        boxShadow: "inset 0 0 0 1px rgba(16, 24, 40, 0.08)",
+        color: INK.fg,
       }}
     >
       {p.photo ? (
@@ -206,8 +349,8 @@ export function EmAvatar({
         />
       ) : (
         <span
-          className="font-display font-bold"
-          style={{ fontSize: `${size * 0.44}em`, letterSpacing: "-0.02em" }}
+          className="font-display font-semibold"
+          style={{ fontSize: `${size * 0.42}em`, letterSpacing: "-0.02em" }}
         >
           {p.name[0]}
         </span>
@@ -237,10 +380,10 @@ export function OwnerChip({
       {...rest}
       data-flip-id={flipId}
       className={`inline-flex items-center self-start ${className ?? ""}`}
-      style={{ fontSize: size, gap: "0.46em", ...style }}
+      style={{ fontSize: size, gap: "0.46em", color: INK.fg, ...style }}
     >
       <EmAvatar person={owner} />
-      <span className="owner-name font-display leading-none font-semibold tracking-[-0.015em] whitespace-nowrap">
+      <span className="owner-name font-display leading-none font-medium tracking-[-0.015em] whitespace-nowrap">
         {TEAM[owner].name}
       </span>
     </span>

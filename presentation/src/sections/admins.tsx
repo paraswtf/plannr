@@ -140,7 +140,7 @@ const FEATURES: Feature[] = [
     points: [
       "Upload the college's own spreadsheet as it is",
       "Preview every addition, change and removal",
-      "Apply it in one click — and undo it in one",
+      "Apply it in one click, undo it in one",
     ],
     solves: ["manual", "bulk"],
     icon: "upload",
@@ -185,7 +185,7 @@ export const admins: SectionDef = {
             position: "40% 50%",
           }}
           number="04"
-          lede="The people who keep the data right — and the people who need to see what it says."
+          lede="The people who keep the data right, and the people who need to see what it says."
           step={step}
         />
       ),
@@ -202,7 +202,6 @@ export const admins: SectionDef = {
         <InterviewSummary
           active={active}
           stakeholder="admins"
-          eyebrow="Admins · Research"
           title="A week with the people behind it."
           research={RESEARCH}
           step={step}
@@ -222,7 +221,6 @@ export const admins: SectionDef = {
       ],
       render: ({ step }) => (
         <FlowDiagram
-          eyebrow="Admins · Today"
           title="Updating the data, one row at a time."
           accent="var(--admins)"
           nodes={[
@@ -257,7 +255,8 @@ export const admins: SectionDef = {
               tone: "bad",
             },
           ]}
-          outcome="Hundreds of edits a term — and no dashboard to see the result."
+          outcomeIcon="chart"
+          outcome="Hundreds of edits a term, and no dashboard to see the result."
           step={step}
         />
       ),
@@ -270,7 +269,6 @@ export const admins: SectionDef = {
       render: ({ step }) => (
         <ProblemBoard
           stakeholder="admins"
-          eyebrow="Admins · What we heard"
           title="Everything they told us."
           problems={PROBLEMS}
           step={step}
@@ -290,7 +288,6 @@ export const admins: SectionDef = {
       render: ({ step }) => (
         <ProblemRanking
           stakeholder="admins"
-          eyebrow="Admins · Ranking"
           title="What hurts most."
           problems={PROBLEMS}
           personas={PERSONAS}
@@ -307,7 +304,6 @@ export const admins: SectionDef = {
       render: ({ step }) => (
         <SolutionMap
           stakeholder="admins"
-          eyebrow="Admins · Solutions"
           title="One answer for each."
           problems={TOP}
           features={FEATURES}

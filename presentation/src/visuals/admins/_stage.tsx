@@ -45,7 +45,7 @@ const INTRO_DELAY = 0.55;
 
 /** Hairline-ringed white card, as the app draws them. */
 export const CARD_SHADOW =
-  "inset 0 0 0 1px var(--card-ring), 0 2px 10px rgba(13,17,23,0.05)";
+  "inset 0 0 0 1px var(--card-ring), 0 2px 10px rgba(16,24,40,0.05)";
 
 export function Stage({
   flipId,
@@ -142,7 +142,7 @@ export function Cursor({
         className="cur-svg block"
         style={{
           transformOrigin: "2px 2px",
-          filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.3))",
+          filter: "drop-shadow(0 3px 6px rgba(16,24,40,0.28))",
           marginLeft: -2,
           marginTop: -2,
         }}

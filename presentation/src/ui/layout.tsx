@@ -5,8 +5,8 @@ import type { CSSProperties, ReactNode } from "react";
  *
  * The canvas is 1920 × 1080. The deck's top bar owns the strip above y = 112
  * and the progress line owns the bottom 16px, so a slide's own content lives
- * inside SlideBody's padding: 128px either side, 132px top, 104px bottom —
- * a 1664 × 844 box.
+ * inside SlideBody's padding: 128px either side, 132px top, 104px bottom, a
+ * 1664 × 844 box.
  */
 export const SAFE = { x: 128, top: 132, bottom: 104 } as const;
 
@@ -35,42 +35,14 @@ export function SlideBody({
   );
 }
 
-/** The small mono label above a title: "STUDENTS · WHAT WE HEARD". */
-export function Eyebrow({
-  children,
-  color,
-  className,
-  flipId,
-}: {
-  children: ReactNode;
-  color?: string;
-  className?: string;
-  flipId?: string;
-}) {
-  return (
-    <p
-      data-flip-id={flipId}
-      className={`t-eyebrow text-muted flex items-center gap-3 ${className ?? ""}`}
-      style={color ? { color } : undefined}
-    >
-      {color && (
-        <span
-          className="inline-block h-[10px] w-[10px] rounded-full"
-          style={{ background: color }}
-        />
-      )}
-      {children}
-    </p>
-  );
-}
-
 /**
- * Eyebrow, title and an optional line under it, in the deck's standard place.
+ * A slide's title and the line under it, in the deck's standard place.
  * `titleFlipId` lets a title travel from the slide before.
+ *
+ * `eyebrow` is accepted and deliberately not drawn: the top bar already names
+ * the section, and a label above every title is a template's rhythm.
  */
 export function SlideHeader({
-  eyebrow,
-  eyebrowColor,
   title,
   lede,
   titleFlipId,
@@ -87,53 +59,31 @@ export function SlideHeader({
 }) {
   return (
     <header className={`flex flex-col ${className ?? ""}`}>
-      {eyebrow && <Eyebrow color={eyebrowColor}>{eyebrow}</Eyebrow>}
       <h1
         data-flip-id={titleFlipId}
-        className={`t-title mt-6 max-w-[22ch] self-start text-balance ${titleClassName ?? ""}`}
+        className={`t-title text-fg max-w-[22ch] self-start ${titleClassName ?? ""}`}
       >
         {title}
       </h1>
-      {lede && (
-        <p className="t-lede text-muted mt-6 max-w-[48ch] text-pretty">
-          {lede}
-        </p>
-      )}
+      {lede && <p className="t-lede text-muted mt-6 max-w-[46ch]">{lede}</p>}
     </header>
   );
 }
 
-/** Gradient-filled words: the one phrase on a slide that carries it. */
-export function Grad({ children }: { children: ReactNode }) {
-  return <span className="grad-text">{children}</span>;
-}
-
-/** A soft glow of the brand's warm end, behind hero type. */
-export function Glow({
-  x = "20%",
-  y = "40%",
-  size = 1100,
-  color = "var(--glow)",
-  className,
+/**
+ * The phrase on a slide that carries it, in the accent.
+ *
+ * `brand` paints it with the full brand gradient instead. That is reserved
+ * for two moments in the whole deck: the cover's name and the closing thesis.
+ */
+export function Grad({
+  children,
+  brand = false,
 }: {
-  x?: string;
-  y?: string;
-  size?: number;
-  color?: string;
-  className?: string;
+  children: ReactNode;
+  brand?: boolean;
 }) {
   return (
-    <div
-      aria-hidden
-      className={`pointer-events-none absolute ${className ?? ""}`}
-      style={{
-        left: x,
-        top: y,
-        width: size,
-        height: size,
-        transform: "translate(-50%, -50%)",
-        background: `radial-gradient(circle at center, ${color} 0%, transparent 62%)`,
-      }}
-    />
+    <span className={brand ? "grad-text" : "text-accent"}>{children}</span>
   );
 }

@@ -130,7 +130,7 @@ const REQUESTS: Request[] = [
 const KIND: Record<Kind, { label: string; fg: string; bg: string }> = {
   extra: { label: "Extra lecture", fg: "#2f5f1f", bg: "rgba(78,125,58,0.14)" },
   room: { label: "Room change", fg: "#2c3f63", bg: "rgba(68,88,121,0.14)" },
-  cancel: { label: "Cancellation", fg: "#a3202e", bg: "rgba(220,56,72,0.12)" },
+  cancel: { label: "Cancellation", fg: "#a8274f", bg: "rgba(200,48,95,0.1)" },
 };
 
 const APPROVE = { w: 88, h: 30 };
@@ -182,7 +182,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
   // On arrival: the requests come in, newest on top, pushing the rest down.
   useIntro(ref, step, active, (tl) => {
     const enter = { duration: 0.5, ease: "power3.out" };
-    const push = { duration: 0.45, ease: "power2.inOut" };
+    const push = { duration: 0.45, ease: "deck.morph" };
     // The badge stays hidden until the first request has landed.
     tl.fromTo(
       ".count",
@@ -216,7 +216,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
     tl.fromTo(
       ".cur-a",
       tip(CURSOR_START),
-      { ...tip(approveAt(y0)), duration: 0.8, ease: "power2.inOut" },
+      { ...tip(approveAt(y0)), duration: 0.8, ease: "deck.morph" },
       ">0.2",
     );
   });
@@ -235,32 +235,32 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
     tl.addLabel("fly1", ">0.1");
     tl.to(
       ".card-r1",
-      { boxShadow: "0 24px 44px rgba(13,17,23,0.28)", duration: 0.2 },
+      { boxShadow: "0 24px 44px rgba(16,24,40,0.24)", duration: 0.2 },
       "fly1",
     );
     tl.to(
       ".card-r1",
-      { ...flight(REQUESTS[0]!, y0), duration: 1, ease: "power2.inOut" },
+      { ...flight(REQUESTS[0]!, y0), duration: 1, ease: "deck.morph" },
       "fly1",
     );
     tl.to(".card-r1 .face-card", { opacity: 0, duration: 0.35 }, "fly1+=0.1");
     tl.to(".card-r1 .face-block", { opacity: 1, duration: 0.4 }, "fly1+=0.45");
     tl.to(
       ".card-r1",
-      { boxShadow: "0 0 0 rgba(13,17,23,0)", duration: 0.3 },
+      { boxShadow: "0 0 0 rgba(16,24,40,0)", duration: 0.3 },
       "fly1+=0.8",
     );
     // The queue closes up behind it.
     tl.fromTo(
       ".card-r2",
       { y: y1 },
-      { y: y0, duration: 0.55, ease: "power2.inOut", immediateRender: false },
+      { y: y0, duration: 0.55, ease: "deck.morph", immediateRender: false },
       "fly1+=0.3",
     );
     tl.fromTo(
       ".card-r3",
       { y: y2 },
-      { y: y1, duration: 0.55, ease: "power2.inOut", immediateRender: false },
+      { y: y1, duration: 0.55, ease: "deck.morph", immediateRender: false },
       "fly1+=0.38",
     );
     tl.fromTo(
@@ -269,7 +269,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
       {
         ...tip(ALL_AT),
         duration: 0.6,
-        ease: "power2.inOut",
+        ease: "deck.morph",
         immediateRender: false,
       },
       "fly1+=0.7",
@@ -298,15 +298,15 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
       const after = (d: number) => `fly2+=${at + d}`;
       tl.to(
         sel,
-        { boxShadow: "0 24px 44px rgba(13,17,23,0.28)", duration: 0.2 },
+        { boxShadow: "0 24px 44px rgba(16,24,40,0.24)", duration: 0.2 },
         t,
       );
-      tl.to(sel, { ...flight(r, from), duration: 1, ease: "power2.inOut" }, t);
+      tl.to(sel, { ...flight(r, from), duration: 1, ease: "deck.morph" }, t);
       tl.to(`${sel} .face-card`, { opacity: 0, duration: 0.35 }, after(0.1));
       tl.to(`${sel} .face-block`, { opacity: 1, duration: 0.4 }, after(0.45));
       tl.to(
         sel,
-        { boxShadow: "0 0 0 rgba(13,17,23,0)", duration: 0.3 },
+        { boxShadow: "0 0 0 rgba(16,24,40,0)", duration: 0.3 },
         after(0.8),
       );
     });
@@ -379,7 +379,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
           <span className="text-[16px] font-semibold">Inbox</span>
           <span
             className="count flex h-5.5 min-w-5.5 items-center justify-center rounded-full px-1.5 font-mono text-[12.5px] font-bold text-white"
-            style={{ background: "var(--red)" }}
+            style={{ background: "var(--accent)" }}
           >
             3
           </span>
@@ -446,8 +446,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
               width: c.w,
               height: c.h,
               opacity: 0,
-              boxShadow:
-                "0 0 0 3px var(--coordinators), 0 0 22px var(--coordinators)",
+              boxShadow: "0 0 0 3px var(--accent)",
             }}
           />
         );
@@ -476,7 +475,7 @@ function RequestCard({ r }: { r: Request }) {
         width: CARD.w,
         height: CARD.h,
         transform: `translateY(${y0}px)`,
-        boxShadow: "0 0 0 rgba(13,17,23,0)",
+        boxShadow: "0 0 0 rgba(16,24,40,0)",
       }}
     >
       {/* As a request, in the queue. */}
@@ -546,15 +545,15 @@ function RequestCard({ r }: { r: Request }) {
           <div
             className="absolute inset-0 overflow-hidden rounded-[10px] px-2 py-1.5"
             style={{
-              background: `repeating-linear-gradient(135deg, rgba(220,56,72,0.08) 0 6px, rgba(255,255,255,0.9) 6px 12px)`,
-              boxShadow: "inset 0 0 0 1.5px rgba(220,56,72,0.55)",
+              background: `repeating-linear-gradient(135deg, rgba(200,48,95,0.08) 0 6px, rgba(255,255,255,0.9) 6px 12px)`,
+              boxShadow: "inset 0 0 0 1.5px rgba(200,48,95,0.5)",
               color: "rgba(13,17,23,0.55)",
             }}
           >
             <span className="line-clamp-2 text-[13px] leading-tight font-semibold line-through">
               {r.result.title}
             </span>
-            <span className="mt-1 block truncate font-mono text-[11px] font-semibold text-[#a3202e]">
+            <span className="mt-1 block truncate font-mono text-[11px] font-semibold text-[#a8274f]">
               Cancelled
             </span>
           </div>

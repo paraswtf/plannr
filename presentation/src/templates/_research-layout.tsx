@@ -47,15 +47,6 @@ export function hoursOf(at: string) {
   return h + m / 60;
 }
 
-/**
- * When a sine.inOut sweep reaches fraction `p` of its distance, as a fraction
- * of its duration. Lets things pop exactly as an eased playhead passes them.
- */
-export function sineInOutTimeAt(p: number) {
-  const c = Math.min(1, Math.max(0, p));
-  return Math.acos(1 - 2 * c) / Math.PI;
-}
-
 export interface LabelItem {
   /** Where the event really is, in track pixels. */
   x: number;

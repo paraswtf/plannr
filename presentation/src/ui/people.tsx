@@ -1,9 +1,13 @@
-import { speakerColor, STAKEHOLDERS, TEAM } from "~/content/team";
+import { STAKEHOLDERS, TEAM } from "~/content/team";
 import type { SpeakerId, StakeholderId } from "~/deck/types";
 
 import { Icon } from "./icon";
 
-/** A presenter's face, or their initial in their colour until a photo is in. */
+/**
+ * A presenter's face, or their initial until a photo is in. A rounded square
+ * rather than a circle, with plain px and hex styles so it can travel in a
+ * morph.
+ */
 export function Avatar({
   person,
   size = 40,
@@ -16,17 +20,17 @@ export function Avatar({
   className?: string;
 }) {
   const p = TEAM[person];
-  const color = speakerColor(person);
   return (
     <span
       data-flip-id={flipId}
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full ${className ?? ""}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden ${className ?? ""}`}
       style={{
         width: size,
         height: size,
-        background: `color-mix(in srgb, ${color} 22%, var(--bg-raised))`,
-        boxShadow: `inset 0 0 0 ${Math.max(1, size / 28)}px color-mix(in srgb, ${color} 70%, transparent)`,
-        color,
+        borderRadius: Math.round(size * 0.3),
+        background: "#e3e6ec",
+        boxShadow: "inset 0 0 0 1px rgba(16, 24, 40, 0.08)",
+        color: "#10141b",
       }}
     >
       {p.photo ? (
@@ -38,8 +42,8 @@ export function Avatar({
         />
       ) : (
         <span
-          className="font-display font-bold"
-          style={{ fontSize: size * 0.44, letterSpacing: "-0.02em" }}
+          className="font-display font-semibold"
+          style={{ fontSize: size * 0.42, letterSpacing: "-0.02em" }}
         >
           {p.name[0]}
         </span>
@@ -71,15 +75,15 @@ export function SpeakerChip({
       <Avatar person={person} size={size} />
       <span className="flex flex-col leading-none">
         <span
-          className="font-display font-semibold"
-          style={{ fontSize: size * 0.48 }}
+          className="font-display text-fg font-medium"
+          style={{ fontSize: size * 0.46 }}
         >
           {TEAM[person].name}
         </span>
         {label && (
           <span
-            className="t-mono text-muted mt-1.5"
-            style={{ fontSize: Math.max(13, size * 0.32) }}
+            className="t-label text-muted mt-1.5"
+            style={{ fontSize: Math.max(14, size * 0.34) }}
           >
             {label}
           </span>
@@ -89,7 +93,7 @@ export function SpeakerChip({
   );
 }
 
-/** A small rounded tag in a stakeholder's colour: icon and name. */
+/** A small tag naming a stakeholder: icon and title, in the accent. */
 export function StakeholderTag({
   stakeholder,
   size = 22,
@@ -105,16 +109,14 @@ export function StakeholderTag({
   return (
     <span
       data-flip-id={flipId}
-      className={`inline-flex items-center gap-2 rounded-full font-semibold ${className ?? ""}`}
+      className={`text-accent bg-accent-soft inline-flex items-center gap-2 font-medium ${className ?? ""}`}
       style={{
         fontSize: size,
-        padding: `${size * 0.32}px ${size * 0.7}px ${size * 0.32}px ${size * 0.5}px`,
-        color: s.color,
-        background: `color-mix(in srgb, ${s.color} 14%, transparent)`,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${s.color} 36%, transparent)`,
+        borderRadius: 12,
+        padding: `${size * 0.3}px ${size * 0.62}px ${size * 0.3}px ${size * 0.46}px`,
       }}
     >
-      <Icon name={s.icon} size={size * 1.05} stroke={2} />
+      <Icon name={s.icon} size={size * 1.05} />
       {s.title}
     </span>
   );

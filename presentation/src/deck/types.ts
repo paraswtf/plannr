@@ -32,7 +32,7 @@ export interface SlideDef {
    * follow along, or one string for the whole slide.
    */
   notes: string | string[];
-  /** Defaults to "dark". */
+  /** Defaults to "light". The deck is one theme; leave this alone. */
   theme?: Theme;
   /** Show the deck's top bar and progress line. Defaults to true. */
   chrome?: boolean;
@@ -84,7 +84,7 @@ export function resolveDeck(sections: SectionDef[]): DeckSlide[] {
         ...def,
         index: slides.length,
         steps,
-        theme: def.theme ?? "dark",
+        theme: def.theme ?? "light",
         chrome: def.chrome ?? true,
         speaker: def.speaker ?? section.speaker,
         section,

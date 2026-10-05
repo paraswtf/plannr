@@ -8,7 +8,7 @@ import { useSteps } from "~/deck/useSteps";
 import { BrowserFrame } from "~/ui/frames";
 import { Icon, type IconName } from "~/ui/icon";
 
-import { MrbsPage, PAGE, PINNED } from "./_oldtimetable-page";
+import { HOLES, MrbsPage, PAGE, PINNED } from "./_oldtimetable-page";
 
 export interface OldTimetableProps {
   step: number;
@@ -34,9 +34,11 @@ export interface OldTimetableProps {
  * Builds (steps = 2):
  *   0 — the page, as it loads in (slowly): a progress strip, then the banner,
  *       then the table painting in, a few rows at a time. Plays on arrival.
- *   1 — callouts pinned onto the page, about a sentence apart: one page for
- *       everybody, type too small for a phone, the whole college loaded on
- *       every visit, plain HTTP. With `stepped`, steps 1–4 pin one each.
+ *   1 — the page washes back towards the stage and callouts are pinned onto
+ *       it, about a sentence apart: one page for everybody, type too small
+ *       for a phone, the whole college loaded on every visit, plain HTTP.
+ *       Each ring opens a clear window in the wash, so the thing it points
+ *       at keeps its colour. With `stepped`, steps 1–4 pin one each.
  */
 
 /** The 960 × 844 box the side layout gives us, and the window inside it. */
@@ -136,7 +138,9 @@ const CALLOUTS: Callout[] = [
   },
 ];
 
-const LEADER = "#e8455e";
+/** The deck's accent, as hex: these are drawn in SVG over the page. */
+const ACCENT = "#c8305f";
+const HOLE_IDS = new Set<string>(HOLES.map((h) => h.id));
 
 /** A soft elbow from the pin to the chip. */
 function leaderPath(from: Point, to: Point) {
@@ -256,12 +260,21 @@ export function OldTimetable({
           at,
         );
       }
+      if (HOLE_IDS.has(c.id)) {
+        tl.fromTo(
+          `.ot-hole-${c.id}`,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.45, ease: "power2.out" },
+          at,
+        );
+      }
       tl.fromTo(
         `.ot-pin-${c.id}`,
         // The origin goes in the "from" state: given only in the "to", GSAP
-        // would shift the pin to hide the change of origin.
-        { scale: 0, opacity: 0, transformOrigin: "50% 50%" },
-        { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(2.2)" },
+        // would shift the pin to hide the change of origin. The ring lands
+        // from a little larger, like a loupe settling onto the page.
+        { scale: 1.18, opacity: 0, transformOrigin: "50% 50%" },
+        { scale: 1, opacity: 1, duration: 0.5, ease: "deck.enter" },
         at,
       );
       tl.fromTo(
@@ -271,14 +284,14 @@ export function OldTimetable({
           drawSVG: "0% 100%",
           autoAlpha: 1,
           duration: 0.5,
-          ease: "power2.inOut",
+          ease: "power3.out",
         },
         at + 0.18,
       );
       tl.fromTo(
         `.ot-chip-${c.id}`,
         { opacity: 0, scale: 0.6 },
-        { opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.6)" },
+        { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.4)" },
         at + 0.55,
       );
       if (stepped) mark();
@@ -313,12 +326,13 @@ export function OldTimetable({
       >
         {CALLOUTS.map((c) => (
           <g key={c.id}>
-            {/* A dark under-stroke keeps the line legible over the busy page. */}
+            {/* A pale halo keeps the line clean where it crosses page text. */}
             <path
               className={`ot-line-${c.id}`}
               d={leaderPath(c.pin, c.anchor)}
               fill="none"
-              stroke="rgba(13,17,23,0.55)"
+              stroke="#ffffff"
+              strokeOpacity={0.9}
               strokeWidth={8}
               strokeLinecap="round"
               style={{ visibility: "hidden" }}
@@ -327,37 +341,44 @@ export function OldTimetable({
               className={`ot-line-${c.id}`}
               d={leaderPath(c.pin, c.anchor)}
               fill="none"
-              stroke={LEADER}
-              strokeWidth={3.5}
+              stroke={ACCENT}
+              strokeWidth={3}
               strokeLinecap="round"
               style={{ visibility: "hidden" }}
             />
             <g className={`ot-pin-${c.id}`} style={{ opacity: 0 }}>
               {c.ring ? (
-                <rect
-                  x={c.ring.x}
-                  y={c.ring.y}
-                  width={c.ring.w}
-                  height={c.ring.h}
-                  rx={8}
-                  fill="rgba(232,69,94,0.12)"
-                  stroke={LEADER}
-                  strokeWidth={3}
-                />
+                <>
+                  <rect
+                    x={c.ring.x - 1.5}
+                    y={c.ring.y - 1.5}
+                    width={c.ring.w + 3}
+                    height={c.ring.h + 3}
+                    rx={9.5}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeOpacity={0.9}
+                    strokeWidth={3}
+                  />
+                  <rect
+                    x={c.ring.x}
+                    y={c.ring.y}
+                    width={c.ring.w}
+                    height={c.ring.h}
+                    rx={8}
+                    fill="none"
+                    stroke={ACCENT}
+                    strokeWidth={3}
+                  />
+                </>
               ) : (
                 <>
                   <circle
                     cx={c.pin.x}
                     cy={c.pin.y}
-                    r={17}
-                    fill="rgba(232,69,94,0.22)"
-                  />
-                  <circle
-                    cx={c.pin.x}
-                    cy={c.pin.y}
-                    r={7}
-                    fill={LEADER}
-                    stroke="#fff"
+                    r={9}
+                    fill={ACCENT}
+                    stroke="#ffffff"
                     strokeWidth={3}
                   />
                 </>
@@ -371,29 +392,21 @@ export function OldTimetable({
         <div
           key={c.id}
           data-no-enter
-          className={`ot-chip-${c.id} absolute flex items-center gap-3 rounded-full whitespace-nowrap`}
+          className={`ot-chip-${c.id} bg-raised text-fg absolute flex items-center gap-3.5 rounded-[12px] whitespace-nowrap`}
           style={{
             left: c.chip.x,
             top: c.chip.y,
             width: c.width,
             justifyContent: c.width ? "center" : undefined,
             height: 60,
-            padding: "0 26px 0 12px",
-            background: "#0d1117",
-            color: "#fff",
-            boxShadow:
-              "inset 0 0 0 1px rgba(255,255,255,0.14), 0 18px 40px rgba(0,0,0,0.35)",
+            padding: "0 24px 0 18px",
+            boxShadow: "inset 0 0 0 1px var(--line-strong), var(--shadow-2)",
             transformOrigin: `${c.anchor.x - c.chip.x}px ${c.anchor.y - c.chip.y}px`,
             opacity: 0,
           }}
         >
-          <span
-            className="flex h-9.5 w-9.5 items-center justify-center rounded-full"
-            style={{ background: "rgba(232,69,94,0.2)", color: "#ff7a8c" }}
-          >
-            <Icon name={c.icon} size={22} stroke={2.2} />
-          </span>
-          <span className="font-body text-[25px] font-semibold tracking-[-0.01em]">
+          <Icon name={c.icon} size={28} className="text-accent" />
+          <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
             {c.text}
           </span>
         </div>

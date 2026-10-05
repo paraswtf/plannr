@@ -35,7 +35,7 @@ export interface TeachingWeekProps {
  *       combined lecture, a banner says so, and the block travels to its new
  *       day, hour and room.
  *   2 — cancel once: the pointer opens a class and cancels it; it greys out
- *       and a toast says "62 students told" — they were told for you.
+ *       and a toast says "62 students told": they were told for you.
  *
  * The browser frame carries `flipId`, shared with RequestLecture and
  * LectureLog, so the window holds still across the three feature slides.
@@ -229,7 +229,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
       "[data-moved]",
       {
         scale: 1.06,
-        boxShadow: "0 16px 30px rgba(13,17,23,0.22)",
+        boxShadow: "0px 16px 30px rgba(16,24,40,0.2)",
         duration: 0.3,
         ease: "power2.out",
       },
@@ -262,7 +262,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
       "[data-moved]",
       {
         scale: 1,
-        boxShadow: "0 0px 0px rgba(13,17,23,0)",
+        boxShadow: "0px 0px 0px rgba(16,24,40,0)",
         duration: 0.35,
         ease: "power2.out",
       },
@@ -377,7 +377,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
         >
           <div>
             <div
-              className="font-mono text-[12.5px] tracking-[0.08em] uppercase"
+              className="text-[14px] leading-[18px] font-semibold"
               style={{ color: INK.muted }}
             >
               Week of 5 Oct
@@ -516,7 +516,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
             style={{
               ...box(MOVED.from.day, MOVED.from.at),
               background: ELECTIVE_FILL,
-              boxShadow: "0 0 0 rgba(13,17,23,0)",
+              boxShadow: "0px 0px 0px rgba(16,24,40,0)",
             }}
           >
             <span
@@ -536,14 +536,14 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
                   <Room>Lab 2</Room>
                 </span>
               </span>
-              <GroupStack size={18} />
+              <GroupStack size={16} />
             </span>
             <span
               data-moved-tag
-              className="absolute -top-[14px] -right-[8px] rounded-full px-2.5 py-[3px] font-mono text-[12px] leading-[14px] font-bold tracking-[0.04em] text-white opacity-0"
-              style={{ background: "#d9771f", boxShadow: "0 0 0 2px #ffffff" }}
+              className="absolute -top-[14px] -right-[8px] rounded-[7px] px-2 py-[3px] text-[13px] leading-[15px] font-bold text-white opacity-0"
+              style={{ background: "#c46d10", boxShadow: "0 0 0 2px #ffffff" }}
             >
-              MOVED
+              Moved
             </span>
           </div>
         </div>
@@ -559,7 +559,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
             top: TOPBAR + 10,
             height: 54,
             transform: "translateY(-90px)",
-            boxShadow: `inset 0 0 0 1.5px rgba(217,119,31,0.55), 0 14px 32px rgba(13,17,23,0.16)`,
+            boxShadow: `inset 0 0 0 1.5px rgba(217,119,31,0.5), 0 2px 4px rgba(16,24,40,0.04), 0 16px 36px -14px rgba(16,24,40,0.24)`,
           }}
         >
           <span
@@ -592,7 +592,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
           style={{
             left: pop.x,
             top: pop.y,
-            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 16px 36px rgba(13,17,23,0.2)`,
+            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 2px 4px rgba(16,24,40,0.04), 0 18px 40px -14px rgba(16,24,40,0.26)`,
           }}
         >
           <div className="px-3 pt-2 pb-2.5">
@@ -601,7 +601,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
               className="font-mono text-[12.5px]"
               style={{ color: INK.muted }}
             >
-              BCA-B · Wed 11:00 · 302
+              BCA-B, Wed 11:00 · 302
             </div>
           </div>
           <div className="mx-2 h-px" style={{ background: INK.hair }} />
@@ -657,7 +657,7 @@ function GroupStack({ size }: { size: number }) {
 
 function BlockTitle({ children }: { children: string }) {
   return (
-    <span className="relative line-clamp-2 px-2 pt-[3px] text-[14.5px] leading-[15px] font-semibold">
+    <span className="relative block px-2 pt-[1px] text-[14.5px] leading-[15px] font-semibold">
       {children}
     </span>
   );
@@ -695,7 +695,7 @@ function Block({
       <BlockTitle>{s.title}</BlockTitle>
       <span className="absolute inset-x-2 bottom-[3px] flex items-center justify-between">
         <Room>{s.room}</Room>
-        {s.group === "AB" && <GroupStack size={18} />}
+        {s.group === "AB" && <GroupStack size={16} />}
       </span>
       {cancellable && (
         <div
@@ -719,10 +719,10 @@ function Block({
             />
           </span>
           <span
-            className="rounded-full px-2 py-[2px] font-mono text-[12px] leading-[14px] font-bold tracking-[0.04em] text-white"
+            className="rounded-[6px] px-1.5 py-[2px] text-[12.5px] leading-[14px] font-bold text-white"
             style={{ background: INK.red }}
           >
-            CANCELLED
+            Cancelled
           </span>
         </div>
       )}

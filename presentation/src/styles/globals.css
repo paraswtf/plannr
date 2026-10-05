@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
 /*
- * Plannr's design tokens, as the app defines them in src/styles/globals.css,
- * plus the few a 1920 × 1080 stage needs on top.
+ * The deck's design tokens. DESIGN.md explains the system; this file is its
+ * single source.
  *
  * Every slide is laid out on a fixed 1920 × 1080 canvas that the deck scales
  * to the screen, so sizes below are real pixels on that canvas: a 28px body
  * line is 28px on a 1080p projector, whatever the laptop's window is.
+ *
+ * The stage is light: a cool off-white ground, ink type, one accent. All the
+ * greys are tinted the same cool slate as Plannr's own palette, so nothing on
+ * a slide mixes warm and cool neutrals.
  */
 :root {
-  /* Light app surface (the product's own screens, mocked up on slides) */
+  /* Plannr's app surface, for the product mock-ups drawn on slides */
   --surface: #ffffff;
   --paper: #eef0f3;
   --app-ink: #2c3135;
@@ -32,6 +36,8 @@
   --orange: #f6a73b;
   --violet: #7a2e8f;
   --magenta: #e8455e;
+  /* The full brand gradient lives in the mark. On type it appears twice in
+     the whole deck: the cover's "Plannr" and the closing thesis. */
   --grad-brand: linear-gradient(
     135deg,
     #7a2e8f 0%,
@@ -49,26 +55,51 @@
     #f6a73b 100%
   );
 
-  /* Dark neutrals: the marketing surfaces, and the deck's default stage */
+  /* Dark neutrals, kept for the presenter's own tools */
   --ink-0: #0d1117;
   --ink-1: #151d28;
   --ink-2: #1e2630;
   --ink-3: #263141;
 
   /*
-   * One accent per stakeholder, so a colour on screen always says whose part
-   * of the story it is. Each is a brand colour, lifted where the original is
-   * too dark to read on --ink-0.
+   * The one accent: the berry from the middle of the brand gradient. It is
+   * the only colour that means "look here" — a key phrase, the top of a
+   * ranking, the line that matters. At #c8305f it holds 5:1 on the ground,
+   * so it is safe for text as well as shapes.
    */
-  --students: #ff5d73;
-  --faculty: #f6a73b;
-  --coordinators: #c174d6;
-  --admins: #86a3d6;
+  --accent: #c8305f;
+  --accent-bright: #e8455e;
+  --accent-soft: rgba(200, 48, 95, 0.09);
+  --accent-line: rgba(200, 48, 95, 0.34);
 
-  /* Signals */
-  --good: #7cc46a;
-  --bad: #ff5d5d;
-  --warn: #f6a73b;
+  /*
+   * The stakeholders used to have a colour each. One accent reads calmer and
+   * makes the accent mean something, so every stakeholder now points at it;
+   * their identity is carried by photo, icon and name instead.
+   */
+  --students: var(--accent);
+  --faculty: var(--accent);
+  --coordinators: var(--accent);
+  --admins: var(--accent);
+
+  /* Signals: real state only (worked / friction / broke) */
+  --good: #2f7a4b;
+  --warn: #a66b12;
+  --bad: var(--accent);
+
+  /* Elevation: soft, diffused, tinted with the ground's slate */
+  --shadow-1:
+    0 1px 1px rgba(16, 24, 40, 0.04), 0 2px 8px -2px rgba(16, 24, 40, 0.06);
+  --shadow-2:
+    0 2px 4px rgba(16, 24, 40, 0.04), 0 18px 48px -18px rgba(16, 24, 40, 0.2);
+  --shadow-3:
+    0 6px 16px -8px rgba(16, 24, 40, 0.16),
+    0 44px 96px -32px rgba(16, 24, 40, 0.34);
+
+  /* Radii: one documented scale (see DESIGN.md) */
+  --r-chip: 12px;
+  --r-inner: 22px;
+  --r-outer: 30px;
 
   /* Motion, shared by the engine and every slide */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -76,35 +107,36 @@
 }
 
 /*
- * The stage's two themes. A slide sets data-theme on its root, and everything
- * inside it reads these names rather than raw colours, so a template works on
- * either without a second set of classes.
+ * Theme tokens. The whole deck is light. `dark` survives for the presenter's
+ * tools (overview, notes) and must not be used on a slide.
  */
-[data-theme="dark"],
-:root {
+:root,
+[data-theme="light"] {
+  --bg: #f2f3f6;
+  --bg-raised: #fbfbfd;
+  --bg-card: #fbfbfd;
+  --bg-sunken: #e7e9ee;
+  --fg: #10141b;
+  --fg-body: #353d4a;
+  --fg-muted: #5f6878;
+  --fg-faint: #8f97a6;
+  --line: rgba(16, 24, 40, 0.08);
+  --line-strong: rgba(16, 24, 40, 0.15);
+  --glow: transparent;
+}
+
+[data-theme="dark"] {
   --bg: var(--ink-0);
   --bg-raised: var(--ink-1);
   --bg-card: #18212d;
   --bg-sunken: #0a0e13;
-  --fg: #ffffff;
-  --fg-muted: rgba(255, 255, 255, 0.64);
-  --fg-faint: rgba(255, 255, 255, 0.4);
+  --fg: #f4f5f7;
+  --fg-body: rgba(244, 245, 247, 0.82);
+  --fg-muted: rgba(244, 245, 247, 0.62);
+  --fg-faint: rgba(244, 245, 247, 0.4);
   --line: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.18);
-  --glow: rgba(232, 69, 94, 0.28);
-}
-
-[data-theme="light"] {
-  --bg: var(--paper);
-  --bg-raised: var(--surface);
-  --bg-card: var(--surface);
-  --bg-sunken: #e3e6eb;
-  --fg: var(--app-title);
-  --fg-muted: rgba(44, 49, 53, 0.66);
-  --fg-faint: rgba(44, 49, 53, 0.44);
-  --line: rgba(68, 88, 121, 0.16);
-  --line-strong: rgba(68, 88, 121, 0.28);
-  --glow: rgba(232, 69, 94, 0.14);
+  --glow: transparent;
 }
 
 @theme inline {
@@ -113,10 +145,14 @@
   --color-card: var(--bg-card);
   --color-sunken: var(--bg-sunken);
   --color-fg: var(--fg);
+  --color-body: var(--fg-body);
   --color-muted: var(--fg-muted);
   --color-faint: var(--fg-faint);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-soft: var(--accent-soft);
 
   --color-surface: var(--surface);
   --color-paper: var(--paper);
@@ -153,49 +189,50 @@
 }
 
 /*
- * The type scale, in canvas pixels. Space Grotesk carries anything that is
- * read from the back of the room; Instrument Sans carries sentences; JetBrains
- * Mono carries times, room codes, counts and the small labels above titles.
+ * The type scale, in canvas pixels. Plannr's own faces: Space Grotesk for
+ * anything read from the back of the room, Instrument Sans for sentences,
+ * JetBrains Mono only for times, codes and counts. Display type is semibold
+ * rather than bold: at these sizes weight comes from scale, not stroke.
  */
 @utility t-hero {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 176px;
-  line-height: 0.92;
+  font-weight: 600;
+  font-size: 168px;
+  line-height: 0.94;
   letter-spacing: -0.045em;
 }
 @utility t-display {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 120px;
-  line-height: 0.96;
+  font-weight: 600;
+  font-size: 112px;
+  line-height: 0.98;
   letter-spacing: -0.04em;
 }
 @utility t-title {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 80px;
-  line-height: 1.02;
+  font-weight: 600;
+  font-size: 76px;
+  line-height: 1.04;
   letter-spacing: -0.035em;
 }
 @utility t-h2 {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 54px;
-  line-height: 1.06;
+  font-weight: 600;
+  font-size: 52px;
+  line-height: 1.08;
   letter-spacing: -0.03em;
 }
 @utility t-h3 {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 36px;
-  line-height: 1.15;
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.18;
   letter-spacing: -0.02em;
 }
 @utility t-lede {
   font-family: var(--font-body);
-  font-size: 36px;
-  line-height: 1.35;
+  font-size: 34px;
+  line-height: 1.38;
   letter-spacing: -0.005em;
 }
 @utility t-body {
@@ -208,20 +245,24 @@
   font-size: 22px;
   line-height: 1.4;
 }
-@utility t-eyebrow {
-  font-family: var(--font-mono);
+/* A quiet functional label: sentence case, never spaced-out capitals. */
+@utility t-label {
+  font-family: var(--font-body);
   font-size: 20px;
   font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 @utility t-mono {
   font-family: var(--font-mono);
   letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Gradient-filled type, for the one word on a slide that carries it. */
+/* The brand gradient on type: the cover and the closing thesis only. */
 @utility grad-text {
   background: var(--grad-brand-h);
   -webkit-background-clip: text;
@@ -229,12 +270,33 @@
   color: transparent;
 }
 
+/*
+ * The double bezel: a frame for anything precious (a photo, a product shot,
+ * a quote). An outer tray with a hairline and a soft shadow holds an inner
+ * plate with its own highlight, and the radii stay concentric.
+ */
+@utility bezel {
+  padding: 8px;
+  border-radius: var(--r-outer);
+  background: rgba(16, 24, 40, 0.035);
+  box-shadow:
+    inset 0 0 0 1px rgba(16, 24, 40, 0.06),
+    var(--shadow-2);
+}
+@utility bezel-core {
+  border-radius: var(--r-inner);
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(16, 24, 40, 0.05);
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: var(--ink-0);
+  background: var(--bg);
 }
 
 body {
@@ -245,15 +307,40 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* In the base layer, so a utility such as whitespace-nowrap still wins. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/*
+ * Film grain over the whole stage, so the light ground reads as a surface
+ * rather than a screen. Fixed and inert, drawn once.
+ */
+.deck-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.12 0 0 0 0 0.16 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 /*
  * Copy the team still has to write. It is marked so nobody presents a
  * placeholder by accident; `H` hides the marks for a clean rehearsal.
  */
 .ph {
   text-decoration: underline dashed 2px;
-  text-decoration-color: color-mix(in srgb, var(--orange) 80%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--orange) 85%, transparent);
   text-underline-offset: 0.18em;
-  background: color-mix(in srgb, var(--orange) 10%, transparent);
+  background: color-mix(in srgb, var(--orange) 14%, transparent);
   border-radius: 4px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;

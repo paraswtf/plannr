@@ -131,7 +131,7 @@ const DAYS: DayLane[] = [
       { at: "16:30", label: "Travels to campus", icon: "mapPin" },
       {
         at: "17:30",
-        label: "Room changed — nobody said",
+        label: "Room changed, nobody said",
         icon: "door",
         tone: "bad",
       },
@@ -199,7 +199,7 @@ const FEATURES: Feature[] = [
     points: [
       "Every division and elective you teach, in one week",
       "A combined lecture shows once, with every group in it",
-      "Cancel once — your students are told for you",
+      "Cancel once. Your students are told for you.",
     ],
     solves: ["many-groups", "not-told", "mail-cancel"],
     icon: "calendar",
@@ -208,10 +208,10 @@ const FEATURES: Feature[] = [
     id: "request",
     name: "Schedule it yourself",
     tagline:
-      "Pick a slot and a room that work — no calls, no waiting on a reply.",
+      "Pick a slot and a room that work. No calls, no waiting on a reply.",
     points: [
       "Only clash-free slots, in rooms with what you need",
-      "Booked in two taps — or sent for approval",
+      "Booked in two taps, or sent for approval",
       "Every student in the group hears about it",
     ],
     solves: ["slot", "room-kit", "free-room"],
@@ -256,7 +256,7 @@ export const faculty: SectionDef = {
             position: "50% 30%",
           }}
           number="02"
-          lede="The people the timetable is built around — who have the least say in it."
+          lede="The people the timetable is built around, who have the least say in it."
           step={step}
         />
       ),
@@ -273,7 +273,6 @@ export const faculty: SectionDef = {
         <InterviewSummary
           active={active}
           stakeholder="faculty"
-          eyebrow="Faculty · Research"
           title="A week with the faculty."
           research={RESEARCH}
           step={step}
@@ -289,7 +288,6 @@ export const faculty: SectionDef = {
         <PersonaCards
           active={active}
           stakeholder="faculty"
-          eyebrow="Faculty · Who they are"
           title="Two kinds of faculty. Two different jobs."
           personas={PERSONAS}
           step={step}
@@ -308,7 +306,6 @@ export const faculty: SectionDef = {
         <DayTimeline
           active={active}
           stakeholder="faculty"
-          eyebrow="Faculty · Their days"
           title="Same college, very different days."
           lanes={DAYS}
           from={7}
@@ -330,7 +327,6 @@ export const faculty: SectionDef = {
       ],
       render: ({ step }) => (
         <FlowDiagram
-          eyebrow="Faculty · Today"
           title="One extra lecture, two people, two mails."
           accent="var(--faculty)"
           nodes={[
@@ -377,7 +373,6 @@ export const faculty: SectionDef = {
       render: ({ step }) => (
         <ProblemBoard
           stakeholder="faculty"
-          eyebrow="Faculty · What we heard"
           title="Everything they told us."
           problems={PROBLEMS}
           step={step}
@@ -397,7 +392,6 @@ export const faculty: SectionDef = {
       render: ({ step }) => (
         <ProblemRanking
           stakeholder="faculty"
-          eyebrow="Faculty · Ranking"
           title="What hurts most."
           problems={PROBLEMS}
           personas={PERSONAS}
@@ -417,7 +411,6 @@ export const faculty: SectionDef = {
       render: ({ step }) => (
         <SolutionMap
           stakeholder="faculty"
-          eyebrow="Faculty · Solutions"
           title="One answer for each."
           problems={TOP}
           features={FEATURES}
@@ -515,10 +508,9 @@ export const faculty: SectionDef = {
         "That's faculty. Now over to Tanisha — for the people who actually run the timetable.",
       render: ({ step }) => (
         <StakeholderMap
-          eyebrow="Next"
           title="That's faculty."
           highlight="coordinators"
-          caption="Over to Tanisha — coordinators."
+          caption="Over to Tanisha, for coordinators."
           step={step}
         />
       ),

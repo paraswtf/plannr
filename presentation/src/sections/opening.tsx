@@ -44,10 +44,10 @@ export const opening: SectionDef = {
           kicker="Design Thinking · UI/UX"
           title={
             <>
-              Presenting <Grad>Plannr</Grad>
+              Presenting <Grad brand>Plannr</Grad>
             </>
           }
-          subtitle="One place for every class, change and room — designed from a week with each of the people who use the timetable."
+          subtitle="One place for every class, change and room, designed from a week with each person who uses the timetable."
           team={["paras", "sonal", "ravya", "tanisha"]}
           footer="SICSR, Pune · 2026"
           step={step}
@@ -68,13 +68,12 @@ export const opening: SectionDef = {
       ],
       render: ({ step, active }) => (
         <VisualSlide
-          eyebrow="The project"
           title={
             <>
               We&apos;re replacing the <Grad>college timetable.</Grad>
             </>
           }
-          lede="Plannr takes over from the timetable site — and from the mails, calls and spreadsheets that hold it together."
+          lede="Plannr takes over from the timetable site, and from the mails, calls and spreadsheets that hold it together."
           visual={
             <OldTimetable
               step={step}
@@ -99,7 +98,6 @@ export const opening: SectionDef = {
       render: ({ step, active }) => (
         <VisualSlide
           layout="below"
-          eyebrow="Today"
           title={
             <>
               Three apps. <Grad>No single source of truth.</Grad>
@@ -123,7 +121,6 @@ export const opening: SectionDef = {
       ],
       render: ({ step }) => (
         <FlowDiagram
-          eyebrow="Today · Scheduling one lecture"
           title="One change, passed along by hand."
           nodes={[
             {
@@ -156,7 +153,7 @@ export const opening: SectionDef = {
               tone: "bad",
             },
           ]}
-          outcome="Four hand-offs, all done by people — and nothing notices when one is missed."
+          outcome="Four hand-offs, all done by people, and nothing notices when one is missed."
           step={step}
         />
       ),
@@ -172,7 +169,6 @@ export const opening: SectionDef = {
       ],
       render: ({ step, active }) => (
         <VisualSlide
-          eyebrow="Today · Finding a teacher"
           title="There's no page for a person."
           lede="To find one teacher, you read the timetable of every course they might teach."
           visual={<FacultyHunt step={step} active={active} />}
@@ -191,7 +187,6 @@ export const opening: SectionDef = {
       render: ({ step, active }) => (
         <VisualSlide
           layout="below"
-          eyebrow="And many more"
           title="That's just the start."
           visual={
             <IssueWall

@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 import type { FlowNode } from "~/content/types";
 import { useSteps } from "~/deck/useSteps";
-import { Icon } from "~/ui/icon";
+import { Icon, type IconName } from "~/ui/icon";
 import { SlideBody, SlideHeader } from "~/ui/layout";
+import { Card } from "~/ui/surfaces";
 
 export interface FlowDiagramProps {
   eyebrow?: ReactNode;
@@ -14,6 +15,8 @@ export interface FlowDiagramProps {
   nodes: FlowNode[];
   /** Where it ends up: "and 3 of 60 students never saw the mail". */
   outcome?: ReactNode;
+  /** The glyph beside the outcome. Default "alert". */
+  outcomeIcon?: IconName;
   accent?: string;
   /**
    * Node i arrives on step i (node 0 from the start); one more step shows the
@@ -32,31 +35,32 @@ const INSET = 72;
 const LIFT = 130;
 const HOP = 1.05;
 
-const BRAND = "#e8455e";
+/** The hand-off lines: quiet slate, so the travelling token is what leads. */
+const ARC = "var(--fg-faint)";
 
 /**
  * How a job gets done today, hop by hop: who passes what to whom, and how
  * long each hand-off waits. Used for every "how it works today" slide.
  *
  * Each build draws the next hand-off as an arc from one card to the next, and
- * sends a token along it — an envelope, really travelling — into the next
- * card as it rises in. A wait ("hours to a day") rides on the arc's crest in
- * amber.
- * The outcome lands last, large, in red.
+ * sends a token along it (an envelope, really travelling) into the next card
+ * as it rises in. The lines are quiet slate and the token is the accent, so
+ * the eye follows the change. A wait ("hours to a day") sits over the arc's
+ * crest: quiet grey, or in the warn tone when the step it leads into is
+ * friction (or worse); a step where it breaks is the accent card. The
+ * outcome lands last, large, in the accent.
  */
 export function FlowDiagram({
-  eyebrow,
   title,
   lede,
   nodes,
   outcome,
+  outcomeIcon = "alert",
   accent,
   step,
 }: FlowDiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const gradId = `flow-grad-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const solid = accent ?? BRAND;
-  const stroke = accent ?? `url(#${gradId})`;
+  const token = accent ?? "var(--accent)";
   const n = Math.max(1, nodes.length);
   const cardW = (WIDTH - (n - 1) * GAP) / n;
   const left = (i: number) => i * (cardW + GAP);
@@ -71,7 +75,7 @@ export function FlowDiagram({
       node,
       sx,
       ex,
-      d: `M${sx},${y} C${sx},${y - LIFT} ${ex},${y - LIFT} ${ex},${y - 8}`,
+      d: `M${sx},${y - 8} C${sx},${y - LIFT} ${ex},${y - LIFT} ${ex},${y - 8}`,
       head: `M${ex - 11},${y - 22} L${ex},${y - 9} L${ex + 11},${y - 22}`,
       // The wait label sits just above the arc's crest, clear of the token.
       label: { x: (sx + ex) / 2, y: y - LIFT * 0.75 - 38 },
@@ -94,7 +98,7 @@ export function FlowDiagram({
       tl.fromTo(
         path,
         { drawSVG: "0%" },
-        { drawSVG: "100%", duration: HOP, ease: "power2.inOut" },
+        { drawSVG: "100%", duration: HOP, ease: "deck.morph" },
         at,
       );
       tl.fromTo(
@@ -112,14 +116,20 @@ export function FlowDiagram({
             alignOrigin: [0.5, 0.5],
           },
           duration: HOP,
-          ease: "power2.inOut",
+          ease: "deck.morph",
         },
         at,
       );
       if (pill) {
         tl.from(
           pill,
-          { opacity: 0, scale: 0.6, duration: 0.55, ease: "back.out(2.2)" },
+          {
+            opacity: 0,
+            y: 14,
+            scale: 0.8,
+            duration: 0.6,
+            ease: "back.out(1.8)",
+          },
           at + HOP * 0.42,
         );
       }
@@ -146,7 +156,13 @@ export function FlowDiagram({
       const at = tl.duration();
       tl.from(
         one(".fd-outcome-icon"),
-        { scale: 0, rotate: -25, duration: 0.7, ease: "back.out(2)" },
+        {
+          scale: 0.4,
+          opacity: 0,
+          rotate: -12,
+          duration: 0.7,
+          ease: "back.out(1.8)",
+        },
         at,
       );
       tl.from(
@@ -160,13 +176,7 @@ export function FlowDiagram({
 
   return (
     <SlideBody>
-      <SlideHeader
-        eyebrow={eyebrow}
-        eyebrowColor={accent}
-        title={title}
-        lede={lede}
-        titleClassName="max-w-none!"
-      />
+      <SlideHeader title={title} lede={lede} titleClassName="max-w-none!" />
       <div
         ref={ref}
         className="flex min-h-0 flex-1 flex-col justify-center pt-4"
@@ -174,13 +184,7 @@ export function FlowDiagram({
         <div className="relative" style={{ width: WIDTH, paddingTop: ARC_H }}>
           <div className="flex items-stretch" style={{ gap: GAP }}>
             {nodes.map((node, i) => (
-              <NodeCard
-                key={node.id}
-                node={node}
-                index={i}
-                width={cardW}
-                accent={solid}
-              />
+              <NodeCard key={node.id} node={node} index={i} width={cardW} />
             ))}
           </div>
 
@@ -191,38 +195,23 @@ export function FlowDiagram({
             height={ARC_H}
             viewBox={`0 0 ${WIDTH} ${ARC_H}`}
           >
-            <defs>
-              <linearGradient
-                id={gradId}
-                gradientUnits="userSpaceOnUse"
-                x1={0}
-                y1={0}
-                x2={WIDTH}
-                y2={0}
-              >
-                <stop offset="0%" stopColor="#c174d6" />
-                <stop offset="35%" stopColor="#e05088" />
-                <stop offset="65%" stopColor="#e8455e" />
-                <stop offset="100%" stopColor="#f6a73b" />
-              </linearGradient>
-            </defs>
             {arcs.map((arc) => (
               <g key={arc.i} data-arc={arc.i}>
                 <path
                   className="fd-path"
                   d={arc.d}
                   fill="none"
-                  stroke={stroke}
-                  strokeWidth={3}
-                  strokeLinecap="butt"
+                  stroke={ARC}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
                   style={{ opacity: 0 }}
                 />
                 <path
                   className="fd-head"
                   d={arc.head}
                   fill="none"
-                  stroke={stroke}
-                  strokeWidth={3}
+                  stroke={ARC}
+                  strokeWidth={2.5}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   style={{ opacity: 0 }}
@@ -235,15 +224,15 @@ export function FlowDiagram({
             <span
               key={arc.i}
               data-token={arc.i}
-              className="absolute top-0 left-0 flex h-12 w-12 items-center justify-center rounded-full"
+              className="absolute top-0 left-0 flex h-14 w-14 items-center justify-center rounded-[16px]"
               style={{
                 opacity: 0,
-                color: "#fff",
-                background: accent ?? "var(--grad-brand)",
-                boxShadow: `0 0 0 6px color-mix(in srgb, ${solid} 18%, transparent), 0 10px 30px -6px color-mix(in srgb, ${solid} 70%, transparent)`,
+                color: "#ffffff",
+                background: token,
+                boxShadow: "var(--shadow-2)",
               }}
             >
-              <Icon name="mail" size={24} stroke={2.1} />
+              <Icon name="mail" size={28} />
             </span>
           ))}
 
@@ -257,15 +246,21 @@ export function FlowDiagram({
                 >
                   <span
                     data-wait={arc.i}
-                    className="t-mono text-warn flex items-center gap-2.5 rounded-full px-5 py-2.5 text-[22px] leading-none whitespace-nowrap"
-                    style={{
-                      background:
-                        "color-mix(in srgb, var(--warn) 13%, var(--bg))",
-                      boxShadow:
-                        "inset 0 0 0 1.5px color-mix(in srgb, var(--warn) 45%, transparent)",
-                    }}
+                    className={`flex items-center gap-2.5 rounded-[12px] px-4 py-2.5 text-[23px] leading-none font-medium whitespace-nowrap ${
+                      (arc.node.tone ?? "neutral") === "neutral"
+                        ? "bg-sunken text-muted"
+                        : "text-warn"
+                    }`}
+                    style={
+                      (arc.node.tone ?? "neutral") === "neutral"
+                        ? undefined
+                        : {
+                            background:
+                              "color-mix(in srgb, var(--warn) 10%, var(--bg))",
+                          }
+                    }
                   >
-                    <Icon name="clock" size={22} stroke={2} />
+                    <Icon name="clock" size={24} />
                     {arc.node.wait}
                   </span>
                 </span>
@@ -274,19 +269,11 @@ export function FlowDiagram({
         </div>
 
         {outcome && (
-          <div className="mt-16 flex items-center gap-7">
-            <span
-              className="fd-outcome-icon flex h-19 w-19 shrink-0 items-center justify-center rounded-full"
-              style={{
-                color: "var(--bad)",
-                background: "color-mix(in srgb, var(--bad) 15%, transparent)",
-                boxShadow:
-                  "inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 50%, transparent)",
-              }}
-            >
-              <Icon name="alert" size={38} stroke={2} />
+          <div className="mt-20 flex items-center gap-8">
+            <span className="fd-outcome-icon bg-accent-soft text-accent flex h-20 w-20 shrink-0 items-center justify-center rounded-[22px]">
+              <Icon name={outcomeIcon} size={40} />
             </span>
-            <p className="fd-outcome-text t-h2 text-bad max-w-[1480px] text-balance">
+            <p className="fd-outcome-text t-h2 text-accent max-w-[1440px] text-balance">
               {outcome}
             </p>
           </div>
@@ -300,53 +287,43 @@ function NodeCard({
   node,
   index,
   width,
-  accent,
 }: {
   node: FlowNode;
   index: number;
   width: number;
-  accent: string;
 }) {
   const tone = node.tone ?? "neutral";
-  const c =
-    tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : accent;
-  const surface: CSSProperties =
-    tone === "neutral"
-      ? {
-          background: "var(--bg-card)",
-          boxShadow: "inset 0 0 0 1px var(--line)",
-        }
-      : {
-          background: `linear-gradient(180deg, color-mix(in srgb, ${c} 14%, var(--bg-card)), color-mix(in srgb, ${c} 6%, var(--bg-card)))`,
-          boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${c} 42%, transparent)`,
-        };
+  const tile: CSSProperties =
+    tone === "bad"
+      ? { color: "var(--accent)", background: "var(--accent-soft)" }
+      : tone === "warn"
+        ? {
+            color: "var(--warn)",
+            background: "color-mix(in srgb, var(--warn) 11%, transparent)",
+          }
+        : { color: "var(--fg-body)", background: "var(--bg-sunken)" };
+  const actor =
+    tone === "bad"
+      ? "text-accent"
+      : tone === "warn"
+        ? "text-warn"
+        : "text-muted";
   return (
-    <div
-      data-node={index}
-      className="flex shrink-0 flex-col rounded-[28px] px-8 pt-8 pb-9"
-      style={{ width, minHeight: 300, ...surface }}
-    >
-      <div className="flex items-center justify-between">
+    <div data-node={index} className="flex shrink-0" style={{ width }}>
+      <Card accent={tone === "bad"} className="flex w-full flex-col p-8">
         <span
-          className="flex h-16 w-16 items-center justify-center rounded-full"
-          style={{
-            color: c,
-            background: `color-mix(in srgb, ${c} 15%, transparent)`,
-            boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${c} 40%, transparent)`,
-          }}
+          className="flex h-16 w-16 items-center justify-center rounded-[12px]"
+          style={tile}
         >
-          <Icon name={node.icon} size={30} stroke={1.9} />
+          <Icon name={node.icon} size={32} />
         </span>
-        <span className="t-mono text-faint text-[22px]">
-          {String(index + 1).padStart(2, "0")}
+        <span className={`t-small mt-8 font-medium ${actor}`}>
+          {node.actor}
         </span>
-      </div>
-      <span className="t-eyebrow mt-7 text-[22px]" style={{ color: c }}>
-        {node.actor}
-      </span>
-      <span className="font-display mt-3 text-[30px] leading-[1.22] font-semibold tracking-[-0.015em] text-pretty">
-        {node.action}
-      </span>
+        <span className="font-display text-fg mt-2 text-[31px] leading-[1.2] font-semibold tracking-[-0.018em] text-pretty">
+          {node.action}
+        </span>
+      </Card>
     </div>
   );
 }

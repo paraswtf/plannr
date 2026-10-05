@@ -5,7 +5,6 @@ import { useRef } from "react";
 import { gsap } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
 import { Icon } from "~/ui/icon";
-import { courseTone } from "~/ui/mock";
 import { Ph } from "~/ui/placeholder";
 
 export interface FacultyHuntProps {
@@ -18,9 +17,15 @@ export interface FacultyHuntProps {
  * only for courses, so they read course timetables cell by cell.
  *
  * Builds (steps = 3):
- *   0 — the question: "Where is Prof. <name> right now?"
- *   1 — if you know her courses: scan each course's timetable, a highlight stepping through cells while a counter of cells read climbs.
- *   2 — if you don't: scan every course that day; the counter runs into the hundreds and the grid fills the screen.
+ *   0: the question: "Where is Prof. <name> right now?"
+ *   1: if you know her courses: scan each course's timetable, a highlight
+ *      stepping through cells while a counter of cells read climbs.
+ *   2: if you don't: scan every course that day; the counter runs into the
+ *      hundreds and the grid fills the screen.
+ *
+ * On the light stage the course grids are white sheets with the deck's soft
+ * slate shadow; the reader's eye is the one accent, and turns to the quiet
+ * "good" green only when it finds her.
  */
 
 /* Everything is placed in canvas pixels inside the 960 × 844 box, so the
@@ -111,6 +116,17 @@ const TEACHERS = [
 const ROOMS = ["301", "302", "304", "Lab 1", "Lab 2", "205"];
 const PASTELS = ["#c9def2", "#ffe2b0", "#d6ecc6", "#ecd5ef", "#f6d2cf"];
 
+/* The eye's colours, as hex: GSAP tweens between them, and cannot
+ * interpolate a var(). Accent (searching) and good (found), from globals.css. */
+const EYE = {
+  border: "#c8305f",
+  fill: "rgba(200,48,95,0.12)",
+  foundBorder: "#2f7a4b",
+  foundFill: "rgba(47,122,75,0.12)",
+} as const;
+/** Her cell, once found: a pale wash of the same green. */
+const HER_CELL = { fill: "#dcefe0", ring: "#2f7a4b" } as const;
+
 /** A deterministic, plausible cell: teacher and room, or a free period. */
 function cellFor(
   seed: number,
@@ -170,35 +186,24 @@ function CourseGrid({
   seed: number;
   found?: number;
 }) {
-  const tone = courseTone(course);
   return (
     <div
-      className="font-body overflow-hidden rounded-[18px] bg-white text-[#0d1117]"
+      className="font-body overflow-hidden rounded-[22px] bg-white text-[#0d1117]"
       style={{
         width: GRID.width,
         height: GRID_H,
         boxShadow:
-          "inset 0 0 0 1px rgba(68,88,121,0.28), 0 14px 34px rgba(0,0,0,0.3)",
+          "inset 0 0 0 1px rgba(16,24,40,0.08), 0 1px 1px rgba(16,24,40,0.04), 0 18px 40px -20px rgba(16,24,40,0.22)",
       }}
     >
-      <div
-        className="flex items-center gap-2.5 px-4"
-        style={{ height: GRID.header }}
-      >
-        <span
-          className="h-[12px] w-[12px] shrink-0 rounded-full"
-          style={{
-            background: tone.fill,
-            boxShadow: `inset 0 0 0 1px ${tone.ring}`,
-          }}
-        />
-        <span className="truncate text-[18px] font-bold tracking-[-0.01em]">
+      <div className="flex items-center px-5" style={{ height: GRID.header }}>
+        <span className="truncate text-[18px] font-semibold tracking-[-0.015em]">
           {course}
         </span>
       </div>
       <div
         className="flex font-mono text-[14px] text-[rgba(44,49,53,0.62)]"
-        style={{ height: GRID.colHead, background: "#eef0f3" }}
+        style={{ height: GRID.colHead, background: "#f3f4f7" }}
       >
         <span style={{ width: GRID.timeCol }} />
         {DIVS.map((d) => (
@@ -230,17 +235,17 @@ function CourseGrid({
             const i = r * DIVS.length + c;
             const isHer = found === i;
             const cell = isHer
-              ? { who: "Kulkarni", room: "Lab 2", tone: "#ffc667" }
+              ? { who: "Kulkarni", room: "Lab 2", tone: HER_CELL.fill }
               : cellFor(seed, i);
             return (
               <span key={d} className="p-[3px]" style={{ width: CELL_W }}>
                 {cell && (
                   <span
-                    className="flex h-full flex-col justify-center rounded-[8px] px-[6px]"
+                    className="flex h-full flex-col justify-center rounded-[10px] px-[6px]"
                     style={{
                       background: cell.tone,
                       boxShadow: isHer
-                        ? "inset 0 0 0 1.5px #d99425"
+                        ? `inset 0 0 0 1.5px ${HER_CELL.ring}`
                         : undefined,
                     }}
                   >
@@ -285,7 +290,7 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
       transformOrigin: "0% 50%",
     });
 
-    // 1 — If you know her courses.
+    // 1: if you know her courses.
     tl.to(".fh-question", {
       y: 0,
       scale: 1,
@@ -346,8 +351,8 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
     );
     // Found her: the cell lights up, and the answer comes out under the grids.
     tl.to(box, {
-      borderColor: "#7cc46a",
-      backgroundColor: "rgba(124,196,106,0.22)",
+      borderColor: EYE.foundBorder,
+      backgroundColor: EYE.foundFill,
       duration: 0.25,
       ease: "power2.out",
     });
@@ -365,7 +370,7 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
     );
     mark();
 
-    // 2 — If you don't: every course running today.
+    // 2: if you don't, every course running today.
     tl.addLabel("all");
     tl.to(
       ".fh-found",
@@ -426,8 +431,8 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
     tl.set(
       box,
       {
-        borderColor: "#ff5d73",
-        backgroundColor: "rgba(255,93,115,0.18)",
+        borderColor: EYE.border,
+        backgroundColor: EYE.fill,
         borderWidth: 2,
       },
       "all+=1.3",
@@ -463,14 +468,15 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
     );
     // Found, at last: the rest of the wall steps back.
     tl.to(box, {
-      borderColor: "#7cc46a",
-      backgroundColor: "rgba(124,196,106,0.3)",
+      borderColor: EYE.foundBorder,
+      backgroundColor: EYE.foundFill,
       duration: 0.2,
+      ease: "power2.out",
     });
     tl.fromTo(
       ".fh-her-wall",
       { autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.2 },
+      { autoAlpha: 1, duration: 0.2, ease: "power2.out" },
       "<",
     );
     tl.to(".fh-dim", { opacity: 0.35, duration: 0.5, ease: "power2.out" }, "<");
@@ -492,47 +498,40 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
         {/* The question */}
         <div className="fh-question absolute top-0 left-0 flex items-start gap-5">
           <span
-            className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full"
-            style={{
-              background:
-                "color-mix(in srgb, var(--students) 20%, var(--bg-raised))",
-              boxShadow:
-                "inset 0 0 0 2px color-mix(in srgb, var(--students) 70%, transparent)",
-              color: "var(--students)",
-            }}
+            className="bg-sunken text-body flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[22px]"
+            style={{ boxShadow: "inset 0 0 0 1px var(--line)" }}
           >
-            <Icon name="user" size={36} stroke={2} />
+            <Icon name="user" size={36} />
           </span>
           <div>
             <div
-              className="bg-raised rounded-[28px] rounded-tl-[8px] px-8 py-6"
+              className="bg-raised rounded-[22px] rounded-tl-[8px] px-8 py-6"
               style={{
-                boxShadow:
-                  "inset 0 0 0 1px var(--line-strong), 0 20px 50px rgba(0,0,0,0.35)",
+                boxShadow: "inset 0 0 0 1px var(--line), var(--shadow-2)",
               }}
             >
-              <p className="font-display text-[40px] leading-tight font-semibold tracking-[-0.025em]">
+              <div className="font-display text-fg text-[40px] leading-tight font-semibold tracking-[-0.025em] whitespace-nowrap">
                 Where is Prof. Kulkarni right now?
-              </p>
+              </div>
             </div>
-            <p className="t-mono text-faint mt-3 ml-3 text-[20px]">
-              A BCA-B student · 10:52
-            </p>
+            <div className="t-small text-muted mt-3 ml-2">
+              A BCA-B student <span className="tabular">· 10:52</span>
+            </div>
           </div>
         </div>
 
         {/* What we are searching */}
         <div className="absolute left-0" style={{ top: 168 }}>
-          <p className="fh-label-known t-h3 invisible absolute top-0 left-0 whitespace-nowrap">
-            If you know her courses{" "}
-            <span className="text-muted font-normal">— read each one</span>
-          </p>
-          <p className="fh-label-all t-h3 invisible absolute top-0 left-0 whitespace-nowrap">
-            If you don&apos;t{" "}
-            <span className="text-muted font-normal">
-              — read every course today
-            </span>
-          </p>
+          {/* divs, not p: the global `p { text-wrap: pretty }` is unlayered
+              and would beat Tailwind's nowrap, breaking the line. */}
+          <div className="fh-label-known t-h3 text-fg invisible absolute top-0 left-0 whitespace-nowrap">
+            If you know her courses:{" "}
+            <span className="text-muted">read each one</span>
+          </div>
+          <div className="fh-label-all t-h3 text-fg invisible absolute top-0 left-0 whitespace-nowrap">
+            If you don&apos;t:{" "}
+            <span className="text-muted">read every course today</span>
+          </div>
         </div>
 
         {/* Every other course, waiting in the wall */}
@@ -601,11 +600,10 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
 
         {/* The reader's eye */}
         <div
-          className="fh-box pointer-events-none invisible absolute top-0 left-0 rounded-[10px]"
+          className="fh-box pointer-events-none invisible absolute top-0 left-0 rounded-[12px]"
           style={{
-            border: "3px solid var(--students)",
-            background: "rgba(255,93,115,0.16)",
-            boxShadow: "0 0 0 6px rgba(255,93,115,0.18)",
+            border: `3px solid ${EYE.border}`,
+            background: EYE.fill,
           }}
         />
 
@@ -614,20 +612,18 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
           className="fh-found invisible absolute left-0 flex items-center gap-4"
           style={{ top: GRID.top + GRID_H + 32 }}
         >
-          <Icon name="checkCircle" size={34} stroke={2.2} color="var(--good)" />
-          <span className="text-[30px] font-semibold tracking-[-0.01em]">
-            Prof. Kulkarni{" "}
-            <span className="text-muted font-normal">
-              · Data Mining · BCA-B ·
-            </span>{" "}
-            <span className="t-mono">11:00 · Lab 2</span>
+          <Icon name="checkCircle" size={34} stroke={2} color="var(--good)" />
+          <span className="text-fg flex items-baseline gap-3 text-[30px] font-semibold tracking-[-0.01em] whitespace-nowrap">
+            Prof. Kulkarni
+            <span className="text-muted font-normal">Data Mining, BCA-B</span>
+            <span className="tabular">11:00 · Lab 2</span>
           </span>
         </div>
 
         {/* The counter, and what it costs */}
-        <div className="fh-counter invisible absolute bottom-0 left-0 flex flex-col gap-4">
-          <span className="t-eyebrow text-muted">cells read</span>
-          <span className="grid">
+        <div className="fh-counter invisible absolute bottom-0 left-0 flex flex-col gap-3">
+          <span className="t-small text-muted">Cells read</span>
+          <span className="text-fg grid">
             <span className="fh-count-known t-mono col-start-1 row-start-1 text-[84px] leading-none font-semibold tracking-[-0.04em] tabular-nums">
               1
             </span>
@@ -639,10 +635,10 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
           </span>
         </div>
         <div className="fh-cost invisible absolute right-0 bottom-0 text-right">
-          <p className="t-h2 leading-none">
+          <div className="t-h2 text-accent tabular leading-none">
             ≈ <Ph>6 min</Ph>
-          </p>
-          <p className="t-body text-muted mt-2">to find one person</p>
+          </div>
+          <div className="t-body text-muted mt-2">to find one person</div>
         </div>
       </div>
     </div>

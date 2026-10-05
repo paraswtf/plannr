@@ -6,7 +6,7 @@ import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
 import { useSteps } from "~/deck/useSteps";
 import { PhoneFrame } from "~/ui/frames";
-import { Icon } from "~/ui/icon";
+import { Icon, type IconName } from "~/ui/icon";
 
 import {
   ASK,
@@ -27,12 +27,25 @@ export interface OldPhoneFlowProps {
   active: boolean;
 }
 
-const STEPS = [
-  { title: "Open the site", sub: "on mobile data, and wait" },
-  { title: "Find your division", sub: "in a grid of the whole college" },
-  { title: "Check Gmail", sub: "in case something changed" },
-  { title: "Ask the group", sub: "and hope somebody knows" },
-] as const;
+const STEPS: readonly { title: string; sub: string; icon: IconName }[] = [
+  { title: "Open the site", sub: "on mobile data, and wait", icon: "globe" },
+  {
+    title: "Find your division",
+    sub: "in a grid of the whole college",
+    icon: "grid",
+  },
+  { title: "Check Gmail", sub: "in case something changed", icon: "mail" },
+  { title: "Ask the group", sub: "and hope somebody knows", icon: "message" },
+];
+
+/*
+ * The step list's colours, as plain hex and rgb for GSAP to interpolate. The
+ * step being talked about wears the accent; a step left behind goes grey.
+ */
+const ACCENT = "#c8305f";
+const ACCENT_SOFT = "rgba(200, 48, 95, 0.09)";
+const SUNKEN = "#e7e9ee";
+const MUTED = "#5f6878";
 
 const ROW_H = 150;
 const ROW_GAP = 14;
@@ -57,14 +70,14 @@ const SWIPE_FROM = { x: 290, y: 560 }; // screen pixels
 const APP_GAP = SCREEN_W + 18; // one app's width plus the gap between cards
 
 /**
- * Checking today's classes on a phone, the way students do it now — in a
+ * Checking today's classes on a phone, the way students do it now, in a
  * PhoneFrame, step by painful step.
  *
  * Builds (steps = 4):
- *   0 — open the timetable site on mobile data: a spinner, seconds counting.
- *   1 — pinch, zoom and scroll sideways to find your division in the college-wide grid.
- *   2 — switch to Gmail and search for changes.
- *   3 — give up and ask the class WhatsApp group.
+ *   0: open the timetable site on mobile data: a spinner, seconds counting.
+ *   1: pinch, zoom and scroll sideways to find your division in the college-wide grid.
+ *   2: switch to Gmail and search for changes.
+ *   3: give up and ask the class WhatsApp group.
  */
 export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -119,7 +132,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
     const indicate = (k: number, at: number) => {
       tl.to(
         ".op-pill",
-        { y: k * (ROW_H + ROW_GAP), duration: 0.7, ease: "power3.inOut" },
+        { y: k * (ROW_H + ROW_GAP), duration: 0.75, ease: "deck.morph" },
         at,
       );
       tl.fromTo(
@@ -131,16 +144,12 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
       const prev = `[data-row="${k - 1}"]`;
       tl.to(
         `${prev} .op-row-text`,
-        { opacity: 0.5, duration: 0.5, ease: "power2.out" },
+        { opacity: 0.6, duration: 0.5, ease: "power2.out" },
         at,
       );
       tl.to(
         `${prev} .op-badge`,
-        {
-          backgroundColor: "rgba(124,196,106,0.16)",
-          color: "#7cc46a",
-          duration: 0.5,
-        },
+        { backgroundColor: SUNKEN, color: MUTED, duration: 0.5 },
         at,
       );
       tl.to(
@@ -168,7 +177,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
      * the left and the next one on from the right. Returns when it lands.
      */
     const switchApps = (out: string, into: string, at: number) => {
-      const swipe = { duration: 0.7, ease: "power3.inOut" };
+      const swipe = { duration: 0.7, ease: "deck.morph" };
       tl.set(".op-t1", { x: 330, y: 836 }, at + 0.02);
       tl.fromTo(
         ".op-t1",
@@ -183,7 +192,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
       return at + 0.76;
     };
 
-    // 1 — the page arrives, shrunk to a desktop grid; pinch, then pan to BCA-A.
+    // 1: the page arrives, shrunk to a desktop grid; pinch, then pan to BCA-A.
     indicate(1, 0);
     tl.to(
       ".op-loading",
@@ -215,7 +224,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
       { autoAlpha: 1, scale: 1, duration: 0.14 },
       0.3,
     );
-    const pinch = { duration: 0.8, ease: "power2.inOut" };
+    const pinch = { duration: 0.85, ease: "deck.morph" };
     tl.to(
       ".op-page",
       { scale: S1, x: AFTER_PINCH.x, y: AFTER_PINCH.y, ...pinch },
@@ -246,7 +255,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
     const dy = (AFTER_PAN.y - AFTER_PINCH.y) / SWIPES;
     let at = 1.3;
     for (let i = 0; i < SWIPES; i++) {
-      const drag = { duration: 0.42, ease: "power2.inOut" };
+      const drag = { duration: 0.42, ease: "deck.morph" };
       tl.set(".op-t1", SWIPE_FROM, at);
       tl.fromTo(
         ".op-t1",
@@ -279,7 +288,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
     );
     mark();
 
-    // 2 — over to the mail app, and search it.
+    // 2: over to the mail app, and search it.
     const b2 = tl.duration();
     indicate(2, b2);
     let t = switchApps(".op-browser", ".op-mail", b2);
@@ -303,7 +312,7 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
     );
     mark();
 
-    // 3 — and on to the class group.
+    // 3: and on to the class group.
     const b3 = tl.duration();
     indicate(3, b3);
     t = switchApps(".op-mail", ".op-chat", b3);
@@ -346,11 +355,10 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
         style={{ height: STEPS.length * ROW_H + (STEPS.length - 1) * ROW_GAP }}
       >
         <span
-          className="op-pill bg-raised absolute inset-x-0 top-0 rounded-[28px]"
+          className="op-pill bg-raised absolute inset-x-0 top-0 rounded-[22px]"
           style={{
             height: ROW_H,
-            boxShadow:
-              "inset 0 0 0 1.5px color-mix(in srgb, var(--students) 45%, transparent)",
+            boxShadow: "inset 0 0 0 1px var(--line), var(--shadow-2)",
           }}
         />
         {STEPS.map((s, i) => (
@@ -361,20 +369,22 @@ export function OldPhoneFlow({ step, active }: OldPhoneFlowProps) {
             style={{ top: i * (ROW_H + ROW_GAP), height: ROW_H }}
           >
             <span
-              className="op-badge t-mono relative flex h-13 w-13 shrink-0 items-center justify-center rounded-full text-[24px] font-semibold"
-              style={{ background: "var(--students)", color: "#0d1117" }}
+              className="op-badge relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[12px]"
+              style={{ backgroundColor: ACCENT_SOFT, color: ACCENT }}
             >
-              <span className="op-num">{i + 1}</span>
+              <span className="op-num flex">
+                <Icon name={s.icon} size={30} weight="regular" />
+              </span>
               <span
                 className="op-check absolute inset-0 flex items-center justify-center"
                 style={{ visibility: "hidden" }}
               >
-                <Icon name="check" size={26} stroke={2.6} />
+                <Icon name="check" size={28} weight="bold" />
               </span>
             </span>
             <span className="op-row-text min-w-0 pt-1">
               <span className="t-h3 text-fg block">{s.title}</span>
-              <span className="text-muted mt-2 block text-[24px] leading-snug">
+              <span className="text-muted mt-1.5 block text-[26px] leading-snug">
                 {s.sub}
               </span>
             </span>

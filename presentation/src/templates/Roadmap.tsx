@@ -4,13 +4,14 @@ import { useId, useRef, type ReactNode } from "react";
 
 import type { gsap } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
-import { Icon, type IconName } from "~/ui/icon";
-import { Eyebrow, Glow, SAFE } from "~/ui/layout";
+import type { IconName } from "~/ui/icon";
+import { SAFE } from "~/ui/layout";
+import { Card, Chip } from "~/ui/surfaces";
 
-import { useEntrance } from "./_closing-motion";
+import { ACCENT, INK, useEntrance } from "./_closing-motion";
 
 export interface RoadmapPhase {
-  /** "Now", "Next", "Later" — or a term: "Sem VIII". */
+  /** "Now", "Next", "Later", or a term: "Sem VIII". */
   label: ReactNode;
   title: ReactNode;
   items: ReactNode[];
@@ -33,32 +34,42 @@ const STATUS: Record<RoadmapPhase["status"], { text: string; icon: IconName }> =
     later: { text: "Exploring", icon: "sparkles" },
   };
 
-/** Phase colours, left to right along the brand gradient. */
-const PHASE_COLORS = ["#c45fd6", "#ef4f6a", "#f6a73b", "#f2743c"];
-
 /* Canvas geometry. */
 const CONTENT_W = 1920 - SAFE.x * 2;
-const LINE_Y = 388;
-const CARD_TOP = 456;
-const CARD_H = 456;
+const LINE_Y = 404;
+const CARD_TOP = 470;
+const CARD_H = 440;
 const GAP = 40;
+
+/** The line's colours: the accent up to the current phase, quiet after it. */
+const LINE_QUIET = "#b4bac5";
 
 /**
  * Where Plannr goes from here, phase by phase.
  *
  * A line runs out from "Today" and draws itself to each phase as it arrives:
- * the node lands with a pulse and the phase's card rises beneath it. On the
- * last phase the line carries on past it and fades out — there is more after.
+ * the node lands with a pulse and the phase rises beneath it. The current
+ * phase (the first one not shipped) is the one that matters: its stretch of
+ * line and its node are in the accent and it sits raised on a card; the
+ * phases after it stand on the ground. On the last phase the line carries on
+ * past it and fades out, because there is more after.
  */
-export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
+export function Roadmap({ title, phases, step }: RoadmapProps) {
   const root = useRef<HTMLDivElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const n = Math.max(1, phases.length);
   const cardW = (CONTENT_W - GAP * (n - 1)) / n;
   const nodeX = phases.map((_, i) => SAFE.x + i * (cardW + GAP) + cardW / 2);
   const end = 1920 - SAFE.x + 20;
-  const color = (i: number) =>
-    PHASE_COLORS[i % PHASE_COLORS.length] ?? "#e8455e";
+
+  // The current phase: one in progress, else the first that is not shipped.
+  const nowIndex = (() => {
+    const inProgress = phases.findIndex((p) => p.status === "now");
+    if (inProgress >= 0) return inProgress;
+    const pending = phases.findIndex((p) => p.status !== "done");
+    return pending >= 0 ? pending : 0;
+  })();
+  const color = (i: number) => (i <= nowIndex ? ACCENT : LINE_QUIET);
 
   // Segment i runs into node i; the last one runs on past the final node.
   const segments = [
@@ -68,6 +79,8 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
     })),
     { x0: nodeX[nodeX.length - 1] ?? SAFE.x, x1: end },
   ];
+  const nowX = nodeX[nowIndex] ?? SAFE.x;
+  const span = end - SAFE.x;
 
   const firstStep = useRef(step).current;
   useEntrance(root, (tl) => {
@@ -89,7 +102,7 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
     );
     tl.from(
       ".rm-seg-0",
-      { drawSVG: "0% 0%", duration: 0.8, ease: "power2.inOut" },
+      { drawSVG: "0% 0%", duration: 0.8, ease: "power3.out" },
       0.45,
     );
     arrive(tl, 0, 1.05);
@@ -156,12 +169,12 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
           {
             drawSVG: "0% 100%",
             duration: 0.75,
-            ease: "power2.inOut",
+            ease: "power3.out",
             immediateRender: true,
           },
           at,
         );
-        arrive(tl, i, `${at}+=0.6`);
+        arrive(tl, i, `${at}+=0.5`);
         if (i === phases.length - 1) {
           tl.fromTo(
             `.rm-seg-${phases.length}`,
@@ -172,7 +185,7 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
               ease: "power2.out",
               immediateRender: true,
             },
-            `${at}+=1.05`,
+            `${at}+=0.95`,
           );
         }
         mark();
@@ -184,15 +197,12 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
   return (
     <div ref={root} data-no-enter className="absolute inset-0">
       <div className="rm-all absolute inset-0">
-        <Glow x="50%" y="70%" size={1700} color="rgba(201, 48, 108, 0.12)" />
-
         <header
           className="absolute"
           style={{ left: SAFE.x, top: SAFE.top, right: SAFE.x }}
         >
           <div className="rm-head-in flex flex-col">
-            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-            <h1 className="t-title mt-6 text-balance">{title}</h1>
+            <h1 className="t-title text-fg text-balance">{title}</h1>
           </div>
         </header>
 
@@ -213,19 +223,17 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
               y2="0"
               gradientUnits="userSpaceOnUse"
             >
-              <stop offset="0" stopColor="#ffffff" stopOpacity="0.5" />
-              {nodeX.map((x, i) => (
-                <stop
-                  key={i}
-                  offset={(x - SAFE.x) / (end - SAFE.x)}
-                  stopColor={color(i)}
-                />
-              ))}
+              <stop offset="0" stopColor={ACCENT} />
+              <stop offset={(nowX - SAFE.x) / span} stopColor={ACCENT} />
               <stop
-                offset="1"
-                stopColor={color(nodeX.length - 1)}
-                stopOpacity="0"
+                offset={Math.min(1, (nowX + 60 - SAFE.x) / span)}
+                stopColor={LINE_QUIET}
               />
+              <stop
+                offset={((nodeX[nodeX.length - 1] ?? nowX) - SAFE.x) / span}
+                stopColor={LINE_QUIET}
+              />
+              <stop offset="1" stopColor={LINE_QUIET} stopOpacity="0" />
             </linearGradient>
           </defs>
 
@@ -234,7 +242,7 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
             y1={LINE_Y}
             x2={end}
             y2={LINE_Y}
-            stroke="var(--line)"
+            stroke="var(--line-strong)"
             strokeWidth="2"
             strokeDasharray="2 12"
             strokeLinecap="round"
@@ -245,56 +253,53 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
               className={`rm-seg-${i}`}
               d={`M${s.x0} ${LINE_Y}H${s.x1}`}
               stroke={`url(#${uid}-line)`}
-              strokeWidth="4"
+              strokeWidth="3"
               strokeLinecap="round"
             />
           ))}
 
           <g className="rm-today">
-            <circle
-              cx={SAFE.x}
-              cy={LINE_Y}
-              r="8"
-              fill="var(--bg)"
-              stroke="#ffffff"
-              strokeWidth="3"
-            />
+            <circle cx={SAFE.x} cy={LINE_Y} r="7" fill={INK.fg} />
           </g>
 
-          {nodeX.map((x, i) => (
-            <g key={i}>
-              <circle
-                className={`rm-halo-${i}`}
-                cx={x}
-                cy={LINE_Y}
-                r="18"
-                stroke={color(i)}
-                strokeWidth="2"
-                style={{ opacity: 0 }}
-              />
-              <g className={`rm-node-${i}`}>
+          {nodeX.map((x, i) => {
+            const now = i === nowIndex;
+            const later = phases[i]?.status === "later";
+            return (
+              <g key={i}>
                 <circle
+                  className={`rm-halo-${i}`}
                   cx={x}
                   cy={LINE_Y}
-                  r="18"
-                  fill="var(--bg)"
+                  r="16"
                   stroke={color(i)}
-                  strokeWidth="4"
+                  strokeWidth="2"
+                  style={{ opacity: 0 }}
                 />
-                <circle
-                  cx={x}
-                  cy={LINE_Y}
-                  r={phases[i]?.status === "later" ? 0 : 8}
-                  fill={color(i)}
-                />
+                <g className={`rm-node-${i}`}>
+                  <circle
+                    cx={x}
+                    cy={LINE_Y}
+                    r={now ? 16 : 13}
+                    fill={now ? ACCENT : INK.ground}
+                    stroke={color(i)}
+                    strokeWidth={now ? 0 : 3}
+                  />
+                  <circle
+                    cx={x}
+                    cy={LINE_Y}
+                    r={now ? 6 : later ? 0 : 5}
+                    fill={now ? "#ffffff" : LINE_QUIET}
+                  />
+                </g>
               </g>
-            </g>
-          ))}
+            );
+          })}
         </svg>
 
         <span
-          className="rm-today t-eyebrow text-muted absolute"
-          style={{ left: SAFE.x, top: LINE_Y - 56 }}
+          className="rm-today text-muted absolute text-[24px] font-medium"
+          style={{ left: SAFE.x, top: LINE_Y - 60 }}
         >
           Today
         </span>
@@ -302,15 +307,9 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
         {phases.map((p, i) => (
           <span
             key={i}
-            className={`rm-label-${i} t-eyebrow absolute flex w-[400px] justify-center`}
-            style={{
-              left: (nodeX[i] ?? 0) - 200,
-              top: LINE_Y - 60,
-              color: color(i),
-            }}
+            className={`rm-label-${i} absolute flex w-[400px] justify-center text-[26px] font-semibold ${i === nowIndex ? "text-accent" : "text-muted"}`}
+            style={{ left: (nodeX[i] ?? 0) - 200, top: LINE_Y - 64 }}
           >
-            <span className="opacity-60">{String(i + 1).padStart(2, "0")}</span>
-            <span className="mx-3 opacity-40">·</span>
             {p.label}
           </span>
         ))}
@@ -326,7 +325,11 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
               height: CARD_H,
             }}
           >
-            <PhaseCard phase={p} color={color(i)} />
+            <PhaseCard
+              phase={p}
+              current={i === nowIndex}
+              repeatStatus={i > 0 && phases[i - 1]?.status === p.status}
+            />
           </div>
         ))}
       </div>
@@ -334,55 +337,52 @@ export function Roadmap({ eyebrow, title, phases, step }: RoadmapProps) {
   );
 }
 
-function PhaseCard({ phase, color }: { phase: RoadmapPhase; color: string }) {
+/**
+ * One phase: its state, its name, what it holds. The current phase is raised
+ * on a card; the others are plain columns under a hairline, so elevation marks
+ * only the phase that matters. A status that repeats the previous phase's
+ * keeps its space (so titles line up) but is not drawn twice.
+ */
+function PhaseCard({
+  phase,
+  current,
+  repeatStatus,
+}: {
+  phase: RoadmapPhase;
+  current: boolean;
+  repeatStatus: boolean;
+}) {
   const status = STATUS[phase.status];
-  return (
+  const body = (
     <div
-      className="bg-card relative flex h-full flex-col overflow-hidden rounded-[28px] px-10 pt-9 pb-10"
-      style={{
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 24%, var(--line))`,
-      }}
+      className={`flex h-full flex-col pt-9 pb-10 ${current ? "px-10" : ""}`}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[200px]"
-        style={{
-          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 12%, transparent), transparent)`,
-        }}
-      />
-      <span
-        aria-hidden
-        className="absolute top-0 left-1/2 h-[4px] w-[72px] -translate-x-1/2 rounded-b-full"
-        style={{ background: color }}
-      />
-      <span
-        className="t-mono relative inline-flex items-center gap-2 self-start rounded-full py-[7px] pr-4 pl-3 text-[20px] font-medium"
-        style={{
-          color,
-          background: `color-mix(in srgb, ${color} 14%, transparent)`,
-          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 34%, transparent)`,
-        }}
+      <Chip
+        icon={status.icon}
+        size={22}
+        className={`self-start ${repeatStatus ? "invisible" : ""}`}
       >
-        <Icon name={status.icon} size={22} stroke={2} />
         {status.text}
-      </span>
-      <h2 className="font-display relative mt-6 text-[44px] leading-[1.08] font-bold tracking-[-0.03em] text-balance">
+      </Chip>
+      <h2 className="font-display text-fg mt-6 text-[44px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance">
         {phase.title}
       </h2>
-      <ul className="relative mt-7 flex flex-col gap-4">
+      <ul className="mt-6 flex flex-col">
         {phase.items.map((item, j) => (
           <li
             key={j}
-            className="text-muted flex gap-4 text-[26px] leading-[1.35]"
+            className={`text-body py-3 text-[26px] leading-[1.35] text-balance ${j > 0 ? "[box-shadow:inset_0_1px_0_var(--line)]" : ""}`}
           >
-            <span
-              className="mt-[13px] h-[9px] w-[9px] shrink-0 rounded-full"
-              style={{ background: color }}
-            />
-            <span className="text-pretty">{item}</span>
+            {item}
           </li>
         ))}
       </ul>
+    </div>
+  );
+  if (current) return <Card className="h-full">{body}</Card>;
+  return (
+    <div className="h-full [box-shadow:inset_0_2px_0_var(--line-strong)]">
+      {body}
     </div>
   );
 }

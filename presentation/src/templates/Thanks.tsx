@@ -4,7 +4,6 @@ import { Fragment, useRef, type ReactNode } from "react";
 
 import { PlannrMark } from "~/ui/brand";
 import { Icon, type IconName } from "~/ui/icon";
-import { Glow } from "~/ui/layout";
 
 import { TimetableDrift } from "./_closing-backdrop";
 import { useEntrance, useSlideActive } from "./_closing-motion";
@@ -27,18 +26,20 @@ export interface ThanksProps {
  *
  * The corner mark ("deck-mark") travels from the top bar into the middle of
  * the slide, the title rises under it, and the cover's drifting week comes
- * back around the edges — the deck ends where it began.
+ * back around the edges: the deck ends where it began.
  */
 export function Thanks({ title, subtitle, footer, active }: ThanksProps) {
   const root = useRef<HTMLDivElement>(null);
   const live = useSlideActive(root, active);
 
   useEntrance(root, (tl) => {
-    tl.from(".th-drift", { opacity: 0, duration: 2.4, ease: "power1.out" }, 0);
-    tl.from(
-      ".th-glow",
-      { opacity: 0, scale: 0.7, duration: 1.8, ease: "power2.out" },
-      0.1,
+    // The drift waits for the mark to land, so the only thing moving during
+    // the morph is the mark itself.
+    tl.fromTo(
+      ".th-drift",
+      { opacity: 0 },
+      { opacity: 1, duration: 1.8, ease: "power1.out", immediateRender: true },
+      1.05,
     );
     tl.from(
       ".th-title",
@@ -67,30 +68,29 @@ export function Thanks({ title, subtitle, footer, active }: ThanksProps) {
       <div className="th-drift absolute inset-0">
         <TimetableDrift active={live} variant="thanks" seed={23} />
       </div>
-      <div className="th-glow absolute inset-0">
-        <Glow x="50%" y="46%" size={1500} />
-      </div>
 
       <div className="absolute inset-x-0 top-[214px] flex flex-col items-center text-center">
         <PlannrMark height={170} flipId="deck-mark" />
-        <h1 className="th-title t-hero mt-16">{title}</h1>
+        <h1 className="th-title t-hero text-fg mt-16">{title}</h1>
         {subtitle && (
-          <p className="th-sub font-display text-muted mt-8 text-[64px] leading-none font-semibold tracking-[-0.03em]">
+          <p className="th-sub font-display text-muted mt-10 text-[64px] leading-none font-medium tracking-[-0.03em]">
             {subtitle}
           </p>
         )}
       </div>
 
       {footer && (
-        <div className="absolute inset-x-0 bottom-[72px] flex items-center justify-center gap-6">
+        <div className="absolute inset-x-0 bottom-[84px] flex items-center justify-center gap-8">
           {parts ? (
             parts.map((part, i) => (
               <Fragment key={part}>
                 {i > 0 && (
-                  <span className="th-foot bg-line-strong h-[6px] w-[6px] rounded-full" />
+                  <span className="th-foot bg-line-strong h-[28px] w-px" />
                 )}
-                <span className="th-foot t-mono text-muted inline-flex items-center gap-3 text-[24px]">
-                  <Icon name={footerIcon(part)} size={26} stroke={1.75} />
+                <span className="th-foot t-mono text-body inline-flex items-center gap-3 text-[24px]">
+                  <span className="text-muted inline-flex">
+                    <Icon name={footerIcon(part)} size={28} />
+                  </span>
                   {part}
                 </span>
               </Fragment>

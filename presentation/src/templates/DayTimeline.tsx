@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import type { DayEvent, DayLane } from "~/content/types";
 import type { StakeholderId } from "~/deck/types";
 import { useSteps } from "~/deck/useSteps";
@@ -12,12 +11,11 @@ import { SlideBody, SlideHeader } from "~/ui/layout";
 import {
   hoursOf,
   layoutLane,
-  sineInOutTimeAt,
   textOf,
   textWidth,
   type PlacedLabel,
 } from "./_research-layout";
-import { useArrival } from "./_research-motion";
+import { SWEEP_EASE, sweepTimeAt, useArrival } from "./_research-motion";
 
 export interface DayTimelineProps {
   stakeholder: StakeholderId;
@@ -72,7 +70,6 @@ const TONE: Record<NonNullable<DayEvent["tone"]>, string> = {
  */
 export function DayTimeline({
   stakeholder,
-  eyebrow,
   title,
   lanes,
   from = 6,
@@ -80,7 +77,6 @@ export function DayTimeline({
   step,
   active = true,
 }: DayTimelineProps) {
-  const color = STAKEHOLDERS[stakeholder].color;
   const ref = useRef<HTMLDivElement>(null);
   const span = Math.max(1, to - from);
   const xOf = (hours: number) =>
@@ -128,7 +124,7 @@ export function DayTimeline({
     tl.fromTo(
       head,
       { x: 0 },
-      { x: TRACK_W, duration: SWEEP, ease: "sine.inOut" },
+      { x: TRACK_W, duration: SWEEP, ease: SWEEP_EASE },
       at,
     );
     tl.fromTo(
@@ -137,13 +133,13 @@ export function DayTimeline({
       {
         scaleX: 1,
         duration: SWEEP,
-        ease: "sine.inOut",
+        ease: SWEEP_EASE,
         transformOrigin: "0% 50%",
       },
       at,
     );
     layouts[i]!.forEach(({ place }, j) => {
-      const t = at + sineInOutTimeAt(place.dot / TRACK_W) * SWEEP - 0.08;
+      const t = at + sweepTimeAt(place.dot / TRACK_W) * SWEEP - 0.08;
       tl.from(
         q(`[data-ev="${j}"] .rt-dot`),
         { scale: 0, duration: 0.55, ease: "back.out(2.4)" },
@@ -183,8 +179,17 @@ export function DayTimeline({
         tl.fromTo(
           later,
           { opacity: 1 },
-          { opacity: 0.32, duration: 0.7, ease: "power2.inOut" },
+          { opacity: 0.32, duration: 0.7, ease: "power2.out" },
           0.45,
+        );
+      }
+      // Sublabels wait for their name, which may still be travelling in.
+      const subs = Array.from(ref.current?.querySelectorAll(".rt-sub") ?? []);
+      if (subs.length > 0) {
+        tl.from(
+          subs,
+          { y: 10, opacity: 0, duration: 0.5, ease: "deck.enter" },
+          0.35,
         );
       }
       if (lanes.length > 0) sweep(tl, 0, 0.55);
@@ -224,12 +229,7 @@ export function DayTimeline({
 
   return (
     <SlideBody>
-      <SlideHeader
-        eyebrow={eyebrow}
-        eyebrowColor={color}
-        title={title}
-        titleClassName="max-w-none!"
-      />
+      <SlideHeader title={title} titleClassName="max-w-none!" />
       <div ref={ref} className="relative mt-12 min-h-0 flex-1">
         {/* The hours */}
         <div
@@ -293,10 +293,12 @@ export function DayTimeline({
                 </span>
                 {lane.sublabel && (
                   <span
-                    className="rt-name t-mono text-faint mt-2 text-[22px]"
+                    className="rt-name t-small text-muted mt-1.5"
                     style={{ opacity: i === 0 ? 1 : 0.32 }}
                   >
-                    <span className="rt-name-calm">{lane.sublabel}</span>
+                    <span className="rt-sub inline-block">
+                      <span className="rt-name-calm">{lane.sublabel}</span>
+                    </span>
                   </span>
                 )}
               </div>
@@ -306,13 +308,13 @@ export function DayTimeline({
                 className="absolute top-1/2"
                 style={{ left: NAME_W + NAME_GAP, width: TRACK_W, height: 0 }}
               >
-                <span className="bg-line absolute inset-x-0 -top-px h-0.5 rounded-full" />
                 <div className="rt-calm absolute inset-0">
+                  <span className="bg-line absolute inset-x-0 -top-px h-0.5 rounded-full" />
                   <span
-                    className="rt-progress absolute inset-x-0 h-0.75 rounded-full"
+                    className="rt-progress absolute inset-x-0 h-0.5 rounded-full"
                     style={{
-                      top: -1.5,
-                      background: `linear-gradient(90deg, color-mix(in srgb, ${color} 30%, transparent), ${color})`,
+                      top: -1,
+                      background: "var(--fg-faint)",
                       transform: "scaleX(0)",
                       transformOrigin: "0% 50%",
                     }}
@@ -328,7 +330,7 @@ export function DayTimeline({
                     />
                   ))}
                 </div>
-                <Playhead color={color} />
+                <Playhead />
               </div>
             </div>
           ))}
@@ -359,6 +361,7 @@ function Event({
   const tone = event.tone ?? "neutral";
   const c = TONE[tone];
   const bad = tone === "bad";
+  const pad = place.side === 0 ? 8 : 4;
   const covers = place.leader === null && place.side !== 0;
   const centred =
     covers && Math.abs(place.left + place.width / 2 - place.dot) < 3;
@@ -368,22 +371,24 @@ function Event({
     : place.left + place.width / 2 > place.dot
       ? "left"
       : "right";
+  // Neutral and good moments are quiet raised discs; friction is ringed in
+  // its tone; where the day breaks is the one filled disc, in the accent.
   const dotStyle: CSSProperties = bad
     ? {
-        background: "var(--bad)",
-        color: "var(--ink-0)",
-        boxShadow: "0 0 0 6px color-mix(in srgb, var(--bad) 20%, transparent)",
+        background: "var(--accent)",
+        color: "#ffffff",
+        boxShadow: "0 0 0 6px var(--accent-soft), var(--shadow-1)",
       }
     : tone === "neutral"
       ? {
-          background: "color-mix(in srgb, var(--fg) 7%, var(--bg))",
+          background: "var(--bg-raised)",
           color: "var(--fg-muted)",
-          boxShadow: "inset 0 0 0 1.5px var(--line-strong)",
+          boxShadow: "inset 0 0 0 1.5px var(--line-strong), var(--shadow-1)",
         }
       : {
-          background: `color-mix(in srgb, ${c} 18%, var(--bg))`,
+          background: "var(--bg-raised)",
           color: c,
-          boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${c} 70%, transparent)`,
+          boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${c} 55%, transparent), var(--shadow-1)`,
         };
   return (
     <div data-ev={index}>
@@ -398,7 +403,7 @@ function Event({
         }}
       >
         {event.icon ? (
-          <Icon name={event.icon} size={dot * 0.5} stroke={2} />
+          <Icon name={event.icon} size={dot * 0.5} weight="regular" />
         ) : (
           <span className="h-2.5 w-2.5 rounded-full bg-current" />
         )}
@@ -406,8 +411,8 @@ function Event({
       <span
         className="rt-label absolute flex items-baseline whitespace-nowrap"
         style={{
-          left: place.side === 0 ? place.left - 8 : place.left,
-          width: place.side === 0 ? place.width + 16 : place.width,
+          left: place.left - pad,
+          width: place.width + pad * 2,
           top: rowTop(place, dot),
           height: LABEL_H,
           lineHeight: `${LABEL_H}px`,
@@ -417,8 +422,11 @@ function Event({
               : align === "left"
                 ? "flex-start"
                 : "flex-end",
-          padding: place.side === 0 ? "0 8px" : undefined,
-          background: place.side === 0 ? "var(--bg)" : undefined,
+          // An opaque patch, so neither the track nor an hour line runs
+          // through the words. Beside-dot labels keep a slimmer patch so
+          // their leader still reaches them.
+          padding: `0 ${pad}px`,
+          background: "var(--bg)",
         }}
       >
         <span
@@ -433,7 +441,11 @@ function Event({
         </span>
         <span
           className="font-body"
-          style={{ fontSize: LABEL_FONT, color: "var(--fg)" }}
+          style={{
+            fontSize: LABEL_FONT,
+            color: bad ? "var(--fg)" : "var(--fg-body)",
+            fontWeight: bad ? 500 : 400,
+          }}
         >
           {event.label}
         </span>
@@ -491,7 +503,7 @@ function Leaders({
   );
 }
 
-function Playhead({ color }: { color: string }) {
+function Playhead() {
   return (
     <div
       className="rt-head pointer-events-none absolute top-0 left-0"
@@ -502,14 +514,15 @@ function Playhead({ color }: { color: string }) {
         style={{
           top: -40,
           height: 80,
-          background: `linear-gradient(180deg, transparent, ${color} 30%, ${color} 70%, transparent)`,
+          background:
+            "linear-gradient(180deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent)",
         }}
       />
       <span
         className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{
-          background: color,
-          boxShadow: `0 0 0 6px color-mix(in srgb, ${color} 25%, transparent), 0 0 28px 6px color-mix(in srgb, ${color} 55%, transparent)`,
+          background: "var(--accent)",
+          boxShadow: "0 0 0 6px var(--accent-soft)",
         }}
       />
     </div>

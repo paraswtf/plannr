@@ -72,7 +72,7 @@ const PERSONAS: Persona[] = [
     traits: [
       "Reads college mail before getting ready",
       "Writes the day's classes into notes",
-      "Rarely misses a change — at 20 minutes a day",
+      "Rarely misses a change, at 20 minutes a day",
     ],
     share: <Ph>4 of 14 we met</Ph>,
   },
@@ -91,7 +91,7 @@ const PERSONAS: Persona[] = [
   {
     id: "follower",
     name: "The Follower",
-    tagline: "Doesn't check anything — asks the group.",
+    tagline: "Doesn't check anything. Asks the group.",
     icon: "message",
     traits: [
       "Relies on friends and the class WhatsApp group",
@@ -148,7 +148,7 @@ const DAYS: DayLane[] = [
       },
       {
         at: "09:00",
-        label: "Class moved — finds out at the door",
+        label: "Class moved, finds out at the door",
         icon: "x",
         tone: "bad",
       },
@@ -182,7 +182,7 @@ const DAYS: DayLane[] = [
       { at: "13:00", label: "Checks the group at lunch", icon: "message" },
       {
         at: "16:00",
-        label: "Extra class held — missed",
+        label: "Extra class held, and missed",
         icon: "calendarX",
         tone: "bad",
       },
@@ -249,11 +249,10 @@ const FEATURES: Feature[] = [
   {
     id: "my-day",
     name: "Your day, on one screen",
-    tagline:
-      "Only your classes — your division, your electives — the moment you open it.",
+    tagline: "Just your division and your electives, the moment you open it.",
     points: [
       "Opens on your next class, not on the whole college",
-      "Swipe between days — even offline, in the lab",
+      "Swipe between days, even offline in the lab",
       "Room, teacher and time to get there, on every class",
     ],
     solves: ["find-mine", "phone", "slow", "three-apps"],
@@ -266,7 +265,7 @@ const FEATURES: Feature[] = [
       "When a class moves, is cancelled or added, your phone knows before you do.",
     points: [
       "A notification the moment a coordinator saves",
-      "Your schedule moves the class — no mail to read",
+      "Your schedule moves the class, no mail to read",
       "Extra classes land in your Google Calendar too",
     ],
     solves: ["mail-only", "extra-missed", "ask-friends"],
@@ -280,7 +279,7 @@ const FEATURES: Feature[] = [
     points: [
       "Every teacher's day, one search away",
       "“Now in 301, until 12:30”",
-      "When they're free — for that quick question",
+      "When they're free, for that quick question",
     ],
     solves: ["find-teacher"],
     icon: "search",
@@ -312,7 +311,7 @@ export const students: SectionDef = {
             position: "50% 40%",
           }}
           number="01"
-          lede="The people who open the timetable more than anyone — usually on a phone, usually in a hurry."
+          lede="The people who open the timetable more than anyone, usually on a phone, usually in a hurry."
           step={step}
         />
       ),
@@ -329,7 +328,6 @@ export const students: SectionDef = {
         <InterviewSummary
           active={active}
           stakeholder="students"
-          eyebrow="Students · Research"
           title="A week with the students."
           research={RESEARCH}
           step={step}
@@ -347,7 +345,6 @@ export const students: SectionDef = {
       ],
       render: ({ step, active }) => (
         <VisualSlide
-          eyebrow="Students · Their weeks"
           title={
             <>
               Most weeks look the same. <Grad>The one that doesn&apos;t</Grad>{" "}
@@ -371,7 +368,6 @@ export const students: SectionDef = {
       ],
       render: ({ step, active }) => (
         <VisualSlide
-          eyebrow="Students · Today"
           title="Where do I need to be?"
           lede="Four apps, for one question."
           visual={<OldPhoneFlow step={step} active={active} />}
@@ -393,7 +389,6 @@ export const students: SectionDef = {
         <DayTimeline
           active={active}
           stakeholder="students"
-          eyebrow="Students · Their days"
           title="Four ways to start the same day."
           lanes={DAYS}
           step={step}
@@ -409,7 +404,6 @@ export const students: SectionDef = {
         <PersonaCards
           active={active}
           stakeholder="students"
-          eyebrow="Students · Who they are"
           title="Four kinds of student."
           personas={PERSONAS}
           step={step}
@@ -424,7 +418,6 @@ export const students: SectionDef = {
       render: ({ step }) => (
         <ProblemBoard
           stakeholder="students"
-          eyebrow="Students · What we heard"
           title="Everything they told us."
           problems={PROBLEMS}
           step={step}
@@ -444,7 +437,6 @@ export const students: SectionDef = {
       render: ({ step }) => (
         <ProblemRanking
           stakeholder="students"
-          eyebrow="Students · Ranking"
           title="What hurts most."
           problems={PROBLEMS}
           personas={PERSONAS}
@@ -464,7 +456,6 @@ export const students: SectionDef = {
       render: ({ step }) => (
         <SolutionMap
           stakeholder="students"
-          eyebrow="Students · Solutions"
           title="One answer for each."
           problems={TOP}
           features={FEATURES}
@@ -566,10 +557,9 @@ export const students: SectionDef = {
         "That's everything for students. Over to Ravya, to tell you what's improved for faculty.",
       render: ({ step }) => (
         <StakeholderMap
-          eyebrow="Next"
           title="That's students."
           highlight="faculty"
-          caption="Over to Ravya — faculty."
+          caption="Over to Ravya, for faculty."
           step={step}
         />
       ),

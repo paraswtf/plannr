@@ -408,7 +408,7 @@ export function Cursor({
           className="cur-svg block"
           style={{
             transformOrigin: "2px 2px",
-            filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.3))",
+            filter: "drop-shadow(0 3px 5px rgba(16,24,40,0.28))",
             marginLeft: -2,
             marginTop: -2,
           }}
@@ -427,7 +427,10 @@ export function Cursor({
   );
 }
 
-/** A dark pill under the window: an icon and a line, for what just happened. */
+/**
+ * A toast under the window: an icon tile and a line, for what just happened.
+ * A raised light surface on the stage; the tone only colours the tile.
+ */
 export function StatusPill({
   icon,
   tone,
@@ -441,26 +444,23 @@ export function StatusPill({
   className?: string;
   style?: CSSProperties;
 }) {
-  const color =
+  const tile =
     tone === "good"
-      ? "var(--good)"
-      : tone === "bad"
-        ? "var(--bad)"
-        : "var(--coordinators)";
+      ? { background: "rgba(47,122,75,0.1)", color: "var(--good)" }
+      : { background: "var(--accent-soft)", color: "var(--accent)" };
   return (
     <div
-      className={`t-small inline-flex items-center gap-3 rounded-full py-3 pr-7 pl-4 text-[24px] font-medium text-white ${className ?? ""}`}
+      className={`bg-raised text-fg inline-flex items-center gap-4 rounded-[22px] py-3 pr-8 pl-3 text-[26px] leading-none font-medium tracking-[-0.01em] whitespace-nowrap ${className ?? ""}`}
       style={{
-        background: `color-mix(in srgb, ${color} 14%, var(--ink-1))`,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 45%, transparent), 0 18px 40px rgba(0,0,0,0.35)`,
+        boxShadow: "inset 0 0 0 1px var(--line), var(--shadow-2)",
         ...style,
       }}
     >
       <span
-        className="flex h-9 w-9 items-center justify-center rounded-full"
-        style={{ background: color, color: "#0d1117" }}
+        className="flex h-11 w-11 items-center justify-center rounded-[12px]"
+        style={tile}
       >
-        <Icon name={icon} size={20} stroke={2.4} />
+        <Icon name={icon} size={24} stroke={2} />
       </span>
       {children}
     </div>

@@ -65,8 +65,9 @@ export function PhoneFrame({
           style={{
             background:
               "linear-gradient(160deg, #3a414d, #161a20 40%, #2a3039)",
+            // A light stage: the shadow is long, soft and slate-tinted.
             boxShadow:
-              "inset 0 0 0 1.5px rgba(255,255,255,0.18), 0 40px 90px rgba(0,0,0,0.45), 0 12px 30px rgba(0,0,0,0.3)",
+              "inset 0 0 0 1.5px rgba(255,255,255,0.18), 0 56px 110px -34px rgba(16,24,40,0.42), 0 20px 40px -20px rgba(16,24,40,0.3)",
           }}
         />
         <div
@@ -200,7 +201,7 @@ export function BrowserFrame({
         background: dark ? "#151d28" : "#ffffff",
         boxShadow: dark
           ? "inset 0 0 0 1px rgba(255,255,255,0.12), 0 40px 100px rgba(0,0,0,0.5)"
-          : "inset 0 0 0 1px rgba(13,17,23,0.12), 0 40px 100px rgba(0,0,0,0.45)",
+          : "inset 0 0 0 1px rgba(16,24,40,0.1), 0 2px 6px -2px rgba(16,24,40,0.1), 0 48px 100px -36px rgba(16,24,40,0.36)",
         ...style,
       }}
     >
@@ -251,6 +252,48 @@ export function BrowserFrame({
         data-enter
         className="relative min-h-0 flex-1 overflow-hidden"
         style={contentStyle}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The double bezel: a tray holding a plate. Wrap anything precious in it, a
+ * photo, a product shot, a quote, so it sits on the stage like a machined
+ * object rather than a flat rectangle. The inner radius follows the outer one
+ * so the curves stay concentric.
+ */
+export function Bezel({
+  children,
+  radius = 30,
+  pad = 8,
+  flipId,
+  className,
+  coreClassName,
+  style,
+  coreStyle,
+}: {
+  children: ReactNode;
+  /** Outer radius in canvas pixels; the plate gets radius - pad. */
+  radius?: number;
+  pad?: number;
+  flipId?: string;
+  className?: string;
+  coreClassName?: string;
+  style?: CSSProperties;
+  coreStyle?: CSSProperties;
+}) {
+  return (
+    <div
+      data-flip-id={flipId}
+      className={`bezel ${className ?? ""}`}
+      style={{ borderRadius: radius, padding: pad, ...style }}
+    >
+      <div
+        className={`bezel-core relative h-full w-full overflow-hidden ${coreClassName ?? ""}`}
+        style={{ borderRadius: radius - pad, ...coreStyle }}
       >
         {children}
       </div>

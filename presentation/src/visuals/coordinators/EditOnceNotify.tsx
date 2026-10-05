@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { useSteps } from "~/deck/useSteps";
 import { Icon } from "~/ui/icon";
 import { Ph } from "~/ui/placeholder";
+import { Card } from "~/ui/surfaces";
 
 import {
   AppBar,
@@ -203,7 +204,7 @@ const SOURCE = toBox({ x: TO.x + TO.w / 2, y: TO.y + TO.h / 2 });
  * Builds (steps = 3):
  *   0 — the coordinator drags a class to a new slot on the grid.
  *   1 — save: notifications fan out to exactly the students and teacher affected.
- *   2 — the tally: "Sent to N people · 0 emails written" (placeholder N).
+ *   2 — the tally: N people told, 0 emails written, N have seen it (placeholder N).
  *
  * The browser window carries `flipId`, at the same size and place as the
  * other two coordinator demos, so it holds still between them.
@@ -220,7 +221,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
         x: CURSOR_GRAB.x,
         y: CURSOR_GRAB.y,
         duration: 0.75,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
     );
     // Grab: the pointer presses, the block lifts off the grid.
@@ -230,7 +231,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
       {
         scale: 1.05,
         rotation: -2,
-        boxShadow: "0 22px 40px rgba(13,17,23,0.3)",
+        boxShadow: "0 22px 40px rgba(16,24,40,0.24)",
         duration: 0.28,
         ease: "power2.out",
       },
@@ -241,7 +242,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
     tl.addLabel("carry", ">0.05");
     tl.to(
       ".dm",
-      { x: DRAG.x, y: DRAG.y, duration: 1.15, ease: "power2.inOut" },
+      { x: DRAG.x, y: DRAG.y, duration: 1.15, ease: "deck.morph" },
       "carry",
     );
     tl.to(
@@ -250,7 +251,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
         x: CURSOR_GRAB.x + DRAG.x,
         y: CURSOR_GRAB.y + DRAG.y,
         duration: 1.15,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
       "carry",
     );
@@ -266,7 +267,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
       {
         scale: 1,
         rotation: 0,
-        boxShadow: "0 0 0 rgba(13,17,23,0)",
+        boxShadow: "0 0 0 rgba(16,24,40,0)",
         duration: 0.3,
         ease: "power2.out",
       },
@@ -288,7 +289,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
         x: CURSOR_SAVE.x,
         y: CURSOR_SAVE.y,
         duration: 0.7,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
       ">0.15",
     );
@@ -340,7 +341,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
           },
           scale: 1,
           duration: 1,
-          ease: "power2.inOut",
+          ease: "deck.morph",
         },
         at,
       );
@@ -353,12 +354,12 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
           duration: 0.14,
           yoyo: true,
           repeat: 1,
-          ease: "power1.inOut",
+          ease: "power2.out",
         },
         landed,
       );
     });
-    tl.to(".glabel-hit", { color: "#ffffff", duration: 0.4 }, ">-0.3");
+    tl.to(".glabel-hit", { color: "#10141b", duration: 0.4 }, ">-0.3");
     mark();
 
     // ── Build 2: who has seen it, and the tally.
@@ -423,10 +424,10 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
                   width: 26,
                   height: 26,
                   opacity: 0,
-                  background: "var(--coordinators)",
-                  color: "#0d1117",
+                  background: "var(--accent)",
+                  color: "#ffffff",
                   boxShadow:
-                    "0 0 0 3px var(--ink-0), 0 0 18px color-mix(in srgb, var(--coordinators) 70%, transparent)",
+                    "0 0 0 3px var(--bg), 0 6px 14px -4px rgba(16,24,40,0.3)",
                 }}
               >
                 <span
@@ -436,7 +437,11 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
                 </span>
                 <span
                   className={`seen-${p.key} absolute inset-0 flex items-center justify-center rounded-full`}
-                  style={{ opacity: 0, background: "var(--good)" }}
+                  style={{
+                    opacity: 0,
+                    background: "var(--good)",
+                    color: "#ffffff",
+                  }}
                 >
                   <Icon name="check" size={15} stroke={3} />
                 </span>
@@ -491,15 +496,18 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
           className="ping pointer-events-none absolute inset-0 rounded-[10px]"
           style={{
             opacity: 0,
-            boxShadow:
-              "0 0 0 3px var(--coordinators), 0 0 24px var(--coordinators)",
+            boxShadow: "0 0 0 3px var(--accent)",
           }}
         />
       </Block>
 
       <div
         className="scrim pointer-events-none absolute inset-0 z-20"
-        style={{ opacity: 0, background: "rgba(13,17,23,0.45)" }}
+        style={{
+          opacity: 0,
+          background: "rgba(242,243,246,0.72)",
+          backdropFilter: "blur(3px)",
+        }}
       />
 
       <Cursor
@@ -560,7 +568,7 @@ function People() {
             left: g.x - 20,
             width: g.w + 40,
             top: ROW_Y - STRIP.y + AV + 14,
-            color: "rgba(255,255,255,0.42)",
+            color: "#8f97a6",
           }}
         >
           {g.label}
@@ -573,43 +581,45 @@ function People() {
   );
 }
 
+/** Avatars are rounded squares (30%); the "+59" tile shares the radius. */
+const AV_RADIUS = Math.round(AV * 0.3);
+
 function Face({ p }: { p: Person }) {
   const w = widthOf(p);
-  const color = p.teacher ? "var(--faculty)" : "var(--students)";
   const base =
-    "absolute inset-0 flex items-center justify-center rounded-full font-display font-bold";
+    "absolute inset-0 flex items-center justify-center font-display font-semibold tabular-nums";
   const size = p.pill ? 19 : p.teacher ? 22 : 18;
   return (
     <span
-      className={`av-${p.key} absolute rounded-full`}
+      className={`av-${p.key} absolute`}
       style={{
         left: p.x,
         top: ROW_Y - STRIP.y,
         width: w,
         height: AV,
-        boxShadow: "0 0 0 4px var(--ink-0)",
+        borderRadius: AV_RADIUS,
+        boxShadow: "0 0 0 4px var(--bg)",
       }}
     >
       <span
-        className={base}
+        className={`${base} bg-raised text-muted`}
         style={{
           fontSize: size,
-          background: "var(--ink-2)",
-          boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.12)",
-          color: "rgba(255,255,255,0.4)",
+          borderRadius: AV_RADIUS,
+          boxShadow: "inset 0 0 0 1px var(--line-strong), var(--shadow-1)",
         }}
       >
         {p.initials}
       </span>
       {p.hit && (
         <span
-          className={`lit-${p.key} ${base}`}
+          className={`lit-${p.key} ${base} text-accent`}
           style={{
             opacity: 0,
             fontSize: size,
-            background: `color-mix(in srgb, ${color} 24%, var(--ink-1))`,
-            boxShadow: `inset 0 0 0 2px color-mix(in srgb, ${color} 80%, transparent)`,
-            color,
+            borderRadius: AV_RADIUS,
+            background: "#f8e7ed",
+            boxShadow: "inset 0 0 0 2px var(--accent-line), var(--shadow-1)",
           }}
         >
           {p.initials}
@@ -628,9 +638,9 @@ function Tally() {
         </Ph>
       ),
       label: "people told",
-      color: "#ffffff",
+      accent: false,
     },
-    { n: <span>0</span>, label: "emails written", color: "var(--good)" },
+    { n: <span>0</span>, label: "emails written", accent: true },
     {
       n: (
         <Ph>
@@ -638,43 +648,37 @@ function Tally() {
         </Ph>
       ),
       label: "have seen it",
-      color: "#ffffff",
+      accent: false,
     },
   ];
   const w = 780;
   return (
-    <div
-      className="tally absolute flex items-stretch rounded-[26px]"
+    <Card
+      className="tally flex items-stretch"
       style={{
+        position: "absolute",
         left: PAGE.x + (PAGE.w - w) / 2,
         top: PAGE.y + 150,
         width: w,
-        height: 196,
+        height: 204,
         opacity: 0,
-        background: "var(--ink-1)",
-        boxShadow:
-          "inset 0 0 0 1px rgba(255,255,255,0.12), 0 40px 80px rgba(0,0,0,0.45)",
+        boxShadow: "inset 0 0 0 1px var(--line), var(--shadow-3)",
       }}
     >
       {stats.map((s, i) => (
         <div
           key={s.label}
-          className="flex flex-1 flex-col items-center justify-center gap-3"
-          style={
-            i > 0
-              ? { boxShadow: "inset 1px 0 0 rgba(255,255,255,0.1)" }
-              : undefined
-          }
+          className="flex flex-1 flex-col items-center justify-center gap-4"
+          style={i > 0 ? { boxShadow: "inset 1px 0 0 var(--line)" } : undefined}
         >
           <span
-            className="font-display text-[76px] leading-none font-bold tracking-[-0.04em] tabular-nums"
-            style={{ color: s.color }}
+            className={`font-display text-[80px] leading-none font-semibold tracking-[-0.04em] tabular-nums ${s.accent ? "text-accent" : "text-fg"}`}
           >
             {s.n}
           </span>
-          <span className="text-[24px] text-white/60">{s.label}</span>
+          <span className="text-muted text-[26px]">{s.label}</span>
         </div>
       ))}
-    </div>
+    </Card>
   );
 }

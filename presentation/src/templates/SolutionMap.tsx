@@ -2,14 +2,13 @@
 
 import { useRef, type ReactNode } from "react";
 
-import { STAKEHOLDERS } from "~/content/team";
 import type { Feature, Problem } from "~/content/types";
 import type { StakeholderId } from "~/deck/types";
 import { useSteps } from "~/deck/useSteps";
 import { Icon } from "~/ui/icon";
 import { SlideBody, SlideHeader } from "~/ui/layout";
 
-import { TEXT_TONE } from "./_problem-tone";
+import { PROBLEM_CARD } from "./_problem-tone";
 
 export interface SolutionMapProps {
   stakeholder: StakeholderId;
@@ -65,8 +64,6 @@ export function SolutionMap({
   step,
 }: SolutionMapProps) {
   const root = useRef<HTMLDivElement>(null);
-  const color = STAKEHOLDERS[stakeholder].color;
-
   const links: Link[] = features.flatMap((f, fi) =>
     problems
       .filter((p) => f.solves.includes(p.id))
@@ -161,11 +158,11 @@ export function SolutionMap({
       const end = findSvg(`[data-sm-end="${f.id}"]`);
       if (!to || !end) return;
       const b = boxIn(to, scope);
-      end.setAttribute("cx", String(b.x));
+      end.setAttribute("cx", String(b.x - 10));
       end.setAttribute("cy", String(b.y + b.h / 2));
     });
 
-    // 1 — For each feature in turn: its lines draw out of the problems it
+    // 1. For each feature in turn: its lines draw out of the problems it
     // answers, and the feature rises in as they arrive.
     features.forEach((f, fi) => {
       const at = fi * 0.34;
@@ -194,8 +191,8 @@ export function SolutionMap({
           { drawSVG: "0% 0%" },
           {
             drawSVG: "0% 100%",
-            duration: 0.8,
-            ease: "power2.inOut",
+            duration: 0.85,
+            ease: "deck.morph",
             stagger: 0.08,
           },
           at + 0.05,
@@ -222,12 +219,13 @@ export function SolutionMap({
 
   return (
     <SlideBody>
-      <SlideHeader eyebrow={eyebrow} eyebrowColor={color} title={title} />
+      <SlideHeader eyebrow={eyebrow} title={title} />
       <div className="mt-8 flex min-h-0 flex-1 items-center">
         <div
           ref={root}
           className="relative flex w-full items-stretch justify-between"
         >
+          {/* The connectors: the one thing on this slide in the accent. */}
           <svg
             aria-hidden
             className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
@@ -237,23 +235,27 @@ export function SolutionMap({
               <path
                 key={l.key}
                 data-sm-line={l.key}
-                stroke={color}
-                strokeWidth={3}
+                stroke="var(--accent)"
+                strokeWidth={2.5}
                 strokeLinecap="round"
-                opacity={0.9}
               />
             ))}
             {links.map((l) => (
-              <circle key={l.key} data-sm-start={l.key} r={7} fill={color} />
+              <circle
+                key={l.key}
+                data-sm-start={l.key}
+                r={6}
+                fill="var(--accent)"
+              />
             ))}
             {features.map((f) => (
               <circle
                 key={f.id}
                 data-sm-end={f.id}
-                r={7}
+                r={6.5}
                 fill="var(--bg)"
-                stroke={color}
-                strokeWidth={3}
+                stroke="var(--accent)"
+                strokeWidth={2.5}
                 style={{
                   display: links.some((l) => l.feature === f.id)
                     ? undefined
@@ -272,7 +274,7 @@ export function SolutionMap({
               >
                 <span
                   data-flip-id={`${stakeholder}-rank-${i}`}
-                  className={`font-display inline-flex shrink-0 items-center justify-center text-[40px] font-bold tracking-[-0.04em] ${TEXT_TONE[stakeholder]}`}
+                  className="font-display tabular text-faint inline-flex shrink-0 items-center justify-center text-[40px] font-semibold tracking-[-0.03em]"
                   style={{ width: RANK_W }}
                 >
                   {i + 1}
@@ -280,11 +282,11 @@ export function SolutionMap({
                 <div
                   data-sm-problem={p.id}
                   data-flip-id={`${stakeholder}-problem-${p.id}`}
-                  className="bg-card ring-hair text-fg flex min-h-[92px] items-center"
+                  className={`${PROBLEM_CARD} text-fg flex min-h-[92px] items-center`}
                   style={{
                     width: PROBLEM_W,
                     padding: "16px 28px",
-                    borderRadius: 18,
+                    borderRadius: 22,
                   }}
                 >
                   <span className="text-[28px] leading-[1.18] font-medium tracking-[-0.005em]">
@@ -306,19 +308,13 @@ export function SolutionMap({
               >
                 <span
                   data-sm-feature={f.id}
-                  className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-[22px]"
-                  style={{
-                    background: `color-mix(in srgb, ${color} 15%, transparent)`,
-                    boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${color} 45%, transparent)`,
-                    color,
-                  }}
+                  className={`${PROBLEM_CARD} text-body flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-[22px]`}
                 >
-                  <Icon name={f.icon} size={36} stroke={1.9} />
+                  <Icon name={f.icon} size={38} stroke={1.5} />
                 </span>
                 <span
                   data-flip-id={`${stakeholder}-feature-${f.id}`}
-                  className={`t-h3 inline-block text-balance ${TEXT_TONE[stakeholder]}`}
-                  style={{ fontSize: 38 }}
+                  className="font-display text-fg inline-block text-[40px] leading-[1.12] font-semibold tracking-[-0.025em] text-balance"
                 >
                   {f.name}
                 </span>

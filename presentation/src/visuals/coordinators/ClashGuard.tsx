@@ -28,7 +28,7 @@ export interface ClashGuardProps {
 
 /*
  * BCA-B's week. Software Testing (Prof. Iyer, room 301) is dragged from
- * Monday 14:00 towards Wednesday 11:00 — a slot that looks empty on this
+ * Monday 14:00 towards Wednesday 11:00, a slot that looks empty on this
  * grid, but room 301 and Prof. Iyer are both busy then, with other groups.
  */
 const G = makeGrid({ x: 15, y: 78, w: 900, gutter: 60, rowH: 72 });
@@ -129,9 +129,9 @@ const grip = (o: { x: number; y: number }) => ({
 const LIFT = {
   scale: 1.05,
   rotation: -2,
-  boxShadow: "0 22px 40px rgba(13,17,23,0.3)",
+  boxShadow: "0 22px 40px rgba(16,24,40,0.24)",
 };
-const REST = { scale: 1, rotation: 0, boxShadow: "0 0 0 rgba(13,17,23,0)" };
+const REST = { scale: 1, rotation: 0, boxShadow: "0 0 0 rgba(16,24,40,0)" };
 
 /** The clash sheet: it slides in from the window's right edge. */
 const PANEL = { w: 352, x: 930 - 352, y: 64, h: 568 - 64 };
@@ -159,7 +159,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
         x: grip({ x: 0, y: 0 }).x,
         y: grip({ x: 0, y: 0 }).y,
         duration: 0.75,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
     );
     tl.to(".cur-svg", { scale: 0.86, duration: 0.12, ease: "power2.out" }, ">");
@@ -174,7 +174,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
     tl.fromTo(
       ".dm",
       { x: 0, y: 0 },
-      { x: AT_CLASH.x, y: AT_CLASH.y, duration: 1.2, ease: "power2.inOut" },
+      { x: AT_CLASH.x, y: AT_CLASH.y, duration: 1.2, ease: "deck.morph" },
       "carry",
     );
     tl.to(
@@ -183,7 +183,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
         x: grip(AT_CLASH).x,
         y: grip(AT_CLASH).y,
         duration: 1.2,
-        ease: "power2.inOut",
+        ease: "deck.morph",
       },
       "carry",
     );
@@ -196,7 +196,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
   });
 
   useSteps(ref, step, (tl, mark) => {
-    // ── Build 1: still holding it — and Plannr says no, before anything is saved.
+    // ── Build 1: still holding it, and Plannr says no, before anything is saved.
     tl.to(".target-red", { opacity: 1, duration: 0.3 });
     tl.to(".dm-red", { opacity: 1, duration: 0.3 }, "<");
     tl.to(
@@ -204,7 +204,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
       {
         keyframes: { x: [0, -9, 8, -6, 4, 0] },
         duration: 0.45,
-        ease: "power1.inOut",
+        ease: "power1.out",
       },
       "<",
     );
@@ -253,7 +253,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
         x: AT_PICK.x,
         y: AT_PICK.y,
         duration: 0.9,
-        ease: "power2.inOut",
+        ease: "deck.morph",
         immediateRender: false,
       },
       "move",
@@ -265,7 +265,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
         x: grip(AT_PICK).x,
         y: grip(AT_PICK).y,
         duration: 0.9,
-        ease: "power2.inOut",
+        ease: "deck.morph",
         immediateRender: false,
       },
       "move",
@@ -306,20 +306,20 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
       stageRef={ref}
       flipId={flipId}
       strip={
-        <div className="relative flex h-16 justify-center">
+        <div className="relative flex h-[68px] justify-center">
           <StatusPill
             icon="alert"
             tone="bad"
             className="pill-bad absolute top-0"
           >
-            2 clashes — caught before saving
+            2 clashes, caught before saving
           </StatusPill>
           <StatusPill
             icon="check"
             tone="good"
             className="pill-good absolute top-0"
           >
-            Saved — no clashes
+            Saved, no clashes
           </StatusPill>
         </div>
       }
@@ -373,8 +373,8 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
           width: CLASH.w + 8,
           height: CLASH.h + 6,
           opacity: 0,
-          background: "rgba(220,56,72,0.12)",
-          outline: "2px dashed var(--red)",
+          background: "rgba(200,48,95,0.1)",
+          outline: "2px dashed var(--accent)",
           outlineOffset: -2,
         }}
       />
@@ -390,7 +390,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
             height: a.r.h,
             background: "rgba(78,125,58,0.12)",
             boxShadow:
-              "inset 0 0 0 2px #5f9a46, 0 0 0 4px rgba(124,196,106,0.25), 0 0 22px rgba(124,196,106,0.55)",
+              "inset 0 0 0 2px #5f9a46, 0 8px 18px -8px rgba(16,24,40,0.28)",
           }}
         >
           <span className="flex items-center gap-1.5 text-[17px] leading-tight font-semibold text-[#2f5f1f]">
@@ -416,13 +416,15 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
             className="dm-red absolute inset-0 rounded-[10px]"
             style={{
               opacity: 0,
-              boxShadow:
-                "inset 0 0 0 2.5px var(--red), 0 0 0 4px rgba(220,56,72,0.25)",
+              boxShadow: "inset 0 0 0 2.5px var(--accent)",
             }}
           >
             <span
               className="absolute -top-2.5 -left-2.5 flex h-6 w-6 items-center justify-center rounded-full font-mono text-[13px] font-bold text-white"
-              style={{ background: "var(--red)", boxShadow: "0 0 0 2px #fff" }}
+              style={{
+                background: "var(--accent)",
+                boxShadow: "0 0 0 2px #fff",
+              }}
             >
               2
             </span>
@@ -431,8 +433,7 @@ export function ClashGuard({ step, active, flipId }: ClashGuardProps) {
             className="dm-good absolute inset-0 rounded-[10px]"
             style={{
               opacity: 0,
-              boxShadow:
-                "inset 0 0 0 2.5px #5f9a46, 0 0 0 5px rgba(124,196,106,0.35)",
+              boxShadow: "inset 0 0 0 2.5px #5f9a46",
             }}
           />
         </div>
@@ -466,7 +467,7 @@ function ClashPanel() {
     {
       icon: "user",
       title: "Prof. Iyer is teaching",
-      detail: "BCA-A · Lab 2 · 11:00",
+      detail: "BCA-A in Lab 2 · 11:00",
     },
     {
       icon: "users",
@@ -484,24 +485,24 @@ function ClashPanel() {
         width: PANEL.w,
         height: PANEL.h,
         boxShadow:
-          "inset 1px 0 0 rgba(220,56,72,0.3), -24px 0 60px rgba(13,17,23,0.16)",
+          "inset 1px 0 0 rgba(200,48,95,0.24), -24px 0 60px -12px rgba(16,24,40,0.16)",
       }}
     >
       <div
         className="flex items-center gap-3.5 px-6 py-5"
         style={{
-          background: "rgba(220,56,72,0.07)",
-          boxShadow: "inset 0 -1px 0 rgba(220,56,72,0.16)",
+          background: "rgba(200,48,95,0.06)",
+          boxShadow: "inset 0 -1px 0 rgba(200,48,95,0.16)",
         }}
       >
         <span
           className="flex h-11 w-11 items-center justify-center rounded-full text-white"
-          style={{ background: "var(--red)" }}
+          style={{ background: "var(--accent)" }}
         >
           <Icon name="alert" size={23} stroke={2.3} />
         </span>
         <span className="flex flex-col">
-          <span className="font-display text-[24px] leading-tight font-bold tracking-[-0.01em] text-[#a3202e]">
+          <span className="font-display text-accent text-[24px] leading-tight font-bold tracking-[-0.01em]">
             2 clashes
           </span>
           <span className="mt-0.5 font-mono text-[13px] text-[rgba(44,49,53,0.6)]">
@@ -520,8 +521,8 @@ function ClashPanel() {
               style={{
                 background: r.ok
                   ? "rgba(78,125,58,0.12)"
-                  : "rgba(220,56,72,0.1)",
-                color: r.ok ? "var(--green)" : "var(--red)",
+                  : "rgba(200,48,95,0.09)",
+                color: r.ok ? "var(--green)" : "var(--accent)",
               }}
             >
               <Icon name={r.icon} size={21} stroke={2} />

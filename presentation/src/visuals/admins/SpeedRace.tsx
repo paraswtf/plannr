@@ -35,11 +35,11 @@ const FAST_DURATION = 2;
 const fmt = (s: number) => `${s.toFixed(2)} s`;
 
 const DAY = [
-  { title: "Design Thinking", time: "09:00 – 10:00", room: "301", past: true },
-  { title: "Cloud Computing", time: "10:00 – 11:00", room: "304", live: true },
-  { title: "Data Mining", time: "11:30 – 12:30", room: "Lab 2" },
-  { title: "Web Technologies", time: "14:00 – 15:00", room: "301" },
-  { title: "Cyber Security", time: "15:00 – 16:00", room: "304" },
+  { title: "Design Thinking", time: "09:00-10:00", room: "301", past: true },
+  { title: "Cloud Computing", time: "10:00-11:00", room: "304", live: true },
+  { title: "Data Mining", time: "11:30-12:30", room: "Lab 2" },
+  { title: "Web Technologies", time: "14:00-15:00", room: "301" },
+  { title: "Cyber Security", time: "15:00-16:00", room: "304" },
 ];
 
 /**
@@ -165,7 +165,7 @@ export function SpeedRace({ step, active }: SpeedRaceProps) {
       { y: 0, duration: 0.45, ease: "power3.out", stagger: 0.04 },
       painted,
     );
-    tl.to(".clock-new-wrap", { color: "#7cc46a", duration: 0.2 }, painted);
+    tl.to(".clock-new-wrap", { color: "#2f7a4b", duration: 0.2 }, painted);
     tl.fromTo(
       ".done-new",
       { scale: 0, opacity: 0 },
@@ -192,7 +192,7 @@ export function SpeedRace({ step, active }: SpeedRaceProps) {
     );
     tl.to(
       ".clock-old-wrap",
-      { color: "#f6a73b", duration: 0.3 },
+      { color: "#a66b12", duration: 0.3 },
       `go+=${REAL_S + FAST_DURATION - 0.1}`,
     );
     tl.fromTo(
@@ -290,7 +290,7 @@ export function SpeedRace({ step, active }: SpeedRaceProps) {
         }
         extra={
           <span
-            className="ff t-mono text-faint flex items-center gap-1 text-[22px]"
+            className="ff t-small text-muted flex items-center gap-1"
             style={{ opacity: 0 }}
           >
             <Icon name="chevronRight" size={20} stroke={2.4} />
@@ -347,12 +347,7 @@ export function SpeedRace({ step, active }: SpeedRaceProps) {
         }}
       >
         <div className="mt-16 flex flex-col items-center gap-3">
-          <span
-            className="bg-card ring-hair text-admins flex h-14 w-14 items-center justify-center rounded-full"
-            style={{ boxShadow: "inset 0 0 0 1px var(--line-strong)" }}
-          >
-            <Signal />
-          </span>
+          <Icon name="phone" size={40} className="text-muted" />
           <span className="text-muted text-[24px] leading-[1.3]">
             Same phone,
             <br />
@@ -361,24 +356,22 @@ export function SpeedRace({ step, active }: SpeedRaceProps) {
         </div>
 
         <div className="relative w-full flex-1">
-          <span className="vs t-mono text-faint absolute inset-x-0 top-1/2 -translate-y-1/2 text-[30px] tracking-[0.2em]">
-            VS
+          <span className="vs font-display text-faint absolute inset-x-0 top-1/2 -translate-y-1/2 text-[34px] font-medium">
+            vs
           </span>
           <div
             className="result absolute inset-x-0 top-1/2 flex -translate-y-[58%] flex-col items-center px-2"
             style={{ opacity: 0 }}
           >
-            <div className="t-display">
+            <div className="t-display text-accent tabular">
               <Ph>
-                <span className="times grad-text">
-                  {Math.round(OLD_S / PLANNR_S)}×
-                </span>
+                <span className="times">{Math.round(OLD_S / PLANNR_S)}×</span>
               </Ph>
             </div>
             <div className="text-fg mt-3 max-w-[240px] text-[30px] leading-[1.2] font-semibold tracking-[-0.01em] text-balance">
               faster on mobile data
             </div>
-            <div className="note t-small text-faint mt-5 max-w-[260px] text-balance">
+            <div className="note t-small text-muted mt-5 max-w-[260px] text-balance">
               Timings to be measured on campus
             </div>
           </div>
@@ -487,7 +480,7 @@ function Racer({
           </span>
           {done && (
             <span
-              className="done-new bg-good flex h-10 w-10 items-center justify-center rounded-full text-[#0d1117]"
+              className="done-new bg-good flex h-10 w-10 items-center justify-center rounded-full text-white"
               style={{ opacity: 0 }}
             >
               <Icon name="check" size={24} stroke={3} />
@@ -517,7 +510,7 @@ function PlannrDay() {
       style={{ opacity: 0 }}
     >
       <div className="px-5" style={{ paddingTop: 128 }}>
-        <div className="font-mono text-[12px] tracking-[0.04em] text-[rgba(44,49,53,0.55)] uppercase">
+        <div className="text-[13px] font-medium text-[rgba(44,49,53,0.58)]">
           Mon 5 Oct · BCA-A
         </div>
         <div className="font-display text-[30px] leading-tight font-bold tracking-[-0.02em] text-[#0d1117]">
@@ -662,24 +655,6 @@ function Plane() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="#0d1117" aria-hidden>
       <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
-    </svg>
-  );
-}
-
-/** Mobile signal bars, drawn rather than borrowed. */
-function Signal() {
-  return (
-    <svg
-      width="26"
-      height="20"
-      viewBox="0 0 26 20"
-      fill="currentColor"
-      aria-hidden
-    >
-      <rect x="0" y="13" width="4.5" height="7" rx="1.5" />
-      <rect x="7" y="9" width="4.5" height="11" rx="1.5" />
-      <rect x="14" y="4.5" width="4.5" height="15.5" rx="1.5" />
-      <rect x="21" y="0" width="4.5" height="20" rx="1.5" />
     </svg>
   );
 }

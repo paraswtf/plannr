@@ -3,11 +3,12 @@
 import { useRef, type ReactNode } from "react";
 
 import { useSteps } from "~/deck/useSteps";
-import { Eyebrow, SlideBody } from "~/ui/layout";
+import { SlideBody } from "~/ui/layout";
 
 import { riseWords, textOf, useEntrance } from "./_story-motion";
 
 export interface VisualSlideProps {
+  /** Accepted and not drawn: the deck puts no label above a title. */
   eyebrow?: ReactNode;
   title: ReactNode;
   lede?: ReactNode;
@@ -25,6 +26,7 @@ export interface VisualSlideProps {
   layout?: "side" | "below";
   /** Short lines under the lede, one per build (point i from step i + 1). */
   points?: ReactNode[];
+  /** Ignored: the tick beside a point is always the deck's one accent. */
   accent?: string;
   step: number;
 }
@@ -46,13 +48,11 @@ function sideTitleSize(title: ReactNode): number {
  * arrives, and brings in `points` one per build.
  */
 export function VisualSlide({
-  eyebrow,
   title,
   lede,
   visual,
   layout = "side",
   points = [],
-  accent,
   step,
 }: VisualSlideProps) {
   const text = useRef<HTMLDivElement>(null);
@@ -61,14 +61,7 @@ export function VisualSlide({
   useEntrance(
     text,
     (tl) => {
-      if (eyebrow) {
-        tl.from(
-          ".vs-eyebrow",
-          { opacity: 0, y: 18, duration: 0.7, ease: "deck.enter" },
-          0.1,
-        );
-      }
-      tl.add(riseWords(text.current?.querySelector(".vs-title") ?? null), 0.16);
+      tl.add(riseWords(text.current?.querySelector(".vs-title") ?? null), 0.12);
       if (lede) {
         tl.from(
           ".vs-lede",
@@ -128,20 +121,15 @@ export function VisualSlide({
           : "flex flex-col"
       }
     >
-      {eyebrow && (
-        <Eyebrow color={accent} className="vs-eyebrow">
-          {eyebrow}
-        </Eyebrow>
-      )}
       <h1
-        className={`vs-title t-title text-balance ${side ? "mt-8" : "mt-6"}`}
+        className="vs-title t-title text-fg text-balance"
         style={{ fontSize: titleSize }}
       >
         {title}
       </h1>
       {lede && (
         <p
-          className={`vs-lede t-lede text-muted text-pretty ${side ? "mt-8" : "mt-6 max-w-[48ch]"}`}
+          className={`vs-lede t-lede text-muted text-pretty ${side ? "mt-10 max-w-[30ch]" : "mt-6 max-w-[48ch]"}`}
         >
           {lede}
         </p>
@@ -152,10 +140,9 @@ export function VisualSlide({
             <li key={i} className="vs-point flex items-start gap-5">
               <span
                 aria-hidden
-                className="vs-tick mt-[19px] block h-[3px] w-[28px] shrink-0 origin-left rounded-full"
-                style={{ background: accent ?? "var(--grad-brand-h)" }}
+                className="vs-tick bg-accent mt-[19px] block h-[3px] w-[28px] shrink-0 origin-left rounded-full"
               />
-              <span className="vs-point-text t-body block text-pretty">
+              <span className="vs-point-text t-body text-body block text-pretty">
                 {p}
               </span>
             </li>

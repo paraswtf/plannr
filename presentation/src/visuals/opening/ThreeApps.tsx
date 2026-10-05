@@ -14,19 +14,25 @@ export interface ThreeAppsProps {
 }
 
 /**
- * Three windows side by side — the timetable site, Moodle, and the college
- * inbox — each correct on its own, contradicting each other together.
+ * Three windows side by side (the timetable site, Moodle, and the college
+ * inbox), each correct on its own, contradicting each other together. They
+ * sit on the light stage as product shots: Plannr's own app colours inside,
+ * the deck's soft slate shadows outside, and the single accent for the one
+ * thing that matters, the contradiction.
  *
  * The timetable window carries data-flip-id="app-timetable": the previous
  * slide's big timetable browser shrinks into it.
  *
  * Builds (steps = 3):
- *   0 — the three apps, calm.
- *   1 — a mail lands: "Design Thinking moved to 2:00 pm, Room 304".
- *   2 — the timetable still says 11:00, Room 301, and Moodle says something else: red links between the contradictions, into a badge "Which one is right?" (the title already says "No single source of truth").
+ *   0: the three apps, calm.
+ *   1: a mail lands: "Design Thinking moved to 2:00 pm, Room 304".
+ *   2: the timetable still says 11:00, Room 301, and Moodle says something
+ *      else: accent links ring the three contradictions and run into a
+ *      marker, "Which one is right?" (the title already says "No single
+ *      source of truth").
  */
 
-/* The stage is laid out in fixed canvas pixels, so the red links can be drawn
+/* The stage is laid out in fixed canvas pixels, so the links can be drawn
  * from constants rather than measured mid-morph. */
 const STAGE = { width: 1664, height: 660 } as const;
 const WIN = { width: 520, height: 520, gap: 52, bar: 52 } as const;
@@ -38,7 +44,7 @@ const FACT = { inset: 20, height: 68 } as const;
 const FACT_TOP = WIN.height - FACT.inset - FACT.height; // 432
 const FACT_BOTTOM = WIN.height - FACT.inset; // 500
 
-const BADGE = { width: 392, height: 64, y: 594 } as const;
+const BADGE = { width: 404, height: 72, y: 594 } as const;
 const BUS_Y = BADGE.y;
 const BADGE_LEFT = STAGE.width / 2 - BADGE.width / 2;
 const BADGE_RIGHT = STAGE.width / 2 + BADGE.width / 2;
@@ -79,7 +85,9 @@ function link(i: 0 | 1 | 2) {
 const OLD_FONT: CSSProperties = {
   fontFamily: "Verdana, Tahoma, Arial, sans-serif",
 };
-const ALARM = "#dc3848";
+/* The deck's accent, as hex: GSAP tweens the fact values to it, and cannot
+ * interpolate towards a var(). Keep in step with --accent in globals.css. */
+const ACCENT = "#c8305f";
 
 export function ThreeApps({ step, active }: ThreeAppsProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -89,7 +97,7 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
 
   /* Moodle and the inbox wait out of the way while the timetable window
    * shrinks in from the slide before, then slide in beside it once it has
-   * nearly landed — so the travelling window never crosses another one. */
+   * nearly landed, so the travelling window never crosses another one. */
   useGSAP(
     () => {
       if (instant || (active && stepNow.current > 0)) {
@@ -114,17 +122,17 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
   );
 
   useSteps(root, step, (tl, mark) => {
-    // 1 — a new mail pushes the list down, then opens into the reading pane.
+    // 1: a new mail pushes the list down, then opens into the reading pane.
     tl.addLabel("mail");
     tl.to(
       ".ta-list",
-      { y: MAIL_ROW, duration: 0.6, ease: "power3.inOut" },
+      { y: MAIL_ROW, duration: 0.7, ease: "deck.morph" },
       "mail",
     );
     tl.fromTo(
       ".ta-newrow",
       { y: -MAIL_ROW, autoAlpha: 0 },
-      { y: 0, autoAlpha: 1, duration: 0.6, ease: "power3.inOut" },
+      { y: 0, autoAlpha: 1, duration: 0.7, ease: "deck.morph" },
       "mail",
     );
     tl.set(".ta-count-old", { autoAlpha: 0 }, "mail+=0.3");
@@ -132,7 +140,7 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     tl.fromTo(
       ".ta-pane",
       { top: LIST_TOP, height: MAIL_ROW, autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.15, ease: "none" },
+      { autoAlpha: 1, duration: 0.15, ease: "power1.out" },
       "mail+=0.8",
     );
     tl.to(
@@ -148,25 +156,26 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
     );
     mark();
 
-    // 2 — the three facts go red, a pen rings each one and runs to the badge.
+    // 2: the three facts turn accent, a pen rings each one and runs to the
+    // marker, which rises into place as the lines arrive.
     tl.addLabel("clash");
     tl.to(
       ".ta-fact-value",
-      { color: ALARM, duration: 0.4, ease: "power2.out", stagger: 0.12 },
+      { color: ACCENT, duration: 0.4, ease: "power2.out", stagger: 0.12 },
       "clash",
     );
     tl.set(".ta-link", { opacity: 1 }, "clash");
     tl.fromTo(
       ".ta-link",
       { drawSVG: "0%" },
-      { drawSVG: "100%", duration: 1.05, ease: "power2.inOut", stagger: 0.12 },
+      { drawSVG: "100%", duration: 1.1, ease: "deck.morph", stagger: 0.12 },
       "clash",
     );
     tl.fromTo(
       ".ta-badge",
-      { autoAlpha: 0, scale: 0.86 },
-      { autoAlpha: 1, scale: 1, duration: 0.55, ease: "back.out(1.6)" },
-      "clash+=0.95",
+      { autoAlpha: 0, y: 28, scale: 0.94 },
+      { autoAlpha: 1, y: 0, scale: 1, duration: 0.7, ease: "deck.enter" },
+      "clash+=0.9",
     );
     mark();
   });
@@ -227,8 +236,8 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
               className="ta-link"
               d={link(i)}
               fill="none"
-              stroke="var(--bad)"
-              strokeWidth={3.5}
+              stroke="var(--accent)"
+              strokeWidth={3}
               strokeLinecap="round"
               strokeLinejoin="round"
               opacity={0}
@@ -236,20 +245,23 @@ export function ThreeApps({ step, active }: ThreeAppsProps) {
           ))}
         </svg>
 
+        {/* The marker the three lines run into: a raised plate on the stage,
+            ringed in the accent's hairline, so it reads as the slide's
+            question rather than as part of any one app. */}
         <div
-          className="ta-badge invisible absolute flex items-center justify-center gap-3 rounded-full"
+          className="ta-badge bg-raised invisible absolute flex items-center justify-center gap-4 rounded-[22px]"
           style={{
             left: BADGE_LEFT,
             top: BADGE.y - BADGE.height / 2,
             width: BADGE.width,
             height: BADGE.height,
-            background: "color-mix(in srgb, var(--bad) 16%, var(--bg))",
-            boxShadow:
-              "inset 0 0 0 2px var(--bad), 0 18px 40px rgba(0,0,0,0.35)",
+            boxShadow: "inset 0 0 0 1.5px var(--accent-line), var(--shadow-2)",
           }}
         >
-          <Icon name="alert" size={30} stroke={2.2} color="var(--bad)" />
-          <span className="font-display text-[30px] font-semibold tracking-[-0.02em] text-white">
+          <span className="bg-accent-soft text-accent flex h-[44px] w-[44px] items-center justify-center rounded-[12px]">
+            <Icon name="alert" size={26} stroke={2} />
+          </span>
+          <span className="font-display text-fg text-[32px] font-semibold tracking-[-0.025em]">
             Which one is right?
           </span>
         </div>
@@ -284,8 +296,10 @@ function Fact({
       style={{
         left: FACT.inset,
         right: FACT.inset,
-        // Positions are measured from the top of the window, bar included.
-        top: FACT_TOP - WIN.bar,
+        // Pinned to the foot of the page (FACT_BOTTOM in window terms), so
+        // while the timetable window morphs in at another size the row stays
+        // under the grid rather than over it.
+        bottom: FACT.inset,
         height: FACT.height,
         background: tone,
         boxShadow: `inset 0 0 0 1px ${ring}`,
@@ -304,7 +318,7 @@ function Fact({
         <span className="truncate text-[15px] leading-tight text-[rgba(44,49,53,0.62)]">
           {label}
         </span>
-        <span className="ta-fact-value mt-1 truncate font-mono text-[25px] leading-none font-bold tracking-[-0.02em] text-[#0d1117]">
+        <span className="ta-fact-value mt-1.5 truncate font-mono text-[25px] leading-none font-semibold tracking-[-0.02em] text-[#0d1117] tabular-nums">
           {value}
         </span>
       </span>
@@ -348,7 +362,7 @@ const BOOKINGS: ([string, string] | null)[][] = [
     null,
     ["BBA-A CC (DM)", MRBS.c],
   ],
-  // 304 is free at 14:00 — which is where the mail moves Design Thinking.
+  // 304 is free at 14:00, which is where the mail moves Design Thinking.
   [
     ["BBA-A CC (DM)", MRBS.c],
     null,
@@ -377,9 +391,15 @@ const BOOKINGS: ([string, string] | null)[][] = [
 
 function TimetableSite() {
   const timeCol = 56;
-  const colW = (WIN.width - 32 - timeCol) / ROOMS.length;
+  /* Columns share the width rather than being fixed, and line height is
+   * set here: this page rides inside the travelling window, whose width and
+   * line height morph from the slide before, so neither must leak in. */
+  const col = { flex: "1 1 0", minWidth: 0 } as const;
   return (
-    <div className="absolute inset-0 bg-white text-black" style={OLD_FONT}>
+    <div
+      className="absolute inset-0 bg-white leading-normal text-black"
+      style={OLD_FONT}
+    >
       <div
         className="flex h-[48px] items-center gap-2.5 px-4 text-white"
         style={{ background: NAVY }}
@@ -405,14 +425,20 @@ function TimetableSite() {
           <span className="text-[13.5px] font-bold">SICSR</span>
           <span className="text-[11px] opacity-85">Timetable</span>
         </span>
-        <span className="ml-auto text-[11px] underline opacity-90">
-          Help · Report · Log in
+        <span className="ml-auto flex gap-3 text-[11px] underline opacity-90">
+          <span>Help</span>
+          <span>Report</span>
+          <span>Log in</span>
         </span>
       </div>
       <div className="flex items-baseline justify-between px-4 pt-3 pb-2.5">
         <span className="text-[14px] font-bold">Thursday 13 August 2026</span>
-        <span className="text-[11px] underline" style={{ color: LINK }}>
-          &lt;&lt; Day Before · Day After &gt;&gt;
+        <span
+          className="flex gap-3 text-[11px] underline"
+          style={{ color: LINK }}
+        >
+          <span>&lt;&lt; Day Before</span>
+          <span>Day After &gt;&gt;</span>
         </span>
       </div>
       <div
@@ -424,11 +450,7 @@ function TimetableSite() {
             Time
           </span>
           {ROOMS.map((room) => (
-            <span
-              key={room}
-              className="py-[6px] text-center"
-              style={{ width: colW }}
-            >
+            <span key={room} className="py-[6px] text-center" style={col}>
               {room}
             </span>
           ))}
@@ -453,7 +475,7 @@ function TimetableSite() {
                   key={room}
                   className="truncate px-1 py-[13px]"
                   style={{
-                    width: colW,
+                    ...col,
                     background: booking?.[1] ?? "#fff",
                     boxShadow: isDT
                       ? `inset 0 0 0 2px ${NAVY}`
@@ -471,7 +493,7 @@ function TimetableSite() {
       <Fact
         label={
           <>
-            <b className="text-black">Design Thinking</b> · BCA-A · Prof.
+            <b className="text-black">Design Thinking</b> (BCA-A), Prof.
             Kulkarni
           </>
         }
@@ -555,8 +577,8 @@ function MoodlePage() {
         <h3 className="mt-1.5 text-[26px] leading-tight font-bold tracking-[-0.01em]">
           Design Thinking
         </h3>
-        <p className="mt-2 text-[13px] font-semibold tracking-[0.04em] text-[rgba(44,49,53,0.6)] uppercase">
-          Week 6 · Prototyping
+        <p className="mt-2 text-[14px] font-semibold text-[rgba(44,49,53,0.6)]">
+          Week 6: Prototyping
         </p>
       </div>
       <div className="mt-2">
@@ -582,7 +604,7 @@ function MoodlePage() {
       <Fact
         label={
           <>
-            <b className="text-[#1d2125]">Attendance</b> · next session
+            <b className="text-[#1d2125]">Attendance</b>, next session
           </>
         }
         value="Today 11:00 · Lab 2"

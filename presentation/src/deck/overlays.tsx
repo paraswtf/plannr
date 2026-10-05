@@ -275,6 +275,7 @@ const KEYS: [string, string][] = [
   ["F", "Full screen"],
   ["B", "Black out the screen"],
   ["H", "Hide the placeholder marks"],
+  ["M", "Reduced motion on or off"],
   ["?", "This list"],
 ];
 

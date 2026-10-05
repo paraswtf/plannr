@@ -49,14 +49,33 @@ export function seeded(seed: number) {
   };
 }
 
-/** The brand gradient's stops, lifted for a dark stage where needed. */
+/**
+ * The brand gradient's stops, for the few drawings that are the brand (the
+ * mark itself). Slides use the one accent, `ACCENT`, for anything else.
+ */
 export const BRAND = {
-  violet: "#a64bc0",
+  violet: "#7a2e8f",
   berry: "#c9306c",
   magenta: "#e8455e",
   coral: "#f2743c",
   amber: "#f6a73b",
-  slate: "#6f86b3",
+  slate: "#445879",
+} as const;
+
+/**
+ * The deck's accent and neutrals as plain hex, for SVG attributes and
+ * elements that travel in a morph (where var() cannot be interpolated).
+ * They mirror the tokens in globals.css.
+ */
+export const ACCENT = "#c8305f";
+export const INK = {
+  fg: "#10141b",
+  body: "#353d4a",
+  muted: "#5f6878",
+  faint: "#8f97a6",
+  rule: "#d3d7de",
+  ground: "#f2f3f6",
+  raised: "#fbfbfd",
 } as const;
 
 /**

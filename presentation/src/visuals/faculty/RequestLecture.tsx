@@ -26,7 +26,7 @@ export interface RequestLectureProps {
 }
 
 /**
- * A faculty member schedules an extra lecture themself — no call to the
+ * A faculty member schedules an extra lecture themself, no call to the
  * coordinator.
  *
  * Builds (steps = 3):
@@ -233,7 +233,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
     tl.to(
       "[data-pick] [data-free-face]",
       {
-        boxShadow: `inset 0 0 0 2px ${INK.green}, 0 6px 16px rgba(78,125,58,0.3)`,
+        boxShadow: `inset 0 0 0 2px ${INK.green}, 0 6px 14px -4px rgba(16,24,40,0.22)`,
         duration: 0.2,
       },
       ">-0.15",
@@ -386,7 +386,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
         >
           <div className="absolute inset-x-[16px]" style={{ top: 16 }}>
             <div
-              className="font-mono text-[12px] leading-[16px] tracking-[0.1em] uppercase"
+              className="text-[13.5px] leading-[17px] font-semibold"
               style={{ color: INK.muted }}
             >
               New lecture
@@ -421,7 +421,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
                   stroke={2}
                   color={INK.faint}
                 />
-                <span className="flex-1 text-center">5 – 10 Oct</span>
+                <span className="flex-1 text-center">5-10 Oct</span>
                 <Icon
                   name="chevronRight"
                   size={15}
@@ -467,7 +467,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
               >
                 <span
                   className="absolute top-[3px] left-[3px] h-[16px] w-[16px] rounded-full bg-white"
-                  style={{ boxShadow: "0 1px 3px rgba(13,17,23,0.25)" }}
+                  style={{ boxShadow: "0 1px 3px rgba(16,24,40,0.25)" }}
                 />
               </span>
             </div>
@@ -487,14 +487,14 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
           }}
         >
           <div
-            className="absolute font-mono text-[12px] leading-[16px] tracking-[0.1em] uppercase"
-            style={{ left: 16, top: 16, color: INK.muted }}
+            className="absolute text-[13.5px] leading-[17px] font-semibold"
+            style={{ left: 16, top: 15, color: INK.muted }}
           >
             Will be told
           </div>
           <div
             data-told-count
-            className="absolute font-mono text-[16px] leading-[22px] font-semibold"
+            className="absolute font-mono text-[16px] leading-[22px] font-semibold tabular-nums"
             style={{ left: 16, top: 36, color: INK.ink }}
           >
             0 of 62 told
@@ -539,10 +539,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
             style={{ left: COORD_LOCAL.x + FACE / 2 + 10, top: COORD_Y + 1 }}
           >
             <span className="text-[15px] font-semibold">Dr. Mehta</span>
-            <span
-              className="font-mono text-[12.5px]"
-              style={{ color: INK.muted }}
-            >
+            <span className="text-[12.5px]" style={{ color: INK.muted }}>
               Coordinator
             </span>
           </span>
@@ -725,7 +722,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
           style={{
             left: NOTE.x,
             top: NOTE.y,
-            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 14px 32px rgba(13,17,23,0.18)`,
+            boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 2px 4px rgba(16,24,40,0.04), 0 18px 40px -14px rgba(16,24,40,0.26)`,
           }}
         >
           <span
@@ -736,13 +733,13 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
           </span>
           <span className="flex flex-col leading-tight">
             <span className="text-[15.5px] font-bold whitespace-nowrap">
-              Booked · Tue 11:00 · 304
+              Booked, Tue 11:00 · 304
             </span>
             <span
               className="text-[13px] whitespace-nowrap"
               style={{ color: INK.muted }}
             >
-              No sign-off needed · confirmed
+              Confirmed, no sign-off needed
             </span>
           </span>
         </div>
@@ -759,7 +756,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
               width: 30,
               height: 30,
               color: INK.slate,
-              boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 6px 14px rgba(13,17,23,0.22)`,
+              boxShadow: `inset 0 0 0 1px ${INK.ring}, 0 6px 14px -4px rgba(16,24,40,0.26)`,
             }}
           >
             <Icon name="bell" size={16} stroke={2.2} />
@@ -811,7 +808,7 @@ function Tick({ index }: { index: number }) {
       data-tick={index}
       className="pointer-events-none absolute -inset-[4px] rounded-full opacity-0"
       style={{
-        boxShadow: `inset 0 0 0 3px ${INK.green}, 0 0 10px rgba(78,125,58,0.35)`,
+        boxShadow: `inset 0 0 0 3px ${INK.green}`,
       }}
     />
   );
