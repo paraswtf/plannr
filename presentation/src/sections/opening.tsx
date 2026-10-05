@@ -57,7 +57,7 @@ export const opening: SectionDef = {
     },
     {
       id: "intro-project",
-      title: "We are simplifying people's schedules",
+      title: "We wanted to simplify everyone's schedules",
       steps: 5,
       notes: [
         "Plannr is a replacement for the timetable app we all use today. This is it — time-table.sicsr.ac.in. One huge page for the entire college: every room, every course, every hour. To be fair, it does show the timetable. But that is all it does.",
@@ -70,7 +70,7 @@ export const opening: SectionDef = {
         <VisualSlide
           title={
             <>
-              We are simplifying <Grad>people&apos;s schedules.</Grad>
+              We wanted to simplify <Grad>everyone&apos;s schedules.</Grad>
             </>
           }
           lede="Plannr combines the best features from all the apps and gives you a single place to look at."
