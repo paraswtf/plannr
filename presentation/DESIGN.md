@@ -56,6 +56,9 @@ accented, nothing is.
 - Product mock-ups (inside a PhoneFrame or BrowserFrame) keep Plannr's own
   colours: course tones, slate, white cards. They are the product, not the
   slide.
+- Other apps' icons (`AppIcon`, in src/visuals/opening/_app-icons.tsx) keep
+  their brands' colours too, matched to their App Store icons. They are the
+  apps, not the slide.
 
 ## Type
 

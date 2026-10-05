@@ -26,6 +26,11 @@ export interface VisualSlideProps {
   layout?: "side" | "below";
   /** Short lines under the lede, one per build (point i from step i + 1). */
   points?: ReactNode[];
+  /**
+   * A row under the lede, a few app icons say. Its children rise in one
+   * after another, just after the lede.
+   */
+  footer?: ReactNode;
   /** Ignored: the tick beside a point is always the deck's one accent. */
   accent?: string;
   step: number;
@@ -53,6 +58,7 @@ export function VisualSlide({
   visual,
   layout = "side",
   points = [],
+  footer,
   step,
 }: VisualSlideProps) {
   const text = useRef<HTMLDivElement>(null);
@@ -67,6 +73,19 @@ export function VisualSlide({
           ".vs-lede",
           { opacity: 0, y: 28, duration: 0.85, ease: "deck.enter" },
           side ? 0.6 : 0.5,
+        );
+      }
+      if (footer) {
+        tl.from(
+          ".vs-footer > *",
+          {
+            opacity: 0,
+            y: 28,
+            duration: 0.75,
+            ease: "deck.enter",
+            stagger: 0.08,
+          },
+          side ? 0.85 : 0.75,
         );
       }
     },
@@ -133,6 +152,13 @@ export function VisualSlide({
         >
           {lede}
         </p>
+      )}
+      {footer && (
+        <div
+          className={`vs-footer flex items-center gap-5 ${side ? "mt-12" : "mt-8"}`}
+        >
+          {footer}
+        </div>
       )}
       {points.length > 0 && (
         <ul className="mt-12 flex flex-col gap-6">

@@ -218,7 +218,7 @@ function IconAt({
 /* The Gmail M, 2026: the gradient mark from Google's May 2026 icon refresh  */
 /* (Wikimedia Commons, "Gmail icon (2026).svg").                            */
 
-function GmailLogo({ width }: { width: number }) {
+export function GmailLogo({ width }: { width: number }) {
   const id = useId().replace(/:/g, "");
   const right = `gm-r-${id}`;
   const top = `gm-t-${id}`;

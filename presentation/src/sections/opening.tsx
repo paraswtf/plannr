@@ -3,6 +3,7 @@ import { Cover } from "~/templates/Cover";
 import { FlowDiagram } from "~/templates/FlowDiagram";
 import { VisualSlide } from "~/templates/VisualSlide";
 import { Grad } from "~/ui/layout";
+import { AppIcon } from "~/visuals/opening/_app-icons";
 import { FacultyHunt } from "~/visuals/opening/FacultyHunt";
 import { IssueWall } from "~/visuals/opening/IssueWall";
 import { OldTimetable } from "~/visuals/opening/OldTimetable";
@@ -73,7 +74,14 @@ export const opening: SectionDef = {
               We wanted to simplify <Grad>everyone&apos;s schedules.</Grad>
             </>
           }
-          lede="Plannr combines the best features from all the apps and gives you a single place to look at."
+          lede="Plannr combines the best features from all the apps you already use and gives you a single place to look at."
+          footer={
+            <>
+              <AppIcon app="gmail" />
+              <AppIcon app="whatsapp" />
+              <AppIcon app="moodle" />
+            </>
+          }
           visual={
             <OldTimetable step={step} active={active} flipId="app-timetable" />
           }
