@@ -1,4 +1,6 @@
-import { STAKEHOLDERS, TEAM } from "~/content/team";
+import type { CSSProperties } from "react";
+
+import { STAKEHOLDERS, TEAM, type PhotoFocus } from "~/content/team";
 import type { SpeakerId, StakeholderId } from "~/deck/types";
 
 import { Icon } from "./icon";
@@ -39,6 +41,7 @@ export function Avatar({
           src={p.photo}
           alt={p.name}
           className="h-full w-full object-cover"
+          style={p.photoFocus && focus(p.photoFocus)}
         />
       ) : (
         <span
@@ -50,6 +53,19 @@ export function Avatar({
       )}
     </span>
   );
+}
+
+/**
+ * Zooms a photo in on a point and brings the point to the middle, as far as
+ * it can go without baring an edge of the avatar.
+ */
+function focus({ x, y, zoom }: PhotoFocus): CSSProperties {
+  const shift = (at: number) =>
+    Math.min(0, Math.max(1 - zoom, 0.5 - zoom * at)) * 100;
+  return {
+    transformOrigin: "0 0",
+    transform: `translate(${shift(x)}%, ${shift(y)}%) scale(${zoom})`,
+  };
 }
 
 /** Avatar and name: who is talking. */

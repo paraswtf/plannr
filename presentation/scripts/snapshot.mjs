@@ -60,6 +60,7 @@ const TYPES = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".avif": "image/avif",
   ".gif": "image/gif",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",

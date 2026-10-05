@@ -15,8 +15,17 @@ export interface Person {
   fullName: string;
   /** The stakeholder this person researched. */
   owns: StakeholderId;
-  /** `/images/team/<id>.jpg` once a photo is added; initials until then. */
+  /** Path under public/, e.g. `/paras-pfp.avif`; initials without one. */
   photo?: string;
+  /** For a photo that is not already a headshot: where to zoom in. */
+  photoFocus?: PhotoFocus;
+}
+
+/** A point in a square photo, as fractions across and down, and a zoom. */
+export interface PhotoFocus {
+  x: number;
+  y: number;
+  zoom: number;
 }
 
 export const TEAM: Record<SpeakerId, Person> = {
@@ -25,8 +34,17 @@ export const TEAM: Record<SpeakerId, Person> = {
     name: "Paras",
     fullName: "Paras Deshpande",
     owns: "admins",
+    photo: "/paras-pfp.avif",
   },
-  sonal: { id: "sonal", name: "Sonal", fullName: "Sonal", owns: "students" },
+  sonal: {
+    id: "sonal",
+    name: "Sonal",
+    fullName: "Sonal",
+    owns: "students",
+    photo: "/sonal-pfp.jpg",
+    // A wide shot: uncropped, the face is a few pixels across in an avatar.
+    photoFocus: { x: 0.615, y: 0.56, zoom: 1.8 },
+  },
   ravya: { id: "ravya", name: "Ravya", fullName: "Ravya", owns: "faculty" },
   tanisha: {
     id: "tanisha",
