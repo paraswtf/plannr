@@ -105,7 +105,7 @@ export const opening: SectionDef = {
     },
     {
       id: "change-flow",
-      title: "One change, passed by hand",
+      title: "How extra lectures are scheduled right now",
       steps: 6,
       notes: [
         "Let's follow one change through the system. A teacher wants to schedule an extra lecture. There is no way for them to do that themselves — so they have to ask the coordinator.",
@@ -117,7 +117,7 @@ export const opening: SectionDef = {
       ],
       render: ({ step }) => (
         <FlowDiagram
-          title="One change, passed along by hand."
+          title="How extra lectures are scheduled right now."
           nodes={[
             {
               id: "faculty",
