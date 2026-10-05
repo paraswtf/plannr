@@ -113,10 +113,10 @@ export const opening: SectionDef = {
       title: "One change, passed by hand",
       steps: 5,
       notes: [
-        "Let's follow one change through the system. A teacher wants to schedule an extra lecture. There is no way for them to do that themselves — so they call or message the coordinator.",
-        "The coordinator checks for clashes by hand — rooms, other classes, the other teachers — and edits the timetable.",
+        "Let's follow one change through the system. A teacher wants to schedule an extra lecture. There is no way for them to do that themselves — so they have to ask the coordinator.",
+        "And they ask however they can — a call, a mail, in person, or they just send a student over. The coordinator then updates the timetable by hand.",
         "Then they write the same change out again, as an email, because the timetable tells nobody that anything changed.",
-        "And the students get one common page for the whole college, and have to find their own division in it — if they look at all.",
+        "And the students check the timetable — if it was updated at all. For a last-minute change, sometimes only the mail goes out, and the timetable is never updated.",
         "Four hand-offs, every single one done by a person. If any one of them slips, somebody walks into an empty room.",
       ],
       render: ({ step }) => (
@@ -132,9 +132,10 @@ export const opening: SectionDef = {
             {
               id: "edit",
               actor: "Coordinator",
-              action: "Checks clashes by hand, edits the timetable",
-              icon: "clipboard",
-              wait: "hours to a day",
+              action: "Updates the timetable by hand",
+              icon: "edit",
+              wait: "via call, mail, in person or a student",
+              waitIcon: "message",
             },
             {
               id: "mail",
@@ -147,7 +148,7 @@ export const opening: SectionDef = {
             {
               id: "students",
               actor: "Students",
-              action: "Find their division on one page for the whole college",
+              action: "Check the timetable, if it was updated at all",
               icon: "users",
               wait: "whenever they look",
               tone: "bad",

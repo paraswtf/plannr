@@ -87,6 +87,8 @@ export interface FlowNode {
   icon: IconName;
   /** How long it takes or waits, e.g. "~1 day". Shown on the arrow into it. */
   wait?: ReactNode;
+  /** The glyph beside the wait. Default "clock"; another when it says how, not how long. */
+  waitIcon?: IconName;
   tone?: "neutral" | "warn" | "bad";
 }
 

@@ -260,7 +260,7 @@ export function FlowDiagram({
                           }
                     }
                   >
-                    <Icon name="clock" size={24} />
+                    <Icon name={arc.node.waitIcon ?? "clock"} size={24} />
                     {arc.node.wait}
                   </span>
                 </span>
