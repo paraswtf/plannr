@@ -16,6 +16,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const config = {
   output: "export",
   images: { unoptimized: true },
+  // Strict Mode mounts every new component's effects twice in development.
+  // A slide's builds are measured when its timeline is built, and the second
+  // build lands after the deck has started morphing the slide in, so it
+  // measured cards mid-morph (back navigation broke the solution maps' lines).
+  // Off, development builds a slide once, as the export always has.
+  reactStrictMode: false,
   outputFileTracingRoot: here,
   turbopack: { root: here },
   // A throwaway preview build (see scripts/snapshot.mjs) may include another
