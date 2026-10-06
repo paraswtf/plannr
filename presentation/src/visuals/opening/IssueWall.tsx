@@ -11,7 +11,10 @@ export interface IssueWallProps {
   step: number;
   active: boolean;
   issues: ReactNode[];
-  /** The one-line diagnosis, shown over the wall on step 1. */
+  /**
+   * What it all comes back to, set over the wall on step 1. A picture that
+   * builds itself on that step, or a line styled by the caller.
+   */
   rootCause?: ReactNode;
   /** An icon per issue; by default one is picked from the issue's words. */
   icons?: IconName[];
@@ -19,7 +22,7 @@ export interface IssueWallProps {
 
 /**
  * Every other issue we found, piling up as chips until the wall is full,
- * then one sentence for the root cause.
+ * then the root cause they all come back to.
  *
  * The wall is laid out by the browser (rows wrap upwards from the floor, so
  * the first issue lands at the bottom), and each chip then falls into its
@@ -28,7 +31,7 @@ export interface IssueWallProps {
  *
  * Builds (steps = 2):
  *   0 — the issues tumble in and stack. Plays by itself on arrival.
- *   1 — they dim, and `rootCause` is set large over them.
+ *   1 — they recede, and `rootCause` rises in where they were.
  */
 
 /** Words in an issue, and the icon that says it. First match wins. */
@@ -162,12 +165,14 @@ export function IssueWall({
   );
 
   useSteps(ref, step, (tl, mark) => {
+    // The wall recedes all the way: what is left of it round the edges of a
+    // picture only reads as smudges.
     tl.to(
       ".iw-wall",
       {
         scale: 0.92,
         y: 24,
-        opacity: 0.22,
+        opacity: 0,
         filter: "blur(8px)",
         duration: 0.8,
         ease: "power3.inOut",
@@ -175,10 +180,17 @@ export function IssueWall({
       0,
     );
     if (rootCause) {
+      // Solid quickly, so the wall never shows through it on the way in.
       tl.fromTo(
         ".iw-cause",
-        { opacity: 0, y: 70, scale: 1.04 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.95, ease: "deck.enter" },
+        { opacity: 0 },
+        { opacity: 1, duration: 0.35, ease: "power1.out" },
+        0.5,
+      );
+      tl.fromTo(
+        ".iw-cause",
+        { y: 70, scale: 1.04 },
+        { y: 0, scale: 1, duration: 0.95, ease: "deck.enter" },
         0.5,
       );
     }
@@ -226,12 +238,9 @@ export function IssueWall({
 
       {rootCause && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <p
-            className="iw-cause font-display text-fg max-w-345 text-center text-[96px] leading-[1.02] font-semibold tracking-[-0.04em] text-balance"
-            style={{ opacity: 0 }}
-          >
+          <div className="iw-cause" style={{ opacity: 0 }}>
             {rootCause}
-          </p>
+          </div>
         </div>
       )}
     </div>

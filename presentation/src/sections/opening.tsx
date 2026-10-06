@@ -6,6 +6,7 @@ import { Grad } from "~/ui/layout";
 import { AppIcon } from "~/visuals/opening/_app-icons";
 import { FacultyHunt } from "~/visuals/opening/FacultyHunt";
 import { IssueWall } from "~/visuals/opening/IssueWall";
+import { NoticeBoard } from "~/visuals/opening/NoticeBoard";
 import { OldTimetable } from "~/visuals/opening/OldTimetable";
 import { ThreeApps } from "~/visuals/opening/ThreeApps";
 
@@ -204,12 +205,7 @@ export const opening: SectionDef = {
               step={step}
               active={active}
               issues={ISSUES}
-              rootCause={
-                <>
-                  The timetable was built as a <Grad>notice board</Grad>, not a
-                  system.
-                </>
-              }
+              rootCause={<NoticeBoard step={step} />}
             />
           }
           step={step}
