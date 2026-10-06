@@ -203,6 +203,8 @@ const CHIPS: Record<
   CalloutId,
   {
     text: string;
+    /** A second, quieter line under the text. */
+    detail?: string;
     icon: IconName;
     w: number;
     h: number;
@@ -214,7 +216,7 @@ const CHIPS: Record<
 > = {
   // Over the three month calendars, big enough to hide them whole.
   "one-page": {
-    text: "One page for the whole college",
+    text: "More than most people need",
     icon: "grid",
     w: 470,
     h: 64,
@@ -243,12 +245,14 @@ const CHIPS: Record<
     origin: "100% 50%",
   },
   // Hung under the label, wide enough to cover the banner's title and short
-  // of its first divider, so no word or line pokes out.
+  // of its first divider, so no word or line pokes out; its second line
+  // runs into the empty band under the banner.
   insecure: {
     text: "Not secure: plain HTTP",
+    detail: "Some browsers refuse to load it",
     icon: "alert",
     w: 388,
-    h: 60,
+    h: 92,
     at: { desktop: { x: 58, y: 80 } },
     first: "desktop",
     origin: "206px 0px",
@@ -739,8 +743,15 @@ export function OldTimetable({ step, active, flipId }: OldTimetableProps) {
             }}
           >
             <Icon name={c.icon} size={28} className="text-accent" />
-            <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
-              {c.text}
+            <span className="flex flex-col">
+              <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
+                {c.text}
+              </span>
+              {c.detail && (
+                <span className="font-body text-muted text-[22px] leading-snug">
+                  {c.detail}
+                </span>
+              )}
             </span>
           </div>
         );
