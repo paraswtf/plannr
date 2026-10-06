@@ -62,6 +62,7 @@ import { MonitorIcon } from "@phosphor-icons/react/dist/csr/Monitor";
 import { MoonIcon } from "@phosphor-icons/react/dist/csr/Moon";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
+import { PhoneIcon } from "@phosphor-icons/react/dist/csr/Phone";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { QuestionIcon } from "@phosphor-icons/react/dist/csr/Question";
 import { ReceiptIcon } from "@phosphor-icons/react/dist/csr/Receipt";
@@ -137,6 +138,7 @@ const ICONS = {
   mail: EnvelopeSimpleIcon,
   bell: BellIcon,
   phone: DeviceMobileIcon,
+  call: PhoneIcon,
   laptop: LaptopIcon,
   message: ChatCircleIcon,
   sun: SunIcon,

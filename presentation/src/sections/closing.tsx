@@ -74,14 +74,19 @@ export const closing: SectionDef = {
       title: "What we combined",
       steps: 2,
       notes: [
-        "So that's what we built. Today there's the timetable for classes, Moodle for assignments, material and attendance, and email for every change — three apps that don't talk to each other.",
-        "Plannr is all three, in one place. One source of truth: change it once, and everyone who needs to know, knows.",
+        "So that's what we built. Today there's the timetable for classes, the class WhatsApp group for the news, Moodle for assignments, material and attendance, and email for every change — four apps that don't talk to each other.",
+        "Plannr is all four, in one place. One source of truth: change it once, and everyone who needs to know, knows.",
       ],
       render: ({ step }) => (
         <MergeApps
-          title="Three apps in. One out."
+          title="Four apps in. One out."
           apps={[
             { name: "Timetable", does: "Classes and rooms", icon: "grid" },
+            {
+              name: "WhatsApp",
+              does: "The news, second-hand",
+              icon: "whatsapp",
+            },
             {
               name: "Moodle",
               does: "Assignments, material, attendance",
