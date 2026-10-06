@@ -24,6 +24,8 @@
  *   --scale <n>       device pixel ratio (default: 1; 2 for retina-sharp)
  *   --hide-placeholders  render without the dashed placeholder marks
  */
+import { createHmac } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +102,41 @@ page.on("console", (m) => {
 await page.route(`${ORIGIN}/**`, serve);
 // Fonts come from the export; anything else external is not needed.
 await page.route(/^https?:\/\/(?!deck\.local)/, (route) => route.abort());
+
+// A locked deck opens for the snapshots: the page starts with the token a
+// browser keeps once it has matched a code (src/lock/totp.ts), worked out
+// from the secret the build was made with.
+const secret =
+  process.env.NEXT_PUBLIC_DECK_TOTP_SECRET ??
+  (() => {
+    const file = path.join(root, ".env.local");
+    if (!existsSync(file)) return "";
+    const line = readFileSync(file, "utf8")
+      .split("\n")
+      .find((l) => l.startsWith("NEXT_PUBLIC_DECK_TOTP_SECRET="));
+    return line ? line.split("=")[1].trim() : "";
+  })();
+if (secret) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const bytes = [];
+  let bits = 0;
+  let value = 0;
+  for (const char of secret.toUpperCase().replace(/[\s=-]/g, "")) {
+    value = (value << 5) | alphabet.indexOf(char);
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((value >>> bits) & 0xff);
+    }
+  }
+  const token = createHmac("sha256", Buffer.from(bytes))
+    .update("plannr-deck-unlocked")
+    .digest("hex");
+  await page.addInitScript(
+    ([key, value]) => localStorage.setItem(key, value),
+    ["plannr.deck.unlock", token],
+  );
+}
 
 const query = `?speed=${speed}${hidePh ? "&placeholders=hidden" : ""}`;
 await page.goto(`${ORIGIN}/${query}`);

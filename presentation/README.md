@@ -31,6 +31,29 @@ npx serve out        # or open it from any static host
 `out/` is plain HTML, CSS and JS: Vercel (set the root directory to
 `presentation`), Netlify, GitHub Pages or a USB stick all work.
 
+## Locking the deck
+
+The deck can sit behind a six-digit code from an authenticator app (Google
+Authenticator, Authy, 1Password…). Set it up once:
+
+```bash
+npm run lock:setup   # saves a secret in .env.local and shows its QR code
+```
+
+Scan the QR into the app. From then on every browser asks for the app's
+current code once, and stays unlocked after (it keeps a token in local
+storage). Run the command again to see the same QR for another phone, or with
+`-- --rotate` for a new secret, which locks every browser again. Without a
+secret the deck is open. Nothing is stored anywhere but `.env.local`, which git
+ignores; for a hosted copy, set `NEXT_PUBLIC_DECK_TOTP_SECRET` on the host
+before it builds.
+
+It is a lock screen, not encryption. The deck is a static site, so the check
+runs in the browser and the secret ships in its JavaScript (the exported pages
+themselves hold only the lock screen). It keeps out anyone who only has the
+link, not someone who reads the bundle. `npm run snapshot` unlocks itself from
+`.env.local`. The code lives in `src/lock/`.
+
 ## Presenting
 
 | Key | Does |

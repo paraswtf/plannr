@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs}\" --cache",
-    "snapshot": "node scripts/snapshot.mjs"
+    "snapshot": "node scripts/snapshot.mjs",
+    "lock:setup": "node scripts/lock-setup.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

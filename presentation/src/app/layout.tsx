@@ -9,6 +9,8 @@ import {
 } from "next/font/google";
 import localFont from "next/font/local";
 
+import { DeckLock } from "~/lock/DeckLock";
+
 export const metadata: Metadata = {
   title: "Presenting Plannr — a design thinking study",
   description:
@@ -64,7 +66,9 @@ export default function RootLayout({
       lang="en"
       className={`${display.variable} ${body.variable} ${mono.variable} ${roboto.variable} ${googleSans.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <DeckLock>{children}</DeckLock>
+      </body>
     </html>
   );
 }
