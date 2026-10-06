@@ -1,13 +1,16 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { STAKEHOLDERS, TEAM } from "~/content/team";
 import { Avatar } from "~/ui/people";
 
 import { sectionColor } from "./Chrome";
 import { gsap, useGSAP } from "./gsap";
-import type { DeckSlide, SectionId } from "./types";
+import { DeckRuntimeProvider } from "./runtime";
+import { ScaledCanvas } from "./ScaledCanvas";
+import { SlideFrame } from "./SlideFrame";
+import { THEME_BG, type DeckSlide, type SectionId } from "./types";
 
 /** Fades a panel in when it mounts. */
 function usePanelIn() {
@@ -24,8 +27,57 @@ function usePanelIn() {
 }
 
 /**
- * The whole deck on one screen, section by section — the structure at a
- * glance, and a way to jump anywhere. `O` or `Esc` opens it.
+ * A slide as a still, at its last build, the way the presenter's preview of
+ * the next slide draws it (instant, inactive). It mounts only once it scrolls
+ * near view, so opening the overview does not render the whole deck at once,
+ * and it stays mounted after. Inert: the card around it takes the click.
+ */
+function SlideThumb({ slide }: { slide: DeckSlide }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el || seen) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setSeen(true);
+      },
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [seen]);
+
+  return (
+    <div
+      ref={box}
+      inert
+      className="pointer-events-none aspect-video w-full overflow-hidden rounded-lg"
+      style={{
+        background: THEME_BG[slide.theme],
+        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
+      }}
+    >
+      {seen && (
+        <DeckRuntimeProvider value={{ instant: true }}>
+          <ScaledCanvas className="h-full w-full">
+            <SlideFrame
+              slide={slide}
+              step={Math.max(0, slide.steps - 1)}
+              active={false}
+            />
+          </ScaledCanvas>
+        </DeckRuntimeProvider>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The whole deck on one screen, section by section, each slide as a preview —
+ * the structure at a glance, and a way to jump anywhere. `O` or `Esc` opens
+ * it.
  */
 export function Overview({
   slides,
@@ -108,13 +160,13 @@ export function Overview({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
                 {section.slides.map((s) => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => onPick(s.index)}
-                    className="flex min-h-[124px] cursor-pointer flex-col rounded-xl bg-white/[0.04] p-3.5 text-left transition-colors hover:bg-white/[0.08]"
+                    className="flex cursor-pointer flex-col rounded-xl bg-white/[0.04] p-2.5 text-left transition-colors hover:bg-white/[0.08]"
                     style={{
                       boxShadow:
                         s.index === current
@@ -122,11 +174,15 @@ export function Overview({
                           : "inset 0 0 0 1px rgba(255,255,255,0.08)",
                     }}
                   >
-                    <span className="flex items-center justify-between">
+                    <SlideThumb slide={s} />
+                    <span className="mt-2.5 flex items-center gap-2 px-1">
                       <span className="t-mono text-[12px] text-white/45">
                         {String(s.index + 1).padStart(2, "0")}
                       </span>
-                      <span className="flex gap-1">
+                      <span className="min-w-0 flex-1 truncate text-[14.5px] leading-snug font-semibold">
+                        {s.title}
+                      </span>
+                      <span className="flex shrink-0 gap-1">
                         {Array.from({ length: s.steps }, (_, i) => (
                           <span
                             key={i}
@@ -134,12 +190,6 @@ export function Overview({
                           />
                         ))}
                       </span>
-                    </span>
-                    <span className="mt-1.5 text-[14.5px] leading-snug font-semibold">
-                      {s.title}
-                    </span>
-                    <span className="mt-1.5 line-clamp-2 text-[12px] leading-snug text-white/45">
-                      {s.notes[0]}
                     </span>
                   </button>
                 ))}

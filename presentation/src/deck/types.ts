@@ -5,6 +5,12 @@ export type StakeholderId = "students" | "faculty" | "coordinators" | "admins";
 export type SectionId = "opening" | "approach" | StakeholderId | "closing";
 export type Theme = "dark" | "light";
 
+/** The stage behind a slide of each theme. */
+export const THEME_BG: Record<Theme, string> = {
+  dark: "#0d1117",
+  light: "#f2f3f6",
+};
+
 /** What every slide is rendered with. */
 export interface SlideProps {
   /** The build on screen, from 0 to `steps - 1`. */

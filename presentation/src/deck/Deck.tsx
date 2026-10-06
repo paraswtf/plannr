@@ -22,12 +22,7 @@ import { HelpPanel, NotesPanel, Overview } from "./overlays";
 import { DeckRuntimeProvider } from "./runtime";
 import { ScaledCanvas } from "./ScaledCanvas";
 import { SlideFrame } from "./SlideFrame";
-import type { DeckSlide, Theme } from "./types";
-
-export const THEME_BG: Record<Theme, string> = {
-  dark: "#0d1117",
-  light: "#f2f3f6",
-};
+import { THEME_BG, type DeckSlide } from "./types";
 
 /** A slide on screen. `key` is new each time a slide arrives, so it remounts. */
 interface Shown {

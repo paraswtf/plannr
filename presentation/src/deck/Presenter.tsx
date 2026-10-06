@@ -11,12 +11,11 @@ import {
   useDeckChannel,
   type DeckMessage,
 } from "./channel";
-import { THEME_BG } from "./Deck";
 import { NotesText, StepDots } from "./overlays";
 import { DeckRuntimeProvider } from "./runtime";
 import { ScaledCanvas } from "./ScaledCanvas";
 import { SlideFrame } from "./SlideFrame";
-import type { DeckSlide } from "./types";
+import { THEME_BG, type DeckSlide } from "./types";
 
 /**
  * The speaker's window: the slide on screen, what comes next, the script,
