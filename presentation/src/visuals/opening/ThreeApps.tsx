@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useLayoutEffect,
-  useRef,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
@@ -14,7 +9,7 @@ import { BrowserFrame } from "~/ui/frames";
 import { Icon, type IconName } from "~/ui/icon";
 
 import { GMAIL, GMAIL_FONT, GmailPage } from "./_gmail-page";
-import { MRBS_CSS, mrbsHtml, VIEW } from "./_mrbs-snapshot";
+import { MrbsStatic } from "./_mrbs-static";
 import { SCALE } from "./_oldtimetable-page";
 import { WHATSAPP, WHATSAPP_FONT, WhatsAppPage } from "./_whatsapp-page";
 
@@ -401,32 +396,11 @@ function Fact({
 /* 1. The timetable site: the college's own page (see _mrbs-snapshot.ts), at */
 /*    the scale the slide before shows it, so the morph only crops it.       */
 
-let mrbsMarkup: string | null = null;
-
 function TimetableSite() {
-  const host = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const el = host.current;
-    if (!el) return;
-    mrbsMarkup ??= `<style>${MRBS_CSS}</style>${mrbsHtml()}`;
-    (el.shadowRoot ?? el.attachShadow({ mode: "open" })).innerHTML = mrbsMarkup;
-  }, []);
-
   return (
     <div className="absolute inset-0 overflow-hidden bg-white">
-      {/* A picture of the page: inert, so its fields never take the keys
-          that drive the deck. */}
-      <div
-        ref={host}
-        inert
-        className="absolute top-0 left-0"
-        style={{
-          width: VIEW.width,
-          height: VIEW.height,
-          transform: `scale(${SCALE})`,
-          transformOrigin: "0 0",
-        }}
+      <MrbsStatic
+        style={{ transform: `scale(${SCALE})`, transformOrigin: "0 0" }}
       />
       <Fact
         label={

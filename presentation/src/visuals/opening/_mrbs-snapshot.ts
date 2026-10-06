@@ -168,7 +168,7 @@ type Booking = readonly [
 ];
 
 // prettier-ignore
-const BOOKINGS: readonly Booking[] = [
+export const BOOKINGS: readonly Booking[] = [
   ["203 (24)", "10:30", 2, "X", "BBA(IT) III- DIV A -Human Resource Management -Dr. Madhu Arora"],
   ["203 (24)", "11:30", 2, "X", "BBA(IT) III- DIV A -Human Resource Management -Dr. Madhu Arora"],
   ["203 (24)", "13:30", 2, "Y", "BBA(IT) III- DIV  B Human Resource Management -Dr. Madhu Arora"],

@@ -175,9 +175,9 @@ export const opening: SectionDef = {
       title: "There's no page for a person",
       steps: 3,
       notes: [
-        "Now try to find a teacher. Say you need to see a professor before a deadline. Where is she right now?",
-        "If you know which courses she teaches, you open each course's timetable and go through every lecture, looking for her name.",
-        "And if you don't know? Then you go through every course running that day. Hundreds of cells, for one person. The information is all there — it's just organised for nobody.",
+        "Now try to find a teacher. It's 11:44, and you need to see Dr. Nagane before a deadline. Where is Dr. Nagane right now?",
+        "If you know which classes they take, you look for those on the timetable. But every name is cut off, so you rest the mouse on each one and wait: the full name takes two seconds to come up. Database Security, no. Networking, no. Android Programming: there.",
+        "And if you don't know? Then you hover every class on the page. That's a hundred classes today, at two seconds each: over three minutes, for one person. The information is all there — it's just organised for nobody.",
       ],
       render: ({ step, active }) => (
         <VisualSlide

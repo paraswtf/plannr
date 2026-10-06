@@ -1,11 +1,15 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 
-import { gsap } from "~/deck/gsap";
+import { gsap, useGSAP } from "~/deck/gsap";
+import { useDeckRuntime } from "~/deck/runtime";
 import { useSteps } from "~/deck/useSteps";
+import { BrowserFrame } from "~/ui/frames";
 import { Icon } from "~/ui/icon";
-import { Ph } from "~/ui/placeholder";
+
+import { BOOKINGS, cellRect, LAYOUT, VIEW } from "./_mrbs-snapshot";
+import { MrbsStatic } from "./_mrbs-static";
 
 export interface FacultyHuntProps {
   step: number;
@@ -13,275 +17,216 @@ export interface FacultyHuntProps {
 }
 
 /**
- * A student trying to find one teacher today. There is no page for a person,
- * only for courses, so they read course timetables cell by cell.
+ * A student trying to find one teacher on the college's real timetable page
+ * (see _mrbs-snapshot.ts). The page has no place for a person, and its cells
+ * cut every name off, so the only way to read one is the browser's tooltip:
+ * rest the pointer on a class and, two seconds later, the full entry comes up.
+ * The hover is mocked step by step, as the site behaves: the link underlines,
+ * its row's time turns pink, and the tooltip waits its two seconds.
  *
  * Builds (steps = 3):
- *   0: the question: "Where is Prof. <name> right now?"
- *   1: if you know her courses: scan each course's timetable, a highlight
- *      stepping through cells while a counter of cells read climbs.
- *   2: if you don't: scan every course that day; the counter runs into the
- *      hundreds and the grid fills the screen.
+ *   0: the question: "Where is Dr. Nagane right now?" at 11:44.
+ *   1: if you know their classes: hover each BCA Sem VII class in the 11:30
+ *      row until the name turns up (the third one, in 702).
+ *   2: if you don't: the window steps back to the whole day and the pointer
+ *      hovers every class on it, in real time, two seconds still on each,
+ *      while the counters run towards what that adds up to: 100 classes and
+ *      3:20 of waiting (over five minutes, with the moving and the reading).
  *
- * On the light stage the course grids are white sheets with the deck's soft
- * slate shadow; the reader's eye is the one accent, and turns to the quiet
- * "good" green only when it finds her.
+ * The page is the site's own, so these are real classes, rooms and names.
  */
 
-/* Everything is placed in canvas pixels inside the 960 × 844 box, so the
- * highlight can step between cells from constants. */
+/* Canvas pixels inside the 960 x 844 box. */
 const BOX = { width: 960, height: 844 } as const;
+const WIN = { top: 226, width: 960, height: 470, bar: 52 } as const;
+const VIEWPORT = { width: WIN.width, height: WIN.height - WIN.bar } as const;
 
-/** One course's timetable for today: divisions across, hours down. */
-const GRID = {
-  width: 300,
-  header: 50,
-  colHead: 32,
-  timeCol: 48,
-  row: 70,
-  gap: 30,
-  top: 230,
-} as const;
-const DIVS = ["BCA-A", "BCA-B", "BBA(IT)-A"];
-const HOURS = ["09:00", "11:00", "14:00", "16:00"];
-const CELL_W = (GRID.width - GRID.timeCol) / DIVS.length;
-const GRID_H = GRID.header + GRID.colHead + HOURS.length * GRID.row;
-const CELLS = DIVS.length * HOURS.length;
+/** How long the browser waits before a tooltip, and how long one is read:
+ * properly in build 1, at a glance in build 2's sweep. */
+const DELAY = 2;
+const READ = 1.1;
+const GLANCE = 0.7;
+/** Build 2's sweep: the move between classes, and the wait for the build
+ * (the zoom out) to land before it starts. */
+const MOVE = 0.45;
+const SETTLE = 1.5;
 
-/** The wall of every course today, for build 2. */
-const WALL = { cols: 9, rows: 4, top: 222, scale: 0.3 } as const;
-const WALL_GAP_X =
-  (BOX.width - WALL.cols * GRID.width * WALL.scale) / (WALL.cols - 1);
-const WALL_GAP_Y = 12;
+type Booking = (typeof BOOKINGS)[number];
 
-/** Her three courses, and where they land in the wall. */
-const HER_COURSES = ["Design Thinking", "Cloud Computing", "Data Mining"];
-const HER_WALL_SLOTS = [8, 19, 28];
-/** She is found in the third course, BCA-B at 11:00. */
-const FOUND = { grid: 2, row: 1, col: 1 } as const;
-const FOUND_INDEX = FOUND.row * DIVS.length + FOUND.col; // within its grid
-const FOUND_AT_KNOWN = FOUND.grid * CELLS + FOUND_INDEX + 1; // cells read in build 1
-const FOUND_AT_ALL =
-  (HER_WALL_SLOTS[FOUND.grid] ?? 0) * CELLS + FOUND_INDEX + 1; // build 2
+const minutes = (time: string) => {
+  const [h = 0, m = 0] = time.split(":").map(Number);
+  return h * 60 + m;
+};
+/** A booking's row in the table: the half-hours from 07:30. */
+const rowOf = (b: Booking) => (minutes(b[1]) - (7 * 60 + 30)) / 30;
+const rectOf = (b: Booking) => cellRect(b[0], b[1]);
+const byColumn = (p: Booking, q: Booking) => rectOf(p).x - rectOf(q).x;
 
-const OTHER_COURSES = [
-  "Web Technologies",
-  "Cyber Security",
-  "Business Analytics",
-  "Software Testing",
-  "Operating Systems",
-  "Java Programming",
-  "Digital Marketing",
-  "Statistics",
-  "Networking",
-  "Python Lab",
-  "Mobile Apps",
-  "Cloud Lab",
-  "Accounting",
-  "AI Fundamentals",
-  "Economics",
-  "Soft Skills",
-  "DBMS",
-  "Linux Admin",
-  "UX Research",
-  "Big Data",
-  "Data Structures",
-  "E-Commerce",
-  "IoT",
-  "ERP Systems",
-  "Research Methods",
-  "Ethics in IT",
-  "Game Design",
-  "Calculus",
-  "Org. Behaviour",
-  "Finance Basics",
-  "Blockchain",
-  "Comms Lab",
-  "Project Mgmt",
-];
+function booking(room: string, start: string): Booking {
+  const b = BOOKINGS.find(([r, s]) => r === room && s === start);
+  if (!b) throw new Error(`No booking in ${room} at ${start}`);
+  return b;
+}
 
-const TEACHERS = [
-  "Mehta",
-  "Iyer",
-  "Rao",
-  "Joshi",
-  "Shah",
-  "Nair",
-  "Desai",
-  "Pillai",
-  "Menon",
-  "Bose",
-  "Gupta",
-];
-const ROOMS = ["301", "302", "304", "Lab 1", "Lab 2", "205"];
-const PASTELS = ["#c9def2", "#ffe2b0", "#d6ecc6", "#ecd5ef", "#f6d2cf"];
+/** Where the pointer rests on a class: on its name, near the top. */
+function tipOf(b: Booking) {
+  const r = rectOf(b);
+  return { x: r.x + r.w * 0.4, y: r.y + 9 };
+}
 
-/* The eye's colours, as hex: GSAP tweens between them, and cannot
- * interpolate a var(). Accent (searching) and good (found), from globals.css. */
-const EYE = {
-  border: "#c8305f",
-  fill: "rgba(200,48,95,0.12)",
-  foundBorder: "#2f7a4b",
-  foundFill: "rgba(47,122,75,0.12)",
-} as const;
-/** Her cell, once found: a pale wash of the same green. */
-const HER_CELL = { fill: "#dcefe0", ring: "#2f7a4b" } as const;
+/* Build 1: the BCA Sem VII classes in the 11:30 row, left to right. Their
+ * cells read "BCA S em VII" and no more; the third is Dr. Nagane's. */
+const HUNT = [
+  booking("306 (48)", "11:30"),
+  booking("402 (28)", "11:30"),
+  booking("702 (44)", "11:30"),
+] as const;
+const FOUND = HUNT[HUNT.length - 1]!;
 
-/** A deterministic, plausible cell: teacher and room, or a free period. */
-function cellFor(
-  seed: number,
-  idx: number,
-): { who: string; room: string; tone: string } | null {
-  const h = (seed * 7919 + idx * 104729) % 9973;
-  if (h % 5 === 0) return null;
+/* Build 2: every class on the page, row by row, left to right. */
+const ALL = [...BOOKINGS].sort((p, q) => rowOf(p) - rowOf(q) || byColumn(p, q));
+
+/* Dr. Nagane's day: 702 from 10:30 to 12:30, two bookings back to back. */
+const THEIRS = (() => {
+  const first = rectOf(booking("702 (44)", "10:30"));
+  const second = rectOf(FOUND);
+  return { ...first, h: second.y + second.h - first.y };
+})();
+
+/** Where the window looks: a zoom, and the page point at its top-left. */
+interface View {
+  k: number;
+  x: number;
+  y: number;
+}
+/** Build 1: the thirteen rooms from 305 to 704, edge to edge, from the room
+ * names down past the 11:30 row, big enough to read. */
+const CLOSE: View = (() => {
+  const left = rectOf(booking("305 (48)", "11:30")).x;
+  const right = rectOf(booking("705 (34)", "08:00")).x;
+  return { k: VIEWPORT.width / (right - left), x: left, y: LAYOUT.tableTop };
+})();
+/** Build 2: the whole day, every room across. */
+const WHOLE: View = { k: WIN.width / VIEW.width, x: 0, y: 236 };
+const layerAt = ({ k, x, y }: View) => ({ x: -x * k, y: -y * k, scale: k });
+
+/* The site's own hover, from its stylesheet: the link underlines, and the
+ * row's time cell goes pink with dark text (`tr:hover td.row_labels`). */
+const ROW_HOVER = { background: "#ffc0da", ink: "#0B263B" } as const;
+
+/* The deck's good, as hex, for the found rings. Keep in step with --good in
+ * globals.css. */
+const GOOD = "#2f7a4b";
+
+/* The tooltip, as macOS draws the browser's: a dark, translucent, blurred
+ * plate with light text, in page pixels (it zooms with the window). */
+const TIP = { width: 246, below: 22 } as const;
+const TOOLTIP: CSSProperties = {
+  maxWidth: TIP.width,
+  padding: "3px 7px 4px",
+  borderRadius: 5,
+  background: "rgba(34,34,36,0.8)",
+  backdropFilter: "blur(14px) saturate(1.5)",
+  WebkitBackdropFilter: "blur(14px) saturate(1.5)",
+  boxShadow:
+    "inset 0 0 0 0.5px rgba(255,255,255,0.24), 0 0 0 0.5px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.28)",
+  color: "#ececec",
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  fontSize: 12,
+  lineHeight: "14.5px",
+  // The site's titles keep their double spaces, and so does the tooltip.
+  whiteSpace: "pre-wrap",
+};
+
+/** Under the pointer, kept inside the window's right edge. */
+function tooltipAt(b: Booking, view: View) {
+  const tip = tipOf(b);
+  const right = view.x + VIEWPORT.width / view.k - 8;
   return {
-    who: TEACHERS[h % TEACHERS.length]!,
-    room: ROOMS[(h >> 3) % ROOMS.length]!,
-    tone: PASTELS[(seed + (idx % 2)) % PASTELS.length]!,
+    left: Math.min(tip.x - 3, right - TIP.width),
+    top: tip.y + TIP.below,
   };
 }
 
-/** Top-left of grid g in build 1. */
-const knownPos = (g: number) => ({
-  x: g * (GRID.width + GRID.gap),
-  y: GRID.top,
-});
-/** Top-left of wall slot s in build 2. */
-const wallPos = (s: number) => ({
-  x: (s % WALL.cols) * (GRID.width * WALL.scale + WALL_GAP_X),
-  y: WALL.top + Math.floor(s / WALL.cols) * (GRID_H * WALL.scale + WALL_GAP_Y),
-});
-/** A cell's box, given its grid's top-left and scale. */
-const cellRect = (origin: { x: number; y: number }, i: number, k = 1) => ({
-  x: origin.x + (GRID.timeCol + (i % DIVS.length) * CELL_W) * k,
-  y:
-    origin.y +
-    (GRID.header + GRID.colHead + Math.floor(i / DIVS.length) * GRID.row) * k,
-  width: CELL_W * k,
-  height: GRID.row * k,
-});
+/* The pointing hand the browser shows over a link, from the deck's icon set:
+ * white with a dark outline, its hotspot on the fingertip. */
+const HAND = { size: 24, hotX: (116 / 256) * 24, hotY: (16 / 256) * 24 };
 
-/** The wall, slot by slot: which course sits there. */
-const WALL_SLOTS: { course: string; mine: number | null }[] = (() => {
-  const slots: { course: string; mine: number | null }[] = [];
-  let other = 0;
-  for (let s = 0; s < WALL.cols * WALL.rows; s++) {
-    const mine = HER_WALL_SLOTS.indexOf(s);
-    if (mine >= 0) slots.push({ course: HER_COURSES[mine]!, mine });
-    else
-      slots.push({
-        course: OTHER_COURSES[other++ % OTHER_COURSES.length]!,
-        mine: null,
-      });
-  }
-  return slots;
-})();
+/* ------------------------------------------------------------------------ */
 
-function CourseGrid({
-  course,
-  seed,
-  found,
-}: {
-  course: string;
-  seed: number;
-  found?: number;
-}) {
-  return (
-    <div
-      className="font-body overflow-hidden rounded-[22px] bg-white text-[#0d1117]"
-      style={{
-        width: GRID.width,
-        height: GRID_H,
-        boxShadow:
-          "inset 0 0 0 1px rgba(16,24,40,0.08), 0 1px 1px rgba(16,24,40,0.04), 0 18px 40px -20px rgba(16,24,40,0.22)",
-      }}
-    >
-      <div className="flex items-center px-5" style={{ height: GRID.header }}>
-        <span className="truncate text-[18px] font-semibold tracking-[-0.015em]">
-          {course}
-        </span>
-      </div>
-      <div
-        className="flex font-mono text-[14px] text-[rgba(44,49,53,0.62)]"
-        style={{ height: GRID.colHead, background: "#f3f4f7" }}
-      >
-        <span style={{ width: GRID.timeCol }} />
-        {DIVS.map((d) => (
-          <span
-            key={d}
-            className="flex items-center justify-center"
-            style={{ width: CELL_W }}
-          >
-            {d}
-          </span>
-        ))}
-      </div>
-      {HOURS.map((hour, r) => (
-        <div
-          key={hour}
-          className="flex"
-          style={{
-            height: GRID.row,
-            boxShadow: "inset 0 1px 0 rgba(68,88,121,0.14)",
-          }}
-        >
-          <span
-            className="flex items-center justify-center font-mono text-[14px] text-[rgba(44,49,53,0.6)]"
-            style={{ width: GRID.timeCol }}
-          >
-            {hour}
-          </span>
-          {DIVS.map((d, c) => {
-            const i = r * DIVS.length + c;
-            const isHer = found === i;
-            const cell = isHer
-              ? { who: "Kulkarni", room: "Lab 2", tone: HER_CELL.fill }
-              : cellFor(seed, i);
-            return (
-              <span key={d} className="p-[3px]" style={{ width: CELL_W }}>
-                {cell && (
-                  <span
-                    className="flex h-full flex-col justify-center rounded-[10px] px-[6px]"
-                    style={{
-                      background: cell.tone,
-                      boxShadow: isHer
-                        ? `inset 0 0 0 1.5px ${HER_CELL.ring}`
-                        : undefined,
-                    }}
-                  >
-                    <span
-                      className={`truncate text-[17px] leading-tight ${isHer ? "font-bold tracking-[-0.02em]" : "font-semibold"}`}
-                    >
-                      {cell.who}
-                    </span>
-                    <span className="mt-1 truncate font-mono text-[13px] text-[rgba(44,49,53,0.68)]">
-                      {cell.room}
-                    </span>
-                  </span>
-                )}
-              </span>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
+interface HoverTarget {
+  link: HTMLElement;
+  label: HTMLElement;
+  labelLink: HTMLElement | null;
+  labelBackground: string;
+  labelInk: string;
 }
 
-export function FacultyHunt({ step }: FacultyHuntProps) {
+/** The live elements a class's hover changes, inside the page's shadow root. */
+function hoverTargets(page: Element | null | undefined) {
+  const rows = page?.shadowRoot?.querySelectorAll<HTMLTableRowElement>(
+    "#day_main > tbody > tr",
+  );
+  return (b: Booking): HoverTarget | null => {
+    const row = rows?.[rowOf(b)];
+    if (!row) return null;
+    // Classes with the same title can start in the same row (the three exam
+    // halls): the nth of them from the left is the nth such link.
+    const twins = BOOKINGS.filter(
+      ([, start, , , title]) => start === b[1] && title === b[4],
+    ).sort(byColumn);
+    const link = [...row.querySelectorAll<HTMLElement>("td a[title]")].filter(
+      (a) => a.title === b[4],
+    )[twins.indexOf(b)];
+    const label = row.querySelector<HTMLElement>("td.row_labels");
+    if (!link || !label) return null;
+    const labelLink = label.querySelector<HTMLElement>("a");
+    return {
+      link,
+      label,
+      labelLink,
+      labelBackground: getComputedStyle(label).backgroundColor,
+      labelInk: labelLink ? getComputedStyle(labelLink).color : "",
+    };
+  };
+}
+
+function hover(
+  tl: gsap.core.Timeline,
+  t: HoverTarget | null,
+  on: boolean,
+  at: string | number,
+) {
+  if (!t) return;
+  tl.set(t.link, { textDecoration: on ? "underline" : "none" }, at);
+  tl.set(
+    t.label,
+    { backgroundColor: on ? ROW_HOVER.background : t.labelBackground },
+    at,
+  );
+  if (t.labelLink)
+    tl.set(t.labelLink, { color: on ? ROW_HOVER.ink : t.labelInk }, at);
+}
+
+const clock = (s: number) =>
+  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** Writes a counter's text, found under `scope`. */
+const writer = (scope: Element | null, selector: string) => (value: string) => {
+  const el = scope?.querySelector(selector);
+  if (el) el.textContent = value;
+};
+
+/* ------------------------------------------------------------------------ */
+
+export function FacultyHunt({ step, active }: FacultyHuntProps) {
   const root = useRef<HTMLDivElement>(null);
+  const { instant } = useDeckRuntime();
 
   useSteps(root, step, (tl, mark) => {
-    const known = gsap.utils.toArray<HTMLElement>(".fh-known", root.current);
-    const others = gsap.utils.toArray<HTMLElement>(".fh-other", root.current);
-    const box = root.current?.querySelector<HTMLElement>(".fh-box") ?? null;
-    const countKnown =
-      root.current?.querySelector<HTMLElement>(".fh-count-known") ?? null;
-    const countAll =
-      root.current?.querySelector<HTMLElement>(".fh-count-all") ?? null;
-    const countAllN =
-      root.current?.querySelector<HTMLElement>(".fh-count-all-n") ?? null;
-    if (!box || !countKnown || !countAll || !countAllN) return;
+    const scope = root.current;
+    const target = hoverTargets(scope?.querySelector(".fh-page"));
 
     // Build 0 holds the question in the middle of the box; it travels up.
     gsap.set(".fh-question", {
@@ -289,8 +234,9 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
       scale: 1.12,
       transformOrigin: "0% 50%",
     });
+    gsap.set(".fh-layer", { ...layerAt(CLOSE), transformOrigin: "0 0" });
 
-    // 1: if you know her courses.
+    // 1: if you know their classes.
     tl.to(".fh-question", {
       y: 0,
       scale: 1,
@@ -304,63 +250,80 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
       "-=0.35",
     );
     tl.fromTo(
-      known,
+      ".fh-window",
       { autoAlpha: 0, y: 60 },
-      { autoAlpha: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.1 },
+      { autoAlpha: 1, y: 0, duration: 0.7, ease: "power3.out" },
       "<0.05",
     );
     tl.fromTo(
-      ".fh-counter",
+      ".fh-counters",
       { autoAlpha: 0, y: 16 },
       { autoAlpha: 1, y: 0, duration: 0.5, ease: "deck.enter" },
       "<0.3",
     );
 
-    // The highlight reads every cell in order, one hop at a time.
-    const knownPath = Array.from({ length: FOUND_AT_KNOWN }, (_, n) =>
-      cellRect(knownPos(Math.floor(n / CELLS)), n % CELLS),
-    );
-    const first = knownPath[0]!;
-    tl.set(box, first);
+    // The hand rests on each class in turn. Nothing shows for two seconds;
+    // then the tooltip, read, and on to the next, which hides it.
+    const start = tipOf(HUNT[0]);
+    tl.set(".fh-hand", { x: start.x - 70, y: start.y + 150 });
     tl.fromTo(
-      box,
-      { autoAlpha: 0, scale: 1.3 },
-      { autoAlpha: 1, scale: 1, duration: 0.3, ease: "power2.out" },
-    );
-    const hop = 0.045;
-    tl.addLabel("scan1");
-    knownPath.slice(1).forEach((r, n) => {
-      tl.to(
-        box,
-        { ...r, duration: hop * 0.8, ease: "power2.inOut" },
-        `scan1+=${(n + 1) * hop}`,
-      );
-    });
-    const counterA = { n: 1 };
-    tl.fromTo(
-      counterA,
-      { n: 1 },
-      {
-        n: FOUND_AT_KNOWN,
-        duration: (FOUND_AT_KNOWN - 1) * hop,
-        ease: "none",
-        onUpdate: () =>
-          (countKnown.textContent = String(Math.round(counterA.n))),
-      },
-      "scan1",
-    );
-    // Found her: the cell lights up, and the answer comes out under the grids.
-    tl.to(box, {
-      borderColor: EYE.foundBorder,
-      backgroundColor: EYE.foundFill,
-      duration: 0.25,
-      ease: "power2.out",
-    });
-    tl.fromTo(
-      ".fh-her-known",
+      ".fh-hand",
       { autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.25, ease: "power2.out" },
-      "<",
+      { autoAlpha: 1, duration: 0.25, ease: "power1.out" },
+    );
+    const hovered = { n: 0 };
+    const waited = { s: 0 };
+    const writeHovered = writer(scope, ".fh-n-one");
+    const writeWaited = writer(scope, ".fh-t-one");
+    HUNT.forEach((b, i) => {
+      const tip = tipOf(b);
+      const t = target(b);
+      tl.to(".fh-hand", {
+        x: tip.x,
+        y: tip.y,
+        duration: i ? 0.6 : 0.75,
+        ease: "deck.morph",
+      });
+      const at = `hover${i}`;
+      tl.addLabel(at);
+      hover(tl, t, true, at);
+      tl.to(
+        hovered,
+        {
+          n: i + 1,
+          duration: 0.15,
+          ease: "none",
+          onUpdate: () => writeHovered(String(Math.round(hovered.n))),
+        },
+        at,
+      );
+      tl.to(
+        waited,
+        {
+          s: (i + 1) * DELAY,
+          duration: DELAY,
+          ease: "none",
+          onUpdate: () => writeWaited(clock(waited.s)),
+        },
+        at,
+      );
+      tl.fromTo(
+        `.fh-tip-${i}`,
+        { autoAlpha: 0 },
+        { autoAlpha: 1, duration: 0.12, ease: "power1.out" },
+        `${at}+=${DELAY}`,
+      );
+      if (i < HUNT.length - 1) {
+        tl.set(`.fh-tip-${i}`, { autoAlpha: 0 }, `${at}+=${DELAY + READ}`);
+        hover(tl, t, false, `${at}+=${DELAY + READ}`);
+      }
+    });
+    // The third is them.
+    tl.fromTo(
+      ".fh-ring-one",
+      { autoAlpha: 0, scale: 1.12 },
+      { autoAlpha: 1, scale: 1, duration: 0.35, ease: "deck.enter" },
+      `+=${0.35}`,
     );
     tl.fromTo(
       ".fh-found",
@@ -370,14 +333,20 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
     );
     mark();
 
-    // 2: if you don't, every course running today.
+    // 2: if you don't, every class on the page.
+    const last = HUNT.length - 1;
     tl.addLabel("all");
     tl.to(
       ".fh-found",
       { autoAlpha: 0, y: -10, duration: 0.3, ease: "power2.in" },
       "all",
     );
-    tl.to(box, { autoAlpha: 0, duration: 0.25, ease: "power2.in" }, "all");
+    tl.to(
+      [".fh-ring-one", `.fh-tip-${last}`, ".fh-hand"],
+      { autoAlpha: 0, duration: 0.2, ease: "power1.in" },
+      "all",
+    );
+    hover(tl, target(FOUND), false, "all");
     tl.to(
       ".fh-label-known",
       { autoAlpha: 0, y: -18, duration: 0.35, ease: "power2.in" },
@@ -389,105 +358,115 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
       { autoAlpha: 1, y: 0, duration: 0.5, ease: "deck.enter" },
       "all+=0.3",
     );
-    // Her three courses shrink and travel to their places among the rest.
-    known.forEach((el, g) => {
-      const from = knownPos(g);
-      const to = wallPos(HER_WALL_SLOTS[g] ?? 0);
-      tl.to(
-        el,
-        {
-          x: to.x - from.x,
-          y: to.y - from.y,
-          scale: WALL.scale,
-          duration: 0.95,
-          ease: "deck.morph",
-        },
-        "all+=0.15",
-      );
-    });
-    tl.set(".fh-her-known", { autoAlpha: 0 }, "all+=0.15");
-    // Every other course stacks in around them, from below.
+    // The window steps back until the whole day is in it.
+    tl.to(
+      ".fh-layer",
+      { ...layerAt(WHOLE), duration: 1, ease: "deck.morph" },
+      "all+=0.15",
+    );
+    tl.set([".fh-n-one", ".fh-t-one"], { autoAlpha: 0 }, "all+=0.6");
+    tl.set([".fh-n-all", ".fh-t-all"], { autoAlpha: 1 }, "all+=0.6");
     tl.fromTo(
-      others,
-      { autoAlpha: 0, y: 120 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: 0.6,
-        ease: "power3.out",
-        stagger: { each: 0.018, from: "start" },
-      },
-      "all+=0.45",
+      ".fh-of",
+      { autoAlpha: 0, x: -12 },
+      { autoAlpha: 1, x: 0, duration: 0.45, ease: "deck.enter" },
+      "all+=0.6",
     );
-    tl.set(countKnown, { autoAlpha: 0 }, "all+=0.6");
-    tl.set(countAll, { autoAlpha: 1 }, "all+=0.6");
-
-    // The scan again, through everything, faster and faster.
-    const slotOrigin = (s: number) => wallPos(s);
-    const allPath = Array.from({ length: FOUND_AT_ALL }, (_, n) =>
-      cellRect(slotOrigin(Math.floor(n / CELLS)), n % CELLS, WALL.scale),
-    );
-    const start = allPath[0]!;
-    tl.set(
-      box,
-      {
-        borderColor: EYE.border,
-        backgroundColor: EYE.fill,
-        borderWidth: 2,
-      },
-      "all+=1.3",
-    );
-    tl.fromTo(
-      box,
-      { autoAlpha: 0, ...start },
-      { autoAlpha: 1, ...start, duration: 0.2, ease: "power2.out" },
-      "all+=1.3",
-    );
-    const scan = gsap.timeline({ paused: true });
-    allPath.slice(1).forEach((r, n) => {
-      scan.to(box, { ...r, duration: 0.8, ease: "power1.inOut" }, n + 1);
-    });
-    const counterB = { n: 1 };
-    scan.fromTo(
-      counterB,
-      { n: 1 },
-      {
-        n: FOUND_AT_ALL,
-        duration: FOUND_AT_ALL - 1,
-        ease: "none",
-        onUpdate: () =>
-          (countAllN.textContent = String(Math.round(counterB.n))),
-      },
-      0,
-    );
-    tl.fromTo(
-      scan,
-      { progress: 0 },
-      { progress: 1, duration: 2.6, ease: "power2.in" },
-      "all+=1.5",
-    );
-    // Found, at last: the rest of the wall steps back.
-    tl.to(box, {
-      borderColor: EYE.foundBorder,
-      backgroundColor: EYE.foundFill,
-      duration: 0.2,
-      ease: "power2.out",
-    });
-    tl.fromTo(
-      ".fh-her-wall",
-      { autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.2, ease: "power2.out" },
-      "<",
-    );
-    tl.to(".fh-dim", { opacity: 0.35, duration: 0.5, ease: "power2.out" }, "<");
-    tl.fromTo(
-      ".fh-cost",
-      { autoAlpha: 0, x: 30 },
-      { autoAlpha: 1, x: 0, duration: 0.6, ease: "deck.enter" },
-      "<0.1",
+    // The hand comes back on the day's first class. From there the hunt runs
+    // on its own, in real time: see the loop below.
+    const first = tipOf(ALL[0]!);
+    tl.set(".fh-hand", { x: first.x, y: first.y }, "all+=1.15");
+    tl.to(
+      ".fh-hand",
+      { autoAlpha: 1, duration: 0.2, ease: "power1.out" },
+      "all+=1.15",
     );
     mark();
   });
+
+  /* Build 2's hunt, at the site's own pace: to the next class, two seconds
+   * still before its tooltip, a glance, on. A hundred classes take over five
+   * minutes, so this is a loop of its own once the build lands, not part of
+   * the build: stepping back mid-hunt must not play it backwards. It stops
+   * when the slide leaves or the step changes, and under reduced motion it
+   * shows where it would end. */
+  useGSAP(
+    () => {
+      if (!active || step < 2) return;
+      const scope = root.current;
+      const writeHovered = writer(scope, ".fh-n-all");
+      const writeWaited = writer(scope, ".fh-t-all");
+      const reset = () => {
+        writeHovered("0");
+        writeWaited("0:00");
+      };
+      if (instant) {
+        gsap.set(".fh-hand", { autoAlpha: 0 });
+        gsap.set([".fh-wash", ".fh-ring-all"], { autoAlpha: 1 });
+        writeHovered(String(ALL.length));
+        writeWaited(clock(ALL.length * DELAY));
+        return reset;
+      }
+
+      const target = hoverTargets(scope?.querySelector(".fh-page"));
+      const tooltip = scope?.querySelector<HTMLElement>(".fh-tip-live");
+      const waited = { s: 0 };
+      const loop = gsap.timeline({ delay: SETTLE });
+      ALL.forEach((b, i) => {
+        const t = target(b);
+        if (i) {
+          const tip = tipOf(b);
+          loop.to(".fh-hand", {
+            x: tip.x,
+            y: tip.y,
+            duration: MOVE,
+            ease: "power2.out",
+          });
+        }
+        const at = `class${i}`;
+        loop.addLabel(at);
+        hover(loop, t, true, at);
+        loop.call(() => writeHovered(String(i + 1)), [], at);
+        loop.to(
+          waited,
+          {
+            s: (i + 1) * DELAY,
+            duration: DELAY,
+            ease: "none",
+            onUpdate: () => writeWaited(clock(waited.s)),
+          },
+          at,
+        );
+        if (tooltip) {
+          loop.call(() => (tooltip.textContent = b[4]), [], at);
+          loop.set(tooltip, tooltipAt(b, WHOLE), at);
+          loop.set(tooltip, { autoAlpha: 1 }, `${at}+=${DELAY}`);
+          loop.set(tooltip, { autoAlpha: 0 }, `${at}+=${DELAY + GLANCE}`);
+        }
+        hover(loop, t, false, `${at}+=${DELAY + GLANCE}`);
+      });
+      // All hundred read; theirs were two of them. The rest steps back.
+      loop.to(".fh-hand", { autoAlpha: 0, duration: 0.2, ease: "power1.in" });
+      loop.fromTo(
+        ".fh-wash",
+        { autoAlpha: 0 },
+        { autoAlpha: 1, duration: 0.5, ease: "power2.out" },
+        "<",
+      );
+      loop.fromTo(
+        ".fh-ring-all",
+        { autoAlpha: 0, scale: 1.12 },
+        { autoAlpha: 1, scale: 1, duration: 0.4, ease: "deck.enter" },
+        "<0.1",
+      );
+      return reset;
+    },
+    {
+      scope: root,
+      dependencies: [step, active, instant],
+      revertOnUpdate: true,
+    },
+  );
 
   return (
     <div
@@ -511,11 +490,11 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
               }}
             >
               <div className="font-display text-fg text-[40px] leading-tight font-semibold tracking-[-0.025em] whitespace-nowrap">
-                Where is Prof. Kulkarni right now?
+                Where is Dr. Nagane right now?
               </div>
             </div>
             <div className="t-small text-muted mt-3 ml-2">
-              A BCA-B student <span className="tabular">· 10:52</span>
+              A BCA Sem VII student <span className="tabular">· 11:44</span>
             </div>
           </div>
         </div>
@@ -525,122 +504,217 @@ export function FacultyHunt({ step }: FacultyHuntProps) {
           {/* divs, not p: the global `p { text-wrap: pretty }` is unlayered
               and would beat Tailwind's nowrap, breaking the line. */}
           <div className="fh-label-known t-h3 text-fg invisible absolute top-0 left-0 whitespace-nowrap">
-            If you know her courses:{" "}
-            <span className="text-muted">read each one</span>
+            If you know their classes:{" "}
+            <span className="text-muted">hover each one</span>
           </div>
           <div className="fh-label-all t-h3 text-fg invisible absolute top-0 left-0 whitespace-nowrap">
             If you don&apos;t:{" "}
-            <span className="text-muted">read every course today</span>
+            <span className="text-muted">hover every class today</span>
           </div>
         </div>
 
-        {/* Every other course, waiting in the wall */}
-        {WALL_SLOTS.map((slot, s) => {
-          if (slot.mine !== null) return null;
-          const p = wallPos(s);
-          return (
-            <div
-              key={s}
-              className="fh-other fh-dim invisible absolute"
-              style={{ left: p.x, top: p.y }}
-            >
+        {/* The timetable site */}
+        <div
+          className="fh-window invisible absolute left-0"
+          style={{ top: WIN.top }}
+        >
+          <BrowserFrame
+            url="time-table.sicsr.ac.in/day.php?year=2026&month=10&day=06&area=1&room=29"
+            insecure
+            width={WIN.width}
+            height={WIN.height}
+          >
+            <div className="absolute inset-0 overflow-hidden bg-white">
               <div
+                className="fh-layer absolute top-0 left-0"
+                style={{ width: VIEW.width, height: VIEW.height }}
+              >
+                <MrbsStatic className="fh-page" />
+                <Wash />
+                <Ring rect={rectOf(FOUND)} className="fh-ring-one" />
+                <Ring rect={THEIRS} className="fh-ring-all" />
+                {HUNT.map((b, i) => (
+                  <Tooltip
+                    key={b[0]}
+                    text={b[4]}
+                    at={tooltipAt(b, CLOSE)}
+                    className={`fh-tip-${i}`}
+                  />
+                ))}
+                {/* Build 2's tooltip: one, moved and refilled per class. */}
+                <Tooltip
+                  text=""
+                  at={{ left: 0, top: 0 }}
+                  className="fh-tip-live"
+                />
+                <Hand />
+              </div>
+
+              {/* Found, in build 1 */}
+              <div
+                className="fh-found bg-raised invisible absolute flex items-center gap-4 rounded-[22px] px-6"
                 style={{
-                  width: GRID.width * WALL.scale,
-                  height: GRID_H * WALL.scale,
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  height: 64,
+                  boxShadow: "inset 0 0 0 1px var(--line), var(--shadow-2)",
                 }}
               >
-                <div
-                  className="origin-top-left"
-                  style={{ transform: `scale(${WALL.scale})` }}
-                >
-                  <CourseGrid course={slot.course} seed={s + 11} />
-                </div>
+                <Icon name="checkCircle" size={32} stroke={2} color={GOOD} />
+                <span className="text-fg text-[24px] font-semibold tracking-[-0.01em] whitespace-nowrap">
+                  Dr. Aniket Nagane
+                </span>
+                <span className="text-muted truncate text-[22px]">
+                  Android Programming, Room 702{" "}
+                  <span className="tabular">· 11:30</span>
+                </span>
               </div>
             </div>
-          );
-        })}
+          </BrowserFrame>
+        </div>
 
-        {/* Her courses */}
-        {HER_COURSES.map((course, g) => {
-          const p = knownPos(g);
-          const isFound = g === FOUND.grid;
-          return (
-            <div
-              key={course}
-              className="absolute"
-              style={{ left: p.x, top: p.y }}
-            >
-              <div
-                className={`fh-known invisible origin-top-left ${isFound ? "" : "fh-dim"}`}
-              >
-                <CourseGrid course={course} seed={g + 3} />
-                {isFound && (
-                  <>
-                    <div className="fh-her-known invisible absolute inset-0">
-                      <CourseGrid
-                        course={course}
-                        seed={g + 3}
-                        found={FOUND_INDEX}
-                      />
-                    </div>
-                    <div className="fh-her-wall invisible absolute inset-0">
-                      <CourseGrid
-                        course={course}
-                        seed={g + 3}
-                        found={FOUND_INDEX}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* The reader's eye */}
+        {/* The counters, and what they add up to. Two columns from their left
+            edges, so the totals build 2 adds after them move nothing. */}
         <div
-          className="fh-box pointer-events-none invisible absolute top-0 left-0 rounded-[12px]"
-          style={{
-            border: `3px solid ${EYE.border}`,
-            background: EYE.fill,
-          }}
-        />
-
-        {/* Found, in build 1 */}
-        <div
-          className="fh-found invisible absolute left-0 flex items-center gap-4"
-          style={{ top: GRID.top + GRID_H + 32 }}
+          className="fh-counters invisible absolute inset-x-0 bottom-0 grid grid-cols-2 items-end"
+          style={{ top: WIN.top + WIN.height + 20 }}
         >
-          <Icon name="checkCircle" size={34} stroke={2} color="var(--good)" />
-          <span className="text-fg flex items-baseline gap-3 text-[30px] font-semibold tracking-[-0.01em] whitespace-nowrap">
-            Prof. Kulkarni
-            <span className="text-muted font-normal">Data Mining, BCA-B</span>
-            <span className="tabular">11:00 · Lab 2</span>
-          </span>
-        </div>
-
-        {/* The counter, and what it costs */}
-        <div className="fh-counter invisible absolute bottom-0 left-0 flex flex-col gap-3">
-          <span className="t-small text-muted">Cells read</span>
-          <span className="text-fg grid">
-            <span className="fh-count-known t-mono col-start-1 row-start-1 text-[84px] leading-none font-semibold tracking-[-0.04em] tabular-nums">
-              1
+          <div className="flex flex-col gap-2">
+            <span className="t-small text-muted">Classes hovered</span>
+            <span className="flex items-baseline gap-3">
+              <span className="text-fg grid">
+                <Counter className="fh-n-one" value="0" />
+                <Counter className="fh-n-all invisible" value="0" />
+              </span>
+              <span className="fh-of t-body text-muted tabular invisible whitespace-nowrap">
+                of {ALL.length}
+              </span>
             </span>
-            <span className="fh-count-all t-mono invisible col-start-1 row-start-1 text-[84px] leading-none font-semibold tracking-[-0.04em] tabular-nums">
-              <Ph note="Cells read to find one teacher across every course that day">
-                <span className="fh-count-all-n">1</span>
-              </Ph>
-            </span>
-          </span>
-        </div>
-        <div className="fh-cost invisible absolute right-0 bottom-0 text-right">
-          <div className="t-h2 text-accent tabular leading-none">
-            ≈ <Ph>6 min</Ph>
           </div>
-          <div className="t-body text-muted mt-2">to find one person</div>
+          <div className="flex flex-col gap-2">
+            <span className="t-small text-muted">Waiting for tooltips</span>
+            <span className="flex items-baseline gap-3">
+              <span className="text-fg grid">
+                <Counter className="fh-t-one" value="0:00" />
+                <Counter className="fh-t-all invisible" value="0:00" />
+              </span>
+              <span className="fh-of t-body text-accent tabular invisible whitespace-nowrap">
+                of {clock(ALL.length * DELAY)}
+              </span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+
+function Counter({ className, value }: { className: string; value: string }) {
+  return (
+    <span
+      className={`t-mono col-start-1 row-start-1 text-[76px] leading-none font-semibold tracking-[-0.04em] tabular-nums ${className}`}
+    >
+      {value}
+    </span>
+  );
+}
+
+function Tooltip({
+  text,
+  at,
+  className,
+}: {
+  text: string;
+  at: { left: number; top: number };
+  className: string;
+}) {
+  return (
+    <div
+      className={`pointer-events-none invisible absolute w-max ${className}`}
+      style={{ ...TOOLTIP, left: at.left, top: at.top }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function Hand() {
+  return (
+    <div
+      className="fh-hand pointer-events-none invisible absolute top-0 left-0"
+      style={{
+        width: HAND.size,
+        height: HAND.size,
+        marginLeft: -HAND.hotX,
+        marginTop: -HAND.hotY,
+        filter: "drop-shadow(0 1px 1.2px rgba(0,0,0,0.35))",
+      }}
+    >
+      <Icon
+        name="hand"
+        weight="fill"
+        color="#ffffff"
+        size={HAND.size}
+        className="absolute inset-0"
+      />
+      <Icon
+        name="hand"
+        weight="regular"
+        color="#111111"
+        size={HAND.size}
+        className="absolute inset-0"
+      />
+    </div>
+  );
+}
+
+/** A found class, ringed in the deck's good green. */
+function Ring({
+  rect,
+  className,
+}: {
+  rect: { x: number; y: number; w: number; h: number };
+  className: string;
+}) {
+  const pad = 3;
+  return (
+    <div
+      className={`pointer-events-none invisible absolute rounded-[5px] ${className}`}
+      style={{
+        left: rect.x - pad,
+        top: rect.y - pad,
+        width: rect.w + pad * 2,
+        height: rect.h + pad * 2,
+        boxShadow: `0 0 0 3px ${GOOD}`,
+      }}
+    />
+  );
+}
+
+/** Washes the page back towards the stage, except Dr. Nagane's classes. */
+function Wash() {
+  const pad = 3;
+  return (
+    <svg
+      aria-hidden
+      className="fh-wash pointer-events-none invisible absolute inset-0"
+      width={VIEW.width}
+      height={VIEW.height}
+      viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
+    >
+      <path
+        fillRule="evenodd"
+        fill="#f2f3f6"
+        fillOpacity={0.72}
+        d={[
+          `M0,0H${VIEW.width}V${VIEW.height}H0Z`,
+          `M${THEIRS.x - pad},${THEIRS.y - pad}`,
+          `h${THEIRS.w + pad * 2}v${THEIRS.h + pad * 2}h${-(THEIRS.w + pad * 2)}Z`,
+        ].join("")}
+      />
+    </svg>
   );
 }
