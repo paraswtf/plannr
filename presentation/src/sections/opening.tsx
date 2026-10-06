@@ -78,6 +78,7 @@ export const opening: SectionDef = {
           lede="Plannr combines the best features from all the apps you already use and gives you a single place to look at."
           footer={
             <>
+              <AppIcon app="timetable" />
               <AppIcon app="gmail" />
               <AppIcon app="whatsapp" />
               <AppIcon app="moodle" />

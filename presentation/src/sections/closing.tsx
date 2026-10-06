@@ -74,7 +74,7 @@ export const closing: SectionDef = {
       title: "What we combined",
       steps: 2,
       notes: [
-        "So that's what we built. Today there's the timetable for classes, the class WhatsApp group for the news, Moodle for assignments, material and attendance, and email for every change — four apps that don't talk to each other.",
+        "So that's what we built. Today there's the timetable for classes, the class WhatsApp group for the news, Moodle for assignments, material and attendance, and Gmail for every change — four apps that don't talk to each other.",
         "Plannr is all four, in one place. One source of truth: change it once, and everyone who needs to know, knows.",
       ],
       render: ({ step }) => (
@@ -92,7 +92,7 @@ export const closing: SectionDef = {
               does: "Assignments, material, attendance",
               icon: "cap",
             },
-            { name: "Email", does: "Every change, by hand", icon: "mail" },
+            { name: "Gmail", does: "Every change, by hand", icon: "mail" },
           ]}
           tagline={
             <>

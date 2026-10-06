@@ -2,10 +2,20 @@
 
 import { useId, useRef, type ReactNode } from "react";
 
-import { gsap } from "~/deck/gsap";
+import { gsap, MotionPathPlugin } from "~/deck/gsap";
 import { useSteps } from "~/deck/useSteps";
-import { Icon, type IconName } from "~/ui/icon";
+import {
+  APP_TILE,
+  GMAIL_M,
+  MARK_SIZE,
+  MOODLE_CAP,
+  MOODLE_M,
+  MOODLE_VIEWBOX,
+  WHATSAPP,
+} from "~/ui/brand-marks";
+import type { IconName } from "~/ui/icon";
 import { SAFE } from "~/ui/layout";
+import { TIMETABLE_MARK, TimetableMarkDetail } from "~/ui/timetable-mark";
 
 import { ACCENT, useEntrance } from "./_closing-motion";
 
@@ -14,9 +24,9 @@ export interface MergeAppsProps {
   title: ReactNode;
   /**
    * The apps people juggle today, left to right. Up to four are drawn; each
-   * one's glyph is chosen by its icon: a grid or calendar is the timetable,
-   * whatsapp or message is the class group, a cap or book is Moodle, a mail
-   * or inbox is email.
+   * one's logo is chosen by its icon: a grid or calendar is the timetable
+   * site, whatsapp or message is the class group, a cap or book is Moodle, a
+   * mail or inbox is Gmail.
    */
   apps: { name: ReactNode; does: ReactNode; icon: IconName }[];
   /** Under the merged mark: "One place. One source of truth." */
@@ -27,8 +37,8 @@ export interface MergeAppsProps {
 
 /*
  * The four shapes of public/logo.svg (167 × 194), in the order the file paints
- * them, with their gradients. The glyphs below are drawn in the same space, so
- * each one morphs into its piece of the mark without moving its frame.
+ * them, with their gradients. The logos below are placed in the same space,
+ * so each one morphs into its piece of the mark without moving its frame.
  */
 const MARK = [
   {
@@ -59,100 +69,6 @@ const MARK = [
 
 type Glyph = "timetable" | "whatsapp" | "moodle" | "email";
 
-/*
- * The glyphs, in the mark's coordinate space. Each solid silhouette is one
- * path, so it can morph cleanly; the details that make it read (the grid,
- * the envelope's flap, the handset, the tassel) sit on top and fade as the
- * morph begins. Four apps, four pieces of the mark, one each:
- *
- *   timetable: the grid's body → the mark's lower-left block (path 0)
- *   email:     the envelope → the mark's top bar (path 1)
- *   whatsapp:  the speech bubble → the mark's stem (path 2). Without the
- *              class group, a double-period class in the grid becomes it.
- *   moodle:    the mortarboard → the mark's right-hand block (path 3)
- */
-const GLYPH = {
-  timetableBody:
-    "M26 18H142C155.255 18 166 28.7452 166 42V152C166 165.255 155.255 176 142 176H26C12.7452 176 2 165.255 2 152V42C2 28.7452 12.7452 18 26 18Z",
-  timetableClass:
-    "M58 62H69C73.9706 62 78 66.0294 78 71V121C78 125.971 73.9706 130 69 130H58C53.0294 130 49 125.971 49 121V71C49 66.0294 53.0294 62 58 62Z",
-  envelope:
-    "M22 36H146C157.046 36 166 44.9543 166 56V138C166 149.046 157.046 158 146 158H22C10.9543 158 2 149.046 2 138V56C2 44.9543 10.9543 36 22 36Z",
-  cap: "M2 74L84 40L166 74L128 89.76V132C128 146 108 156 84 156C60 156 40 146 40 132V89.76Z",
-  /** A circle with WhatsApp's tail at its lower left. */
-  bubble: "M57.03 160.76A72 72 0 1 0 22.94 132.15L10 178Z",
-};
-
-/**
- * What each glyph looks like as an app. The apps people juggle today are
- * drawn in greys, steps of the stage's slate, so the only colour in the
- * picture is the one they become: the Plannr mark.
- */
-const LOOK: Record<Glyph, { stops: [string, string] }> = {
-  timetable: { stops: ["#7c8596", "#4f5868"] },
-  whatsapp: { stops: ["#959dab", "#687182"] },
-  moodle: { stops: ["#a4abb8", "#7a8393"] },
-  email: { stops: ["#8f97a6", "#626b7b"] },
-};
-/** The double-period class, when it is a piece of its own. */
-const CLASS_STOPS: [string, string] = ["#f4f5f8", "#d6dae1"];
-
-const ORDER: Glyph[] = ["timetable", "whatsapp", "moodle", "email"];
-
-function glyphFor(icon: IconName, index: number): Glyph {
-  if (icon === "grid" || icon === "calendar") return "timetable";
-  if (icon === "whatsapp" || icon === "message") return "whatsapp";
-  if (icon === "cap" || icon === "book") return "moodle";
-  if (icon === "mail" || icon === "inbox") return "email";
-  return ORDER[index % ORDER.length] ?? "timetable";
-}
-
-interface Piece {
-  glyph: Glyph;
-  shape: string;
-  /** The gradient's line, in the glyph's space: x1, y1, x2, y2. */
-  vector: [number, number, number, number];
-  stops: [string, string];
-}
-
-/** The mark's four pieces, in its paint order: which app each comes from. */
-function piecesFor(glyphs: Glyph[]): Piece[] {
-  const stem: Piece = glyphs.includes("whatsapp")
-    ? {
-        glyph: "whatsapp",
-        shape: GLYPH.bubble,
-        vector: [84, 22, 84, 178],
-        stops: LOOK.whatsapp.stops,
-      }
-    : {
-        glyph: "timetable",
-        shape: GLYPH.timetableClass,
-        vector: [63, 62, 63, 130],
-        stops: CLASS_STOPS,
-      };
-  return [
-    {
-      glyph: "timetable",
-      shape: GLYPH.timetableBody,
-      vector: [84, 18, 84, 176],
-      stops: LOOK.timetable.stops,
-    },
-    {
-      glyph: "email",
-      shape: GLYPH.envelope,
-      vector: [84, 36, 84, 158],
-      stops: LOOK.email.stops,
-    },
-    stem,
-    {
-      glyph: "moodle",
-      shape: GLYPH.cap,
-      vector: [84, 40, 84, 156],
-      stops: LOOK.moodle.stops,
-    },
-  ];
-}
-
 /* Canvas geometry, for up to four tiles in a row. */
 const LOCAL = { cx: 84, cy: 97 };
 const TILE = 240;
@@ -160,6 +76,13 @@ const TILE_Y = 572;
 const SPREAD = 360;
 const LABEL_W = 340;
 const GLYPH_SCALE = 0.8;
+/** A tile, in the mark's units: the logos are placed in it as the intro
+ * slide's app icons place them in theirs. */
+const TILE_LOCAL = {
+  size: TILE / GLYPH_SCALE,
+  left: LOCAL.cx - TILE / GLYPH_SCALE / 2,
+  top: LOCAL.cy - TILE / GLYPH_SCALE / 2,
+};
 const MARK_H = 330;
 const MARK_SCALE = MARK_H / 194;
 const MARK_CENTRE = { x: 960, y: 560 };
@@ -178,16 +101,186 @@ const startOf = (i: number, n: number) => ({
 const transformOf = (t: { x: number; y: number; s: number }) =>
   `translate(${t.x} ${t.y}) scale(${t.s})`;
 
+/* ------------------------------------------------------------------------ */
+/* The logos, as parts that morph.                                          */
+
+/** A shape of a logo that travels and becomes a piece of the mark. */
+interface Part {
+  d: string;
+  /** Its fill, as stops along `line` (a flat colour is two equal stops). */
+  stops: [offset: number, color: string][];
+  line: [x1: number, y1: number, x2: number, y2: number];
+  /** Not drawn at rest: it fills an outline mark in as the morph begins. */
+  fillIn?: boolean;
+}
+
+interface Look {
+  /** The tile behind the logo, as the app's own icon has it. */
+  tile: string;
+  /** The piece of the mark the logo becomes. */
+  piece: number;
+  parts: Part[];
+}
+
+/** A box's placement in the mark's units: scale, then offset. */
+interface Placement {
+  s: number;
+  x: number;
+  y: number;
+}
+
+/** A path in its own units, carried into the mark's: one part per subpath,
+ * so each morphs on its own. */
+function placed(d: string, at: Placement): string[] {
+  return MotionPathPlugin.stringToRawPath(d).map((segment) => {
+    for (let i = 0; i < segment.length; i += 2) {
+      segment[i] = (segment[i] ?? 0) * at.s + at.x;
+      segment[i + 1] = (segment[i + 1] ?? 0) * at.s + at.y;
+    }
+    return MotionPathPlugin.rawPathToString([segment]);
+  });
+}
+
+const flat = (color: string): Part["stops"] => [
+  [0, color],
+  [1, color],
+];
+
+/** Centred in the tile at `width` of it, `box` being the mark's own size. */
+function centred(box: { width: number; height: number }, width: number) {
+  const s = (TILE_LOCAL.size * width) / box.width;
+  return {
+    s,
+    x: LOCAL.cx - (box.width * s) / 2,
+    y: LOCAL.cy - (box.height * s) / 2,
+  };
+}
+
+/* Where each logo sits, as on the intro slide's app icons (see
+ * visuals/opening/_app-icons.tsx). */
+const AT_TIMETABLE = centred(TIMETABLE_MARK, MARK_SIZE.timetable);
+const AT_GMAIL = centred(GMAIL_M, MARK_SIZE.gmail);
+const AT_WHATSAPP = centred({ width: 24, height: 24 }, MARK_SIZE.whatsapp);
+const AT_MOODLE = (() => {
+  const [vx = 0, vy = 0, vw = 1] = MOODLE_VIEWBOX.split(" ").map(Number);
+  const s = TILE_LOCAL.size / vw;
+  return { s, x: TILE_LOCAL.left - vx * s, y: TILE_LOCAL.top - vy * s };
+})();
+
+/*
+ * Which logo becomes which piece: the timetable's window the mark's base, the
+ * Gmail M its top bar, the WhatsApp bubble its stem, Moodle's "m" and cap its
+ * bright block. Each goes the way its colour already leans: Moodle's orange
+ * to the orange block, Gmail's red to the berry bar, the timetable's slate
+ * to the slate base.
+ */
+const LOOKS: Record<Glyph, Look> = {
+  timetable: {
+    tile: APP_TILE.timetable,
+    piece: 0,
+    parts: placed(TIMETABLE_MARK.window, AT_TIMETABLE).map((d) => {
+      const [x1, y1, x2, y2] = TIMETABLE_MARK.line;
+      const at = AT_TIMETABLE;
+      return {
+        d,
+        stops: TIMETABLE_MARK.stops.map(([o, c]) => [o, c] as [number, string]),
+        line: [
+          x1 * at.s + at.x,
+          y1 * at.s + at.y,
+          x2 * at.s + at.x,
+          y2 * at.s + at.y,
+        ] as Part["line"],
+      };
+    }),
+  },
+  email: {
+    tile: APP_TILE.gmail,
+    piece: 1,
+    parts: GMAIL_M.parts.flatMap(({ d, stops, line: [x1, y1, x2, y2] }) =>
+      placed(d, AT_GMAIL).map((shape) => ({
+        d: shape,
+        stops:
+          stops.length > 1
+            ? stops.map(([o, c]) => [o, c] as [number, string])
+            : flat(stops[0]?.[1] ?? "#fc413d"),
+        line: [
+          x1 * AT_GMAIL.s + AT_GMAIL.x,
+          y1 * AT_GMAIL.s + AT_GMAIL.y,
+          x2 * AT_GMAIL.s + AT_GMAIL.x,
+          y2 * AT_GMAIL.s + AT_GMAIL.y,
+        ] as Part["line"],
+      })),
+    ),
+  },
+  whatsapp: {
+    tile: APP_TILE.whatsapp,
+    piece: 2,
+    parts: [
+      {
+        // The ring's outer edge, the last of WhatsApp's three subpaths: the
+        // bubble, solid, in its own green.
+        d: placed(WHATSAPP, AT_WHATSAPP).at(-1) ?? "",
+        stops: [
+          [0, "#00ec71"],
+          [1, "#00db41"],
+        ],
+        line: [84, 0, 84, 194],
+        fillIn: true,
+      },
+    ],
+  },
+  moodle: {
+    tile: APP_TILE.moodle,
+    piece: 3,
+    parts: [
+      ...placed(MOODLE_CAP, AT_MOODLE).map((d) => ({
+        d,
+        stops: flat("#333333"),
+        line: [84, 0, 84, 194] as Part["line"],
+      })),
+      ...placed(MOODLE_M, AT_MOODLE).map((d) => ({
+        d,
+        stops: flat("#f48020"),
+        line: [84, 0, 84, 194] as Part["line"],
+      })),
+    ],
+  },
+};
+
+const ORDER: Glyph[] = ["timetable", "whatsapp", "moodle", "email"];
+
+function glyphFor(icon: IconName, index: number): Glyph {
+  if (icon === "grid" || icon === "calendar") return "timetable";
+  if (icon === "whatsapp" || icon === "message") return "whatsapp";
+  if (icon === "cap" || icon === "book") return "moodle";
+  if (icon === "mail" || icon === "inbox") return "email";
+  return ORDER[index % ORDER.length] ?? "timetable";
+}
+
+/** A mix of two hex colours, `t` of the way from a to b. */
+function mix(a: string, b: string, t: number) {
+  const ch = (hex: string, i: number) =>
+    parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) =>
+    Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t)
+      .toString(16)
+      .padStart(2, "0"),
+  );
+  return `#${out.join("")}`;
+}
+
 /**
  * The deck's thesis as one motion: the timetable site, the class WhatsApp
- * group, Moodle and the inbox collapse into a single Plannr mark.
+ * group, Moodle and Gmail collapse into a single Plannr mark.
  *
- * Build 0 sets the apps out as tiles. Build 1 lets the tiles go: the glyphs
- * travel to the middle, and as they travel each one morphs (MorphSVG) into
- * its piece of the mark (the grid becomes the mark's base, the speech bubble
- * its stem, the envelope its top bar, the cap its bright block), changing
- * from grey into the mark's own gradients on the way. The pieces lock
- * together with a pulse of one accent ring, and the tagline rises underneath.
+ * Build 0 sets the apps out as their own icons, in their own colours: the
+ * same logos the intro slide shows (ui/brand-marks.ts), and the timetable as
+ * a small copy of its page. Build 1 lets them go: the tiles slide in and
+ * dissolve, the logos travel to the middle, and as they travel each one
+ * morphs (MorphSVG) into its piece of the mark, every shape of it changing
+ * from its brand's colours into the mark's own gradient on the way (an
+ * outline mark, WhatsApp's, first fills in solid). The pieces lock together
+ * with a pulse of one accent ring, and the tagline rises underneath.
  */
 export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -195,15 +288,25 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
   const shown = apps.slice(0, ORDER.length);
   const n = shown.length;
   const glyphs = shown.map((a, i) => glyphFor(a.icon, i));
-  const slot = (g: Glyph) => Math.max(0, glyphs.indexOf(g));
 
-  // Which tile each of the mark's four pieces starts in.
-  const pieces = piecesFor(glyphs);
-  const pieceSlot = pieces.map((p) => slot(p.glyph));
-  const pieceStart = pieceSlot.map((i) => startOf(i, n));
-  // With the class group drawn, the grid's class is no longer a piece of the
-  // mark, only part of how the grid reads.
-  const classInGrid = glyphs.includes("whatsapp");
+  // Each app's logo, painted in the order of the pieces it becomes, so the
+  // overlaps at the end are the mark's own.
+  const groups = glyphs
+    .map((glyph, slot) => ({ glyph, slot, look: LOOKS[glyph] }))
+    .sort((a, b) => a.look.piece - b.look.piece);
+  // Every part, in paint order, with the piece it ends as and its stops'
+  // colours at the end: the piece's gradient, the stops spread over it.
+  let next = 0;
+  const parts = groups.flatMap(({ look }) =>
+    look.parts.map((part) => ({ ...part, piece: look.piece, id: next++ })),
+  );
+  const stopsAtEnd = parts.flatMap(({ piece, stops }) => {
+    const [a, b] = MARK[piece]?.stops ?? MARK[0].stops;
+    return stops.map((_, j) => {
+      const t = stops.length > 1 ? j / (stops.length - 1) : 0;
+      return { offset: t, color: mix(a, b, t) };
+    });
+  });
 
   const firstStep = useRef(step).current;
   useEntrance(root, (tl) => {
@@ -246,14 +349,15 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
         ".ma-travel",
         root.current,
       );
-      const paths = gsap.utils.toArray<SVGPathElement>(
-        ".ma-piece",
+      const shapes = gsap.utils.toArray<SVGPathElement>(
+        ".ma-part",
         root.current,
       );
       tl.addLabel("m");
 
       // The apps let go: labels drop away, tiles slide in towards the middle
-      // and dissolve, the glyphs shed their details.
+      // and dissolve. An outline logo fills in first, then the details that
+      // are not part of any piece fade.
       tl.to(
         ".ma-label",
         { y: 28, opacity: 0, duration: 0.45, ease: "power2.in", stagger: 0.04 },
@@ -276,17 +380,22 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
         "m+=0.08",
       );
       tl.to(
-        ".ma-detail",
-        { opacity: 0, duration: 0.4, ease: "power1.in" },
+        ".ma-fill-in",
+        { opacity: 1, duration: 0.22, ease: "power1.out" },
         "m",
       );
+      tl.to(
+        ".ma-detail",
+        { opacity: 0, duration: 0.36, ease: "power1.in" },
+        "m+=0.12",
+      );
 
-      // The glyphs travel into the mark's place, each piece's frame moving
-      // from its tile to the mark. The frames are proxies written to the
+      // The logos travel into the mark's place, each app's frame moving from
+      // its tile to the mark. The frames are proxies written to the
       // transform attribute, so the SVG's own coordinates are never
       // second-guessed by a transform origin.
-      const frames = travellers.map((_, k) => ({
-        ...(pieceStart[k] ?? startOf(0, n)),
+      const frames = travellers.map((g) => ({
+        ...startOf(Number(g.dataset.slot ?? 0), n),
       }));
       tl.to(
         frames,
@@ -305,42 +414,41 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
         "m+=0.05",
       );
 
-      // And morph into the mark's shapes and colours on the way.
-      paths.forEach((p, k) => {
-        const target = MARK[k];
-        if (!target) return;
+      // And morph, every shape of a logo into its piece of the mark, in
+      // shape and in colour.
+      const pieceOf = (i: number) => MARK[parts[i]?.piece ?? 0] ?? MARK[0];
+      shapes.forEach((p, i) => {
         tl.to(
           p,
           {
-            morphSVG: { shape: target.d, shapeIndex: "auto" },
+            morphSVG: { shape: pieceOf(i).d, shapeIndex: "auto" },
             duration: 1.05,
             ease: "power3.inOut",
           },
           "m+=0.22",
         );
       });
-      const piece = (i: number) => MARK[i] ?? MARK[0];
       tl.to(
         gsap.utils.toArray<SVGLinearGradientElement>(".ma-grad", root.current),
         {
           attr: {
-            x1: (i: number) => piece(i).from[0],
-            y1: (i: number) => piece(i).from[1],
-            x2: (i: number) => piece(i).to[0],
-            y2: (i: number) => piece(i).to[1],
+            x1: (i: number) => pieceOf(i).from[0],
+            y1: (i: number) => pieceOf(i).from[1],
+            x2: (i: number) => pieceOf(i).to[0],
+            y2: (i: number) => pieceOf(i).to[1],
           },
           duration: 1.05,
           ease: "power3.inOut",
         },
         "m+=0.22",
       );
-      // Stops run g0's start, g0's end, g1's start…
       tl.to(
         gsap.utils.toArray<SVGStopElement>(".ma-grad stop", root.current),
         {
           attr: {
-            "stop-color": (i: number): string =>
-              piece(Math.floor(i / 2)).stops[i % 2 === 0 ? 0 : 1],
+            offset: (i: number) => stopsAtEnd[i]?.offset ?? 0,
+            "stop-color": (i: number) =>
+              stopsAtEnd[i]?.color ?? MARK[0].stops[0],
           },
           duration: 1,
           ease: "power2.inOut",
@@ -410,6 +518,7 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
         </header>
 
         {shown.map((a, i) => {
+          const look = LOOKS[glyphs[i] ?? "timetable"];
           return (
             <div key={i}>
               <div
@@ -422,10 +531,11 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
                 }}
               >
                 <div
-                  className={`ma-tile-in-${i} bg-raised h-full w-full rounded-[58px]`}
+                  className={`ma-tile-in-${i} h-full w-full rounded-[54px]`}
                   style={{
+                    background: look.tile,
                     boxShadow:
-                      "inset 0 0 0 1px var(--line), inset 0 1px 0 #ffffff, var(--shadow-2)",
+                      "inset 0 0 0 1px var(--line), inset 0 1px 0 rgba(255,255,255,0.6), var(--shadow-2)",
                   }}
                 />
               </div>
@@ -459,10 +569,10 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
           aria-hidden
         >
           <defs>
-            {pieces.map(({ vector: [x1, y1, x2, y2] }, k) => (
+            {parts.map(({ id, stops, line: [x1, y1, x2, y2] }) => (
               <linearGradient
-                key={k}
-                id={`${uid}-g${k}`}
+                key={id}
+                id={`${uid}-g${id}`}
                 className="ma-grad"
                 x1={x1}
                 y1={y1}
@@ -470,8 +580,9 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
                 y2={y2}
                 gradientUnits="userSpaceOnUse"
               >
-                <stop stopColor={pieces[k]?.stops[0]} />
-                <stop offset="1" stopColor={pieces[k]?.stops[1]} />
+                {stops.map(([offset, color], j) => (
+                  <stop key={j} offset={offset} stopColor={color} />
+                ))}
               </linearGradient>
             ))}
           </defs>
@@ -487,22 +598,25 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
           />
 
           <g className="ma-lock">
-            {MARK.map((_, k) => (
-              <g key={k} className={`ma-enter-${pieceSlot[k]}`}>
+            {groups.map(({ glyph, slot }) => (
+              <g key={glyph} className={`ma-enter-${slot}`}>
                 <g
                   className="ma-travel"
-                  transform={transformOf(pieceStart[k] ?? startOf(0, n))}
+                  data-slot={slot}
+                  transform={transformOf(startOf(slot, n))}
                 >
-                  <path
-                    className="ma-piece"
-                    d={pieces[k]?.shape}
-                    fill={`url(#${uid}-g${k})`}
-                  />
-                  <GlyphDetail
-                    glyph={pieces[k]?.glyph ?? "timetable"}
-                    piece={k}
-                    classInGrid={classInGrid}
-                  />
+                  {parts
+                    .filter((p) => p.piece === LOOKS[glyph].piece)
+                    .map(({ id, d, fillIn }) => (
+                      <path
+                        key={id}
+                        className={`ma-part ${fillIn ? "ma-fill-in" : ""}`}
+                        d={d}
+                        fill={`url(#${uid}-g${id})`}
+                        style={fillIn ? { opacity: 0 } : undefined}
+                      />
+                    ))}
+                  <Detail glyph={glyph} />
                 </g>
               </g>
             ))}
@@ -528,107 +642,32 @@ export function MergeApps({ title, apps, tagline, step }: MergeAppsProps) {
   );
 }
 
-/** What makes each silhouette read as its app; fades as the morph starts. */
-function GlyphDetail({
-  glyph,
-  piece,
-  classInGrid,
-}: {
-  glyph: Glyph;
-  piece: number;
-  classInGrid: boolean;
-}) {
-  if (glyph === "timetable" && piece === 0) {
+/**
+ * What makes a logo read that is no piece of the mark; it fades as the morph
+ * starts. The timetable site: everything on its window (ui/timetable-mark).
+ * WhatsApp: its white mark on the green (the green bubble fills in under it
+ * first).
+ */
+function Detail({ glyph }: { glyph: Glyph }) {
+  if (glyph === "timetable") {
+    const at = AT_TIMETABLE;
     return (
-      <g className="ma-detail">
-        <path
-          d="M26 18H142C155.255 18 166 28.7452 166 42V56H2V42C2 28.7452 12.7452 18 26 18Z"
-          fill="#3a414d"
-        />
-        <circle cx="22" cy="37" r="5" fill="#c9ced8" />
-        <circle cx="38" cy="37" r="5" fill="#c9ced8" opacity="0.55" />
-        <path
-          d="M43 56V176M84 56V176M125 56V176M2 96H166M2 136H166"
-          stroke="#2a303a"
-          strokeOpacity="0.45"
-          strokeWidth="2.5"
-        />
-        <rect
-          x="90"
-          y="102"
-          width="29"
-          height="28"
-          rx="7"
-          fill="#ffffff"
-          opacity="0.32"
-        />
-        <rect
-          x="131"
-          y="142"
-          width="29"
-          height="28"
-          rx="7"
-          fill="#ffffff"
-          opacity="0.2"
-        />
-        <rect
-          x="8"
-          y="142"
-          width="29"
-          height="28"
-          rx="7"
-          fill="#ffffff"
-          opacity="0.2"
-        />
-        {classInGrid && <path d={GLYPH.timetableClass} fill="#e9ecf1" />}
+      <g
+        className="ma-detail"
+        transform={`translate(${at.x} ${at.y}) scale(${at.s})`}
+      >
+        <TimetableMarkDetail />
       </g>
     );
   }
   if (glyph === "whatsapp") {
     return (
       <g className="ma-detail">
-        {/* The handset, centred in the bubble. */}
-        <g transform="translate(50 60)">
-          <Icon name="call" size={68} weight="fill" color="#ffffff" />
-        </g>
-      </g>
-    );
-  }
-  if (glyph === "email") {
-    return (
-      <g className="ma-detail">
         <path
-          d="M18 54L84 104L150 54"
-          stroke="#ffffff"
-          strokeOpacity="0.85"
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          d={WHATSAPP}
+          fill="#ffffff"
+          transform={`translate(${AT_WHATSAPP.x} ${AT_WHATSAPP.y}) scale(${AT_WHATSAPP.s})`}
         />
-        <path
-          d="M18 142L62 104M150 142L106 104"
-          stroke="#ffffff"
-          strokeOpacity="0.32"
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-      </g>
-    );
-  }
-  if (glyph === "moodle") {
-    return (
-      <g className="ma-detail">
-        <path d="M2 74L84 40L166 74L84 108Z" fill="#ffffff" opacity="0.2" />
-        <path
-          d="M84 74L146 88V126"
-          stroke="#3a414d"
-          strokeOpacity="0.75"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="146" cy="132" r="9" fill="#3a414d" opacity="0.75" />
-        <circle cx="84" cy="74" r="7" fill="#3a414d" opacity="0.75" />
       </g>
     );
   }

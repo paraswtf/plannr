@@ -2,6 +2,8 @@
 
 import { useId, type CSSProperties, type ReactNode } from "react";
 
+import { GMAIL_M } from "~/ui/brand-marks";
+
 /*
  * Gmail on the web as it looks in October 2026: the Material 3 inbox with the
  * navigation collapsed to its rail and the side panel hidden, the Primary /
@@ -215,69 +217,45 @@ function IconAt({
 }
 
 /* ------------------------------------------------------------------------ */
-/* The Gmail M, 2026: the gradient mark from Google's May 2026 icon refresh  */
-/* (Wikimedia Commons, "Gmail icon (2026).svg").                            */
+/* The Gmail M, 2026: the gradient mark from Google's May 2026 icon refresh, */
+/* drawn from its parts in ui/brand-marks.ts.                               */
 
 export function GmailLogo({ width }: { width: number }) {
   const id = useId().replace(/:/g, "");
-  const right = `gm-r-${id}`;
-  const top = `gm-t-${id}`;
-  const t = "matrix(4.5454426,0,0,4.5454426,-36.362684,-118.18025)";
   return (
     <svg
       aria-hidden
-      viewBox="0 0 800 636.36322"
+      viewBox={`0 0 ${GMAIL_M.width} ${GMAIL_M.height}`}
       width={width}
-      height={(width * 636.36322) / 800}
+      height={(width * GMAIL_M.height) / GMAIL_M.width}
       style={{ display: "block" }}
     >
       <defs>
-        <linearGradient
-          id={right}
-          x1="165"
-          x2="165"
-          y1="44"
-          y2="166"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform={t}
-        >
-          <stop stopColor="#60d673" />
-          <stop offset=".17" stopColor="#42c868" />
-          <stop offset=".39" stopColor="#0ebc5f" />
-          <stop offset=".62" stopColor="#00a9bb" />
-          <stop offset=".86" stopColor="#3c90ff" />
-          <stop offset="1" stopColor="#3186ff" />
-        </linearGradient>
-        <linearGradient
-          id={top}
-          x1="8"
-          x2="184"
-          y1="46.13"
-          y2="46.13"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform={t}
-        >
-          <stop offset=".08" stopColor="#ff63a0" />
-          <stop offset=".3" stopColor="#fc413d" />
-          <stop offset=".65" stopColor="#fc413d" />
-          <stop offset=".72" stopColor="#fc5c30" />
-          <stop offset=".86" stopColor="#feb10c" />
-          <stop offset=".91" stopColor="#fec700" />
-          <stop offset=".96" stopColor="#ffdb0f" />
-        </linearGradient>
+        {GMAIL_M.parts.map(({ stops, line: [x1, y1, x2, y2] }, i) =>
+          stops.length > 1 ? (
+            <linearGradient
+              key={i}
+              id={`gm-${i}-${id}`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              gradientUnits="userSpaceOnUse"
+            >
+              {stops.map(([offset, color]) => (
+                <stop key={offset} offset={offset} stopColor={color} />
+              ))}
+            </linearGradient>
+          ) : null,
+        )}
       </defs>
-      <path
-        fill={`url(#${right})`}
-        d="M627.27 81.82H800v500c0 30.12-24.42 54.54-54.55 54.54h-90.9a27.27 27.27 0 0 1-27.28-27.27z"
-      />
-      <path
-        fill="#fc413d"
-        d="M172.73 81.82H0v500c0 30.12 24.42 54.54 54.55 54.54h90.9a27.27 27.27 0 0 0 27.28-27.27z"
-      />
-      <path
-        fill={`url(#${top})`}
-        d="M141.94 20.26C105.42-10.44 50.95-5.72 20.26 30.8c-30.7 36.5-25.98 90.99 10.54 121.68l345.8 290.68a36.36 36.36 0 0 0 46.8 0l345.8-290.68c36.51-30.7 41.23-85.17 10.54-121.69-30.69-36.5-85.17-41.22-121.68-10.53L400 237.18Z"
-      />
+      {GMAIL_M.parts.map(({ d, stops }, i) => (
+        <path
+          key={i}
+          d={d}
+          fill={stops.length > 1 ? `url(#gm-${i}-${id})` : stops[0]?.[1]}
+        />
+      ))}
     </svg>
   );
 }
