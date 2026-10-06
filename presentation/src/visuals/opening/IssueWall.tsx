@@ -238,7 +238,10 @@ export function IssueWall({
 
       {rootCause && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="iw-cause" style={{ opacity: 0 }}>
+          <div
+            className="iw-cause"
+            style={{ opacity: 0, willChange: "transform, opacity" }}
+          >
             {rootCause}
           </div>
         </div>
