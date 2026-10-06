@@ -21,19 +21,20 @@ npm install
 npm run dev          # http://localhost:3001  (Plannr keeps 3000)
 ```
 
-To present from a build that works offline:
+To present from a production build, which works offline too:
 
 ```bash
-npm run build        # writes the static site to out/
-npx serve out        # or open it from any static host
+npm run build
+npm start            # http://localhost:3001
 ```
 
-`out/` is plain HTML, CSS and JS: Vercel (set the root directory to
-`presentation`), Netlify, GitHub Pages or a USB stick all work.
+It needs a server for its lock (below), so it is no longer a static export:
+host it where Next runs, such as Vercel with the root directory set to
+`presentation`, or `npm start` on the presenting laptop.
 
 ## Locking the deck
 
-The deck can sit behind a six-digit code from an authenticator app (Google
+The deck sits behind a six-digit code from an authenticator app (Google
 Authenticator, Authy, 1Password…). Set it up once:
 
 ```bash
@@ -41,18 +42,37 @@ npm run lock:setup   # saves a secret in .env.local and shows its QR code
 ```
 
 Scan the QR into the app. From then on every browser asks for the app's
-current code once, and stays unlocked after (it keeps a token in local
-storage). Run the command again to see the same QR for another phone, or with
-`-- --rotate` for a new secret, which locks every browser again. Without a
-secret the deck is open. Nothing is stored anywhere but `.env.local`, which git
-ignores; for a hosted copy, set `NEXT_PUBLIC_DECK_TOTP_SECRET` on the host
-before it builds.
+current code once, and stays unlocked after. Run the command again to see the
+same QR for another phone, or with `-- --rotate` for a new secret, which locks
+every browser again. Without a secret, `npm run dev` leaves the deck open, and
+a production server (`npm start`, or a host) keeps it shut and says the secret
+is missing.
 
-It is a lock screen, not encryption. The deck is a static site, so the check
-runs in the browser and the secret ships in its JavaScript (the exported pages
-themselves hold only the lock screen). It keeps out anyone who only has the
-link, not someone who reads the bundle. `npm run snapshot` unlocks itself from
-`.env.local`. The code lives in `src/lock/`.
+It is checked on the server, and the secret never leaves it. The middleware
+(`src/middleware.ts`) sends every page to `/unlock` and answers every other
+file, the deck's JavaScript and pictures included, with 401 until the browser
+has the cookie that `/api/unlock` gives for a matching code. The cookie is
+httpOnly, derived from the secret (so it gives nothing of it away) and renewed
+on every visit. Only the unlock page's own needs are open: the page, its
+stylesheets, its fonts and the mark.
+
+Eight wrong codes from one address, or forty from everyone, in fifteen minutes,
+and the form makes people wait. A browser that is already unlocked never
+notices, so unlock the laptop you present from beforehand: someone sending
+wrong codes on purpose can keep the form waiting. A code opens the deck once,
+so one seen on a projected screen is already spent. The server keeps both in
+memory. There is no database: the secret lives in `.env.local`, which git
+ignores. For a hosted copy, set `DECK_TOTP_SECRET` in the host's environment
+and redeploy. `npm run snapshot` lets itself in from `.env.local`. The code is
+in `src/lock/`, `src/middleware.ts` and `src/app/unlock/`.
+
+It holds on `npm start` and on Vercel, which runs the middleware before its
+cache. To check a copy, open it in a private window: the unlock page's network
+panel should show the deck's scripts answering 401. Don't put a caching proxy
+in front of `npm start`, or it may hand one unlocked browser's files to
+everyone. `npm run dev` answers this computer only (`-H 127.0.0.1`), because a
+dev server also serves source maps of the deck that the middleware never sees;
+`npm run dev -- -H 0.0.0.0` opens it to the network, slides and all.
 
 ## Presenting
 
@@ -193,16 +213,15 @@ MorphSVG, DrawSVG, SplitText, ScrambleText, MotionPath, Text and CustomEase.
 ## Pictures of the slides
 
 ```bash
-npm run build
 npm run snapshot                                   # every slide and build → snapshots/
 npm run snapshot -- --slides students-ranking --mid   # one slide, plus mid-morph
 npm run snapshot -- --steps last --scale 2         # final state of each, retina-sharp
 ```
 
-No server is started: the script hands `out/` to a headless browser straight
-from disk, and reaches each slide from the one before so the morph plays as it
-does in the room. Handy for the report, or for a PDF (select the PNGs in
-Finder → Quick Actions → Create PDF).
+It photographs a running deck, the dev server by default (`--url` for
+another), and starts no server of its own. Each slide is reached from the one
+before, so the morph plays as it does in the room. Handy for the report, or for
+a PDF (select the PNGs in Finder → Quick Actions → Create PDF).
 
 ## Checks
 

@@ -7,8 +7,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "next dev --turbo -p 3001",
+    "dev": "next dev --turbo -p 3001 -H 127.0.0.1",
     "build": "next build",
+    "start": "next start -p 3001",
     "check": "next lint && tsc --noEmit",
     "lint": "next lint",
     "lint:fix": "next lint --fix",

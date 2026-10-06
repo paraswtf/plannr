@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /**
- * Screenshots of the built deck, one PNG per slide and build.
+ * Screenshots of the deck, one PNG per slide and build, taken from a running
+ * copy of it: the dev server you already have open, or `npm start` after a
+ * build. It starts no server of its own.
  *
- *   npm run build
  *   npm run snapshot                          # every slide, every build
  *   npm run snapshot -- --slides students-ranking,findings
  *   npm run snapshot -- --steps last --dest ~/Desktop/deck
  *   npm run snapshot -- --slides combined --mid   # plus a frame mid-morph
  *
- * No server is started: the exported files in out/ are handed to the browser
- * straight from disk, through Playwright's request interception. Each slide
- * is reached the way a presenter reaches it — from the previous slide's last
- * build, with its morph — so the pictures show what the audience sees.
+ * Each slide is reached the way a presenter reaches it — from the previous
+ * slide's last build, with its morph — so the pictures show what the
+ * audience sees. A locked deck opens by itself: the script carries the cookie
+ * an unlocked browser has, worked out from the secret in .env.local.
  *
  * Options
- *   --out <dir>       the static export to read (default: out)
+ *   --url <url>       the running deck (default: http://localhost:3001)
  *   --dest <dir>      where to write PNGs (default: snapshots)
  *   --slides <list>   comma-separated slide ids or 1-based numbers (default: all)
  *   --steps <which>   all | first | last (default: all)
@@ -26,7 +27,7 @@
  */
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,7 +42,7 @@ function arg(name, fallback) {
   return value === undefined || value.startsWith("--") ? true : value;
 }
 
-const outDir = path.resolve(root, String(arg("out", "out")));
+const origin = new URL(String(arg("url", "http://localhost:3001"))).origin;
 const dest = path.resolve(root, String(arg("dest", "snapshots")));
 const only = arg("slides", "");
 const which = String(arg("steps", "all"));
@@ -51,72 +52,19 @@ const mid = Boolean(arg("mid", false));
 const scale = Number(arg("scale", 1));
 const hidePh = Boolean(arg("hide-placeholders", false));
 
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript",
-  ".css": "text/css",
-  ".json": "application/json",
-  ".txt": "text/plain",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".gif": "image/gif",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-  ".woff": "font/woff",
-};
-
-const ORIGIN = "http://deck.local";
-
-async function serve(route) {
-  const url = new URL(route.request().url());
-  let file = decodeURIComponent(url.pathname);
-  if (file.endsWith("/")) file += "index.html";
-  if (!path.extname(file)) file += ".html";
-  try {
-    const body = await readFile(path.join(outDir, file));
-    await route.fulfill({
-      status: 200,
-      body,
-      contentType: TYPES[path.extname(file)] ?? "application/octet-stream",
-    });
-  } catch {
-    await route.fulfill({ status: 404, body: "not found" });
-  }
-}
-
-const browser = await chromium.launch();
-const page = await browser.newPage({
-  viewport: { width: 1920, height: 1080 },
-  deviceScaleFactor: scale,
-});
-page.on("pageerror", (e) => console.error(`  [page error] ${e.message}`));
-page.on("console", (m) => {
-  if (m.type() === "error" || m.type() === "warning") {
-    console.error(`  [console.${m.type()}] ${m.text()}`);
-  }
-});
-await page.route(`${ORIGIN}/**`, serve);
-// Fonts come from the export; anything else external is not needed.
-await page.route(/^https?:\/\/(?!deck\.local)/, (route) => route.abort());
-
-// A locked deck opens for the snapshots: the page starts with the token a
-// browser keeps once it has matched a code (src/lock/totp.ts), worked out
-// from the secret the build was made with.
-const secret =
-  process.env.NEXT_PUBLIC_DECK_TOTP_SECRET ??
-  (() => {
-    const file = path.join(root, ".env.local");
-    if (!existsSync(file)) return "";
-    const line = readFileSync(file, "utf8")
-      .split("\n")
-      .find((l) => l.startsWith("NEXT_PUBLIC_DECK_TOTP_SECRET="));
-    return line ? line.split("=")[1].trim() : "";
-  })();
-if (secret) {
+/** The cookie a browser earns by matching a code (src/lock/totp.ts). */
+function unlockCookie() {
+  const secret =
+    process.env.DECK_TOTP_SECRET ??
+    (() => {
+      const file = path.join(root, ".env.local");
+      if (!existsSync(file)) return "";
+      const line = readFileSync(file, "utf8")
+        .split("\n")
+        .find((l) => l.startsWith("DECK_TOTP_SECRET="));
+      return line ? line.slice("DECK_TOTP_SECRET=".length).trim() : "";
+    })();
+  if (!secret) return null;
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const bytes = [];
   let bits = 0;
@@ -132,16 +80,28 @@ if (secret) {
   const token = createHmac("sha256", Buffer.from(bytes))
     .update("plannr-deck-unlocked")
     .digest("hex");
-  await page.addInitScript(
-    ([key, value]) => localStorage.setItem(key, value),
-    ["plannr.deck.unlock", token],
-  );
+  return { name: "plannr_deck", value: token, url: origin };
 }
 
+const browser = await chromium.launch();
+const context = await browser.newContext({
+  viewport: { width: 1920, height: 1080 },
+  deviceScaleFactor: scale,
+});
+const cookie = unlockCookie();
+if (cookie) await context.addCookies([cookie]);
+const page = await context.newPage();
+page.on("pageerror", (e) => console.error(`  [page error] ${e.message}`));
+page.on("console", (m) => {
+  if (m.type() === "error" || m.type() === "warning") {
+    console.error(`  [console.${m.type()}] ${m.text()}`);
+  }
+});
+
 const query = `?speed=${speed}${hidePh ? "&placeholders=hidden" : ""}`;
-await page.goto(`${ORIGIN}/${query}`);
+await page.goto(`${origin}/${query}`);
 await page.waitForFunction(() => window.__deck?.ready === true, null, {
-  timeout: 30_000,
+  timeout: 60_000,
 });
 await page.evaluate(() => document.fonts.ready);
 

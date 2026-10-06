@@ -7,8 +7,9 @@
  *   npm run lock:setup              # again: the same QR, to add another phone
  *   npm run lock:setup -- --rotate  # a new secret; every browser locks again
  *
- * The dev server picks the change up by itself. A build reads the secret when
- * it runs, so for a hosted copy set NEXT_PUBLIC_DECK_TOTP_SECRET on the host.
+ * The secret stays on the server: the middleware and /api/unlock read it, and
+ * no page or script ever carries it. The dev server picks the change up by
+ * itself; for a hosted copy, set DECK_TOTP_SECRET in the host's environment.
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,7 +18,9 @@ import { fileURLToPath } from "node:url";
 
 import QRCode from "qrcode";
 
-const KEY = "NEXT_PUBLIC_DECK_TOTP_SECRET";
+const KEY = "DECK_TOTP_SECRET";
+/** The name the first, client-side version of the lock used. */
+const OLD_KEY = "NEXT_PUBLIC_DECK_TOTP_SECRET";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const envFile = path.join(root, ".env.local");
 const rotate = process.argv.includes("--rotate");
@@ -42,19 +45,25 @@ function base32(bytes) {
 const lines = existsSync(envFile)
   ? readFileSync(envFile, "utf8").split("\n")
   : [];
+// A secret under the old, public name was in the deck's JavaScript, so it is
+// not carried over: it goes, and a new one is made below.
+const old = lines.findIndex((l) => l.startsWith(`${OLD_KEY}=`));
+if (old >= 0) lines.splice(old, 1);
 const at = lines.findIndex((l) => l.startsWith(`${KEY}=`));
 let secret = at >= 0 ? lines[at].slice(KEY.length + 1).trim() : "";
 
-if (!secret || rotate) {
+if (!secret || rotate || old >= 0) {
   secret = base32(randomBytes(20));
   const line = `${KEY}=${secret}`;
   if (at >= 0) lines[at] = line;
   else lines.splice(lines.at(-1) === "" ? -1 : lines.length, 0, line);
   writeFileSync(envFile, `${lines.join("\n").replace(/\n*$/, "")}\n`);
   console.log(
-    rotate && at >= 0
-      ? "\nA new secret is in .env.local. Every browser is locked again."
-      : "\nThe deck's secret is in .env.local.",
+    old >= 0
+      ? "\nThe old secret had been in the deck's JavaScript, so .env.local has a new\none. Scan it below, and delete the old entry from your app."
+      : rotate && at >= 0
+        ? "\nA new secret is in .env.local. Every browser is locked again."
+        : "\nThe deck's secret is in .env.local.",
   );
 } else {
   console.log("\nThe deck already has a secret; here it is again.");
@@ -68,5 +77,6 @@ console.log(await QRCode.toString(uri, { type: "terminal", small: true }));
 console.log(`Or type the key in: ${secret.match(/.{1,4}/g).join(" ")}\n`);
 console.log(
   "The deck asks for the app's six digits once per browser. The dev server\n" +
-    "picks this up by itself; rebuild (npm run build) for the static copy.\n",
+    "picks this up by itself; restart `npm start`, or set DECK_TOTP_SECRET on\n" +
+    "the host and redeploy, for a running copy.\n",
 );
