@@ -12,13 +12,24 @@ const GESTURE_GRACE = 500;
 /** How long one of our own smooth scrolls is allowed to take, in ms. */
 const SELF_SCROLL = 700;
 
-/** Pill group with a slate-filled active segment — the prototype's day tabs. */
+/**
+ * A choice between a handful of views — the prototype's day tabs, the rooms
+ * screen's list-or-grid.
+ *
+ * The chosen segment is a white tile raised off the slate track, rather than a
+ * slate fill. A selection is a state, not an action: filled slate is what the
+ * one primary button on a screen wears, and a strip of day tabs dressed the
+ * same way competed with it for the eye on every screen that had both. The
+ * raised tile still reads at a glance as "this one", the way a pressed key on
+ * a keyboard does, and leaves slate to mean "do this".
+ */
 export function Segmented<T extends string | number>({
   items,
   value,
   onChange,
   size = "md",
   ariaLabel,
+  marker,
 }: {
   items: SegmentedItem<T>[];
   value: T;
@@ -31,9 +42,15 @@ export function Segmented<T extends string | number>({
    * announced as two identical radio groups.
    */
   ariaLabel?: string;
+  /**
+   * One option to mark without choosing it — today, on a strip of dated tabs
+   * showing some other day. It keeps the title ink and a short slate rule
+   * under its label, so "which one is today" survives having picked Friday,
+   * and it is told to a screen reader as the current date.
+   */
+  marker?: T;
 }) {
-  const pad =
-    size === "sm" ? "px-3 py-1.5 text-[12.5px]" : "px-4 py-2 text-[13.5px]";
+  const pad = size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm";
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -107,13 +124,13 @@ export function Segmented<T extends string | number>({
       className="plr-scroll -my-1 max-w-full overflow-x-auto py-1"
     >
       <div
-        className="inline-flex gap-1 rounded-[11px] p-1"
-        style={{ background: "rgba(68,88,121,0.07)" }}
+        className="bg-tint inline-flex gap-1 rounded-[11px] p-1"
         role="radiogroup"
         aria-label={ariaLabel}
       >
         {items.map((item) => {
           const active = item.value === value;
+          const marked = marker !== undefined && item.value === marker;
           return (
             <button
               key={String(item.value)}
@@ -121,21 +138,19 @@ export function Segmented<T extends string | number>({
               type="button"
               role="radio"
               aria-checked={active}
+              aria-current={marked ? "date" : undefined}
               onClick={() => onChange(item.value)}
               // Tab labels never wrap or shrink: they scroll out of view
               // instead. The floor on the height is the touch target, which
               // the pointer-driven layout above the sidebar's breakpoint has
               // no need of.
-              className={`plr-clip inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center rounded-[8px] font-semibold whitespace-nowrap lg:min-h-0 ${pad}`}
-              style={
+              className={`plr-clip inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center rounded-[8px] font-semibold whitespace-nowrap tabular-nums lg:min-h-0 ${pad} ${
                 active
-                  ? {
-                      background: "var(--slate)",
-                      color: "#fff",
-                      boxShadow: "0 2px 8px rgba(68,88,121,0.28)",
-                    }
-                  : { color: "var(--muted)" }
-              }
+                  ? "bg-surface text-slate-ink shadow-[var(--shadow-tile)]"
+                  : marked
+                    ? "text-title shadow-[inset_0_-2px_0_var(--slate-muted)]"
+                    : "text-muted hover:text-title"
+              }`}
             >
               {item.label}
             </button>

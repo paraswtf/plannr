@@ -1,15 +1,28 @@
 @import "tailwindcss";
 
 /*
- * Plannr design tokens, transcribed from the prototype.
+ * Plannr design tokens.
  *
- * The rgba() strings for muted text, hairlines and rings are kept exactly as
- * they were designed: the look is built from inset hairline rings rather than
- * borders, and small changes to those alphas are very visible.
+ * Transcribed from the prototype, then given a second layer: semantic names
+ * for every colour a screen reaches for — the washes behind a quiet control,
+ * the three states (good, warn, bad), the field and its focus — so that a
+ * screen says what a colour is for and never which rgba() it happens to be.
+ * DESIGN.md at the repository root is the reading guide; this file is the
+ * source of truth for the values.
+ *
+ * The rgba() strings for hairlines and rings are kept exactly as they were
+ * designed: the look is built from inset hairline rings rather than borders,
+ * and small changes to those alphas are very visible.
  */
 :root {
   /* Light app surface */
   --surface: #ffffff;
+  /*
+   * What a white control turns on hover. Barely off the surface — a step a
+   * finger cannot see and a pointer can — because a secondary button that
+   * darkened as far as a tint would read as pressed rather than hovered.
+   */
+  --surface-hover: #f6f7f9;
   --paper: #eef0f3;
   --app-ink: #2c3135;
   --app-title: #0d1117;
@@ -17,8 +30,21 @@
   /* Brand */
   --slate: #445879;
   --slate-hover: #4b6186;
+  /*
+   * Slate as text. Set on the washes below, the brand slate itself is still
+   * 6.5:1, but a label sitting on a tint of its own colour wants to be the
+   * darker of the two or it reads as the tint showing through.
+   */
+  --slate-ink: #324464;
   --slate-muted: #9facc2;
   --red: #dc3848;
+  /*
+   * Red that white text can sit on. The brand red is 4.47:1 under white,
+   * a hair below what a 13px label needs, so a destructive button is filled a
+   * shade deeper and keeps `--red` for the lamp, the ring and the now line.
+   */
+  --red-strong: #c42f3e;
+  --red-hover: #b02636;
   --green: #4e7d3a;
   --orange: #f6a73b;
   --violet: #7a2e8f;
@@ -38,13 +64,105 @@
   --ink-2: #1e2630;
   --ink-3: #263141;
 
-  /* Derived text and hairlines */
-  --muted: rgba(44, 49, 53, 0.58);
-  --faint: rgba(44, 49, 53, 0.4);
+  /*
+   * Secondary and tertiary text.
+   *
+   * These were the ink at 58% and 40% opacity, which drew 3.6:1 and 2.3:1
+   * against white and less again against the paper — so most of the app's
+   * small print, the times, the rooms, the counts under every title, failed
+   * the contrast a 12px line needs. Solid now, tinted toward the slate the
+   * rest of the palette leans on, and each one chosen to clear 4.5:1 on the
+   * paper as well as on a card: `--muted` 7.0 / 6.1, `--faint` 5.2 / 4.6.
+   * The hierarchy between them is carried by size, weight and the mono face
+   * rather than by fading the words until they cannot be read.
+   */
+  --muted: #515a67;
+  --faint: #656d7a;
+  /*
+   * Placeholder text, and nothing else. A field always has a label of its own,
+   * so what it says before anything is typed is a hint about the format, and
+   * it is allowed to be the one line on the screen that steps back this far.
+   */
+  --placeholder: #7d8591;
   --hair: rgba(68, 88, 121, 0.16);
   --hair-soft: rgba(68, 88, 121, 0.1);
   --card-ring: rgba(68, 88, 121, 0.28);
   --card-soft: rgba(68, 88, 121, 0.08);
+
+  /*
+   * Washes: slate laid thinly over whatever is underneath.
+   *
+   * One ladder for every quiet surface in the app — a row under the pointer,
+   * the track of a segmented control, a quiet button, the selected option in a
+   * list — so that "selected" is the same weight everywhere and a hovered row
+   * never looks chosen. Alpha rather than solid so the same wash works on the
+   * paper and on a card.
+   */
+  --tint-hover: rgba(68, 88, 121, 0.05);
+  --tint: rgba(68, 88, 121, 0.07);
+  --tint-selected: rgba(68, 88, 121, 0.1);
+  --tint-strong: rgba(68, 88, 121, 0.14);
+
+  /*
+   * The three states, plus information.
+   *
+   * Each comes as an ink for words, a wash to sit behind them and a line to
+   * draw the edge, and every ink clears 5.5:1 on its own wash. The names are
+   * the ones the deck uses — good, warn, bad — because they are about what the
+   * thing means, not what colour it is: "bad" is a clash, a refusal, an error;
+   * it is never a decoration that happens to be red.
+   */
+  --good-ink: #3f6a2e;
+  --good-wash: rgba(78, 125, 58, 0.1);
+  --good-line: rgba(78, 125, 58, 0.3);
+  --warn-ink: #8a5309;
+  --warn-wash: rgba(246, 167, 59, 0.14);
+  --warn-line: rgba(217, 148, 37, 0.42);
+  --bad-ink: #b02636;
+  --bad-wash: rgba(220, 56, 72, 0.08);
+  --bad-line: rgba(220, 56, 72, 0.3);
+  --bad-halo: rgba(220, 56, 72, 0.14);
+  /* The washes a step deeper, for a hovered quiet control in that state. */
+  --bad-wash-strong: rgba(220, 56, 72, 0.13);
+  --warn-wash-strong: rgba(246, 167, 59, 0.22);
+  /*
+   * A neutral wash: a chip or badge that is a fact rather than a state, in the
+   * ink's own grey instead of the slate the selection states use.
+   */
+  --neutral-wash: rgba(44, 49, 53, 0.06);
+  --info-ink: #324464;
+  --info-wash: rgba(68, 88, 121, 0.08);
+  --info-line: rgba(68, 88, 121, 0.24);
+
+  /*
+   * The page header's frosted strip: the paper at 82%, so content scrolling
+   * under it is visible as movement but never legible enough to compete.
+   */
+  --glass: rgba(238, 240, 243, 0.82);
+  /* The phone's top bar: white at 90%, frosted the same way. */
+  --glass-white: rgba(255, 255, 255, 0.9);
+  /*
+   * What a modal lays over the page: a deep slate, not black, at a strength
+   * that keeps the page recognisable behind it, so the dialog reads as being
+   * about that page.
+   */
+  --scrim: rgba(16, 22, 33, 0.44);
+  /* A chosen tile lifted off its track: the segment, today's date cell. */
+  --shadow-tile:
+    0 0 0 1px rgba(68, 88, 121, 0.12), 0 1px 2px rgba(22, 32, 51, 0.1),
+    0 2px 6px -2px rgba(22, 32, 51, 0.12);
+
+  /*
+   * Text fields. White, ringed like a card, and ringed harder under the
+   * pointer — inset rather than raised, because a field is somewhere things go
+   * in. Focus is the slate ring thickened plus a soft halo outside it, so the
+   * field being typed into is findable from across the room on a projector.
+   */
+  --field: #ffffff;
+  --field-line: var(--card-ring);
+  --field-line-hover: rgba(68, 88, 121, 0.44);
+  --focus: var(--slate);
+  --focus-halo: rgba(68, 88, 121, 0.18);
 
   /*
    * Your own classes, picked out of everybody else's on the campus timetable.
@@ -87,11 +205,28 @@
    */
   --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 216px));
 
-  /* Elevation is a drawn hairline plus a soft shadow, never a border */
+  /*
+   * Elevation is a drawn hairline plus a soft shadow, never a border.
+   *
+   * Three heights and no more: resting (a card on the paper), raised (a menu
+   * or a picker hanging off a control) and floating (a dialog over a scrim).
+   * The shadows are cast in a deep slate rather than black, so they read as
+   * the same light falling on the same blue-grey world instead of as soot.
+   */
   --ring: inset 0 0 0 1px var(--card-ring);
-  --shadow-card: 0 2px 10px rgba(13, 17, 23, 0.05);
-  --shadow-md: 0 8px 24px rgba(13, 17, 23, 0.1);
-  --shadow-float: 0 18px 50px rgba(13, 17, 23, 0.2);
+  --shadow-card:
+    0 1px 2px rgba(22, 32, 51, 0.04), 0 2px 10px rgba(22, 32, 51, 0.045);
+  --shadow-md:
+    0 4px 10px -4px rgba(22, 32, 51, 0.1),
+    0 14px 32px -8px rgba(22, 32, 51, 0.16);
+  /*
+   * The shadow a docked panel casts sideways onto the page beside it — the
+   * booking panel, a drawer — rather than down onto it.
+   */
+  --shadow-edge: -12px 0 34px rgba(22, 32, 51, 0.07);
+  --shadow-float:
+    0 8px 20px -8px rgba(22, 32, 51, 0.14),
+    0 24px 60px -12px rgba(22, 32, 51, 0.3);
 
   /* Radii */
   --radius-sm: 4px;
@@ -99,24 +234,38 @@
   --radius-lg: 6px;
   --radius-btn: 10px;
   --radius-card: 14px;
+  --radius-dialog: 18px;
   --radius-pill: 999px;
 
-  /* Motion */
+  /*
+   * Motion.
+   *
+   * `--ease` is the prototype's curve and stays where it is already used.
+   * Anything new answers a touch, so it takes `--ease-out`, which spends its
+   * movement in the first frames — the ones the person is watching — rather
+   * than easing into them. Nothing in the app eases in.
+   */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 120ms;
   --dur: 200ms;
 }
 
 @theme inline {
   --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
   --color-paper: var(--paper);
   --color-ink: var(--app-ink);
   --color-title: var(--app-title);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
+  --color-placeholder: var(--placeholder);
   --color-slate: var(--slate);
   --color-slate-hover: var(--slate-hover);
+  --color-slate-ink: var(--slate-ink);
   --color-red: var(--red);
+  --color-red-strong: var(--red-strong);
+  --color-red-hover: var(--red-hover);
   --color-green: var(--green);
   --color-orange: var(--orange);
   --color-violet: var(--violet);
@@ -126,6 +275,31 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
 
+  --color-tint-hover: var(--tint-hover);
+  --color-tint: var(--tint);
+  --color-tint-selected: var(--tint-selected);
+  --color-tint-strong: var(--tint-strong);
+  --color-hair: var(--hair);
+  --color-hair-soft: var(--hair-soft);
+  --color-field: var(--field);
+  --color-focus: var(--focus);
+
+  --color-good: var(--good-ink);
+  --color-good-wash: var(--good-wash);
+  --color-good-line: var(--good-line);
+  --color-warn: var(--warn-ink);
+  --color-warn-wash: var(--warn-wash);
+  --color-warn-line: var(--warn-line);
+  --color-bad: var(--bad-ink);
+  --color-bad-wash: var(--bad-wash);
+  --color-bad-line: var(--bad-line);
+  --color-bad-wash-strong: var(--bad-wash-strong);
+  --color-warn-wash-strong: var(--warn-wash-strong);
+  --color-neutral-wash: var(--neutral-wash);
+  --color-info: var(--info-ink);
+  --color-info-wash: var(--info-wash);
+  --color-info-line: var(--info-line);
+
   --font-display:
     var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-body:
@@ -134,9 +308,58 @@
 
   --radius-btn: var(--radius-btn);
   --radius-card: var(--radius-card);
+  --radius-dialog: var(--radius-dialog);
 
   --shadow-card: var(--shadow-card);
+  --shadow-md: var(--shadow-md);
   --shadow-float: var(--shadow-float);
+
+  --ease-out: var(--ease-out);
+}
+
+/*
+ * The type scale.
+ *
+ * Eight steps on a ratio of about 1.2, from a 14px body: the minor third a
+ * dense tool wants, where every step is still visibly a step. The app had
+ * grown nineteen sizes, four of them within a pixel of each other (12, 12.5,
+ * 13 and 13.5), and a label a half-pixel bigger than the line beside it is
+ * not a hierarchy, it is a rounding error. Hierarchy comes from the three
+ * levers together — size, weight and ink — and mostly from the last two.
+ *
+ * Tailwind's own names, re-pointed: nothing in the app used the defaults, and
+ * `text-sm` reading as "the small UI size" is what anybody would guess.
+ *
+ *   2xs 11  table heads, tiny counts, the mono under a chip
+ *   xs  12  captions, hints, badges, meta lines
+ *   sm  13  the working size: rows, controls, secondary copy
+ *   base 14 reading copy, primary row titles
+ *   md  16  card and section titles
+ *   lg  19  dialog and drawer titles
+ *   xl  24  page titles
+ *   2xl 30  the one number a screen is about; sign-in
+ *
+ * Line height is 1.5 up to the body size — what everything inherited before
+ * the scale existed, so moving a line onto a step never moves the lines
+ * around it — and tightens as the type grows.
+ */
+@theme {
+  --text-2xs: 11px;
+  --text-2xs--line-height: 1.5;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 14px;
+  --text-base--line-height: 1.5;
+  --text-md: 16px;
+  --text-md--line-height: 1.4;
+  --text-lg: 19px;
+  --text-lg--line-height: 1.3;
+  --text-xl: 24px;
+  --text-xl--line-height: 1.2;
+  --text-2xl: 30px;
+  --text-2xl--line-height: 1.15;
 }
 
 html {
@@ -155,6 +378,9 @@ html {
  * Keyed on `pointer: coarse` rather than a width, because it is the input
  * device that decides whether this happens, not how wide the window is: a
  * narrow desktop window has no such behaviour and keeps the smaller type.
+ *
+ * Deliberately outside every layer, so it beats the size utilities a field is
+ * given: that is the whole point of it.
  */
 @media (pointer: coarse) {
   input,
@@ -176,6 +402,7 @@ html {
 @media (min-width: 1024px) {
   :root {
     --topbar-h: 0px;
+    --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 152px));
   }
 }
 
@@ -184,6 +411,55 @@ body {
   color: var(--app-ink);
   background: var(--paper);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  /*
+   * One focus ring for everything a keyboard can land on.
+   *
+   * The app drew its controls with inline styles and had almost no focus
+   * states, so a keyboard user tabbed through buttons that never showed they
+   * had the caret. An outline rather than a shadow because the two cannot
+   * collide: a control's own ring is a `box-shadow`, often set inline, and an
+   * inline shadow would beat any shadow this rule could set. `:focus-visible`
+   * keeps it off a mouse click. A control that draws a focus state of its own
+   * — every text field does — opts out with `outline-none`, which as a
+   * utility outranks this base rule.
+   */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgba(68, 88, 121, 0.2);
+  }
+
+  /*
+   * Headings balance their lines, so a two-line title splits near the middle
+   * instead of leaving one word on its own; paragraphs avoid ending on one.
+   */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--placeholder);
+  }
+
+  /* A tap on a phone flashes nothing; every control draws its own press. */
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 /* Prototype animation + scrollbar kit, ported verbatim. */
@@ -225,58 +501,126 @@ body {
     transform: none;
   }
 }
-
-.plr-pop {
-  animation: plrPop 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.plr-fade {
-  animation: plrFade 0.18s ease;
-}
-@media (min-width: 1024px) {
-  :root {
-    --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 152px));
+/*
+ * The phone menu's entrance: the whole width of the panel, from off the left
+ * edge. A drawer that faded in or nudged 26px would only hint at where it came
+ * from; this one actually travels there.
+ */
+@keyframes plrDrawerIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
   }
 }
 
-.plr-toast {
-  animation: plrToast 0.28s cubic-bezier(0.34, 1.4, 0.5, 1);
-}
-.plr-slide-in {
-  animation: plrSlideIn 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+@layer components {
+  .plr-pop {
+    animation: plrPop 0.22s var(--ease-out);
+  }
+  .plr-fade {
+    animation: plrFade 0.18s ease;
+  }
+  /*
+   * A toast rises and settles; it no longer overshoots. A bounce on something
+   * that is only saying "saved" is the interface performing, not answering.
+   */
+  .plr-toast {
+    animation: plrToast 0.28s var(--ease-out);
+  }
+  .plr-slide-in {
+    animation: plrSlideIn 0.24s var(--ease-out);
+  }
+  .plr-drawer-in {
+    animation: plrDrawerIn 0.28s var(--ease-out);
+  }
+
+  .plr-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(68, 88, 121, 0.35) transparent;
+  }
+  .plr-scroll::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .plr-scroll::-webkit-scrollbar-thumb {
+    background: rgba(68, 88, 121, 0.3);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .plr-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(68, 88, 121, 0.5);
+    background-clip: padding-box;
+  }
+
+  /*
+   * The transition a clickable surface gets. Named properties only — never
+   * `all`, which would also animate a width the layout changes, or a colour a
+   * parent is fading.
+   */
+  .plr-clip {
+    transition:
+      transform 0.16s var(--ease-out),
+      scale 0.16s var(--ease-out),
+      box-shadow 0.16s ease,
+      background-color 0.16s ease,
+      color 0.16s ease;
+  }
+  .plr-hoverlift:hover {
+    transform: translateY(-2px);
+  }
+  .plr-slotcol:hover {
+    background: var(--tint-hover);
+  }
 }
 
-.plr-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(68, 88, 121, 0.35) transparent;
+/*
+ * A hairline under a panel's header that appears only once the body under it
+ * has been scrolled: at the top there is nothing beneath the header to
+ * separate it from. A scroll-driven animation, so it costs no script and no
+ * scroll listener; the panel declares the timeline's scope, the body is the
+ * timeline, and the header animates against it over the first 12px.
+ */
+@keyframes plrEdge {
+  from {
+    box-shadow: 0 1px 0 transparent;
+  }
+  to {
+    box-shadow: 0 1px 0 var(--hair-soft);
+  }
 }
-.plr-scroll::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-.plr-scroll::-webkit-scrollbar-thumb {
-  background: rgba(68, 88, 121, 0.3);
-  border-radius: 99px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.plr-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(68, 88, 121, 0.5);
-  background-clip: padding-box;
+@supports (animation-timeline: scroll()) {
+  .plr-scroll-edge {
+    timeline-scope: --plr-body;
+  }
+  .plr-scroll-body {
+    scroll-timeline: --plr-body block;
+  }
+  .plr-scroll-edge .plr-scroll-head {
+    animation-name: plrEdge;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    animation-timeline: --plr-body;
+    animation-range: 0 12px;
+  }
 }
 
-.plr-clip {
-  transition:
-    transform 0.16s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.16s ease,
-    background 0.16s ease;
-}
-.plr-hoverlift:hover {
-  transform: translateY(-2px);
-}
-.plr-slotcol:hover {
-  background: rgba(68, 88, 121, 0.05);
-}
-
-input::placeholder {
-  color: rgba(44, 49, 53, 0.42);
+/*
+ * Reduced motion keeps the fades and drops the travel: a panel still arrives,
+ * it just does not slide or bounce on the way, and a card no longer rises
+ * under the pointer. Anything that moves because the person moved it — a
+ * swipe, a scroll-snap — is theirs and is left alone.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .plr-pop,
+  .plr-toast,
+  .plr-slide-in,
+  .plr-drawer-in {
+    animation-name: plrFade;
+  }
+  .plr-hoverlift:hover {
+    transform: none;
+  }
 }

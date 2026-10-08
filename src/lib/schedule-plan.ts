@@ -54,7 +54,7 @@ export const PLAN_STATUS_TONE: Record<PlanStatusName, PlanTone> = {
 
 export const PLAN_STATUS_HINT: Record<PlanStatusName, string> = {
   DRAFT: "Only you can see this.",
-  IN_REVIEW: "Shared — reviewers are being waited on.",
+  IN_REVIEW: "Shared, and waiting on the reviewers.",
   APPROVED: "Every reviewer signed off. Ready to apply.",
   CHANGES_REQUESTED: "A reviewer asked for changes. Revise it into a new draft.",
   APPLIED: "These classes are on the live timetable.",
@@ -163,14 +163,14 @@ export function formatSlot(minutes: number): string {
   return `${h12}:${String(minute).padStart(2, "0")}${suffix}`;
 }
 
-/** "Mon 9:00am–10:00am", the way one session reads in a list. */
+/** "Mon 9:00am-10:00am", the way one session reads in a list. */
 export function formatSessionWhen(
   dayOfWeek: number | null,
   startMinutes: number | null,
   durationMinutes: number,
 ): string {
   if (dayOfWeek === null || startMinutes === null) return "Not placed";
-  return `${WEEKDAY_SHORT[dayOfWeek] ?? "?"} ${formatSlot(startMinutes)}–${formatSlot(
+  return `${WEEKDAY_SHORT[dayOfWeek] ?? "?"} ${formatSlot(startMinutes)}-${formatSlot(
     startMinutes + durationMinutes,
   )}`;
 }

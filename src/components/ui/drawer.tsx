@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties } from "react";
 
+import { IconButton } from "./button";
 import { Icon, type IconName } from "./icon";
 
 /**
@@ -111,7 +112,7 @@ export function Drawer({
       // `scroll-mt` is for the scroll that focusing the panel provokes — the
       // hamburger bar is stuck to the top of the page, and without a margin to
       // stop short by, the title and close button arrive underneath it.
-      className="bg-surface flex w-full scroll-mt-(--topbar-h) flex-col shadow-[inset_0_1px_0_var(--hair)] outline-none lg:sticky lg:h-screen lg:w-(--drawer-w) lg:max-w-[92vw] lg:shrink-0 lg:animate-[plrSlideIn_0.24s_cubic-bezier(0.4,0,0.2,1)] lg:shadow-[inset_1px_0_0_var(--hair),-12px_0_34px_rgba(13,17,23,0.07)]"
+      className="bg-surface flex w-full scroll-mt-(--topbar-h) flex-col shadow-[inset_0_1px_0_var(--hair)] outline-none lg:sticky lg:h-screen lg:w-(--drawer-w) lg:max-w-[92vw] lg:shrink-0 lg:animate-[plrSlideIn_0.24s_var(--ease-out)] lg:shadow-[inset_1px_0_0_var(--hair),var(--shadow-edge)] motion-reduce:lg:animate-[plrFade_0.18s_ease]"
       style={
         {
           top: "var(--topbar-h)",
@@ -127,31 +128,29 @@ export function Drawer({
       >
         {icon && (
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px]"
             style={{
-              background: `color-mix(in srgb, ${iconTone} 14%, #fff)`,
+              background: `color-mix(in srgb, ${iconTone} 12%, #fff)`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${iconTone} 18%, transparent)`,
             }}
           >
             <Icon name={icon} size={19} color={iconTone} stroke={1.9} />
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
+          <h2 className="font-display text-title text-lg font-semibold tracking-[-0.015em]">
             {title}
           </h2>
-          {subtitle && (
-            <p className="text-muted mt-0.5 text-[12.5px]">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-muted mt-0.5 text-sm">{subtitle}</p>}
         </div>
         {onClose && (
-          <button
-            type="button"
+          <IconButton
+            icon="x"
+            label="Close"
+            size="sm"
             onClick={onClose}
-            aria-label="Close"
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:h-8 sm:w-8"
-          >
-            <Icon name="x" size={16} color="var(--muted)" />
-          </button>
+            className="-mt-0.5 -mr-1.5"
+          />
         )}
       </div>
 

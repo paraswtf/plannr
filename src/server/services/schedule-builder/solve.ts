@@ -548,7 +548,7 @@ export function solve(input: SolveInput): SolveResult {
     }
     return {
       blocked: lastBlock
-        ? `Nowhere free in the week — ${lastBlock}.`
+        ? `Nowhere free in the week: ${lastBlock}.`
         : "Nowhere free in the week.",
     };
   };

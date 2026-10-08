@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { IconButton } from "./button";
 import { Icon, type IconName } from "./icon";
 
 /**
@@ -51,18 +52,34 @@ export function Dialog({
   subtitle,
   icon,
   iconTone = "var(--slate)",
+  media,
   width = 520,
+  tall = false,
   onClose,
   footer,
   children,
 }: {
   open: boolean;
   title: string;
-  /** The line under the title, drawn the same way the drawer draws its own. */
-  subtitle?: string;
+  /**
+   * The line under the title, drawn the same way the drawer draws its own. A
+   * node, so a record's dialog can set its status badges in it.
+   */
+  subtitle?: React.ReactNode;
   icon?: IconName;
   iconTone?: string;
+  /**
+   * Something to stand where the glyph plate would — a person's `Avatar` in
+   * their own record — when the dialog is about one thing that has a face.
+   */
+  media?: React.ReactNode;
   width?: number;
+  /**
+   * Hold the panel at one height whatever its body holds, so switching
+   * between tabs inside it does not make the whole dialog jump. The body
+   * scrolls inside the height instead of the panel growing to fit.
+   */
+  tall?: boolean;
   onClose: () => void;
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -154,7 +171,7 @@ export function Dialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       style={{
-        background: "rgba(13,17,23,0.42)",
+        background: "var(--scrim)",
         backdropFilter: "blur(3px)",
         WebkitBackdropFilter: "blur(3px)",
       }}
@@ -177,15 +194,28 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className="plr-pop bg-surface flex max-h-full w-full flex-col overflow-hidden rounded-[18px] outline-none sm:max-h-[86vh]"
-        style={{ maxWidth: width, boxShadow: "var(--shadow-float)" }}
+        className={`plr-pop plr-scroll-edge bg-surface flex max-h-full w-full flex-col overflow-hidden rounded-[var(--radius-dialog)] outline-none sm:max-h-[86vh] ${
+          tall ? "sm:h-[min(86vh,760px)]" : ""
+        }`}
+        style={{
+          maxWidth: width,
+          boxShadow: "var(--ring), var(--shadow-float)",
+        }}
       >
-        <div className="flex shrink-0 items-start gap-3 px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
-          {icon && (
+        {/*
+         * `plr-scroll-head` draws a hairline under the header once the body
+         * has scrolled — none while the body sits at its top, where it would
+         * be a line under nothing. CSS-only (a scroll-driven animation); where
+         * that is unsupported the header simply has no line, as before.
+         */}
+        <div className="plr-scroll-head flex shrink-0 items-start gap-3 px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
+          {media && <span className="shrink-0">{media}</span>}
+          {!media && icon && (
             <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px]"
               style={{
-                background: `color-mix(in srgb, ${iconTone} 14%, #fff)`,
+                background: `color-mix(in srgb, ${iconTone} 12%, #fff)`,
+                boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${iconTone} 18%, transparent)`,
               }}
             >
               <Icon name={icon} size={19} color={iconTone} stroke={1.9} />
@@ -197,31 +227,34 @@ export function Dialog({
            * this renders exactly what the bare `<h2 className="… pt-1.5">` did.
            */}
           <div className="min-w-0 flex-1 pt-1.5">
-            <h2 className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
+            <h2 className="font-display text-title text-lg font-semibold tracking-[-0.015em]">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-muted mt-0.5 text-[12.5px]">{subtitle}</p>
+              <p className="text-muted mt-0.5 text-sm">{subtitle}</p>
             )}
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon="x"
+            label="Close"
+            size="sm"
             onClick={onClose}
-            aria-label="Close"
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:h-8 sm:w-8"
-          >
-            <Icon name="x" size={16} color="var(--muted)" />
-          </button>
+            className="-mt-0.5 -mr-1.5"
+          />
         </div>
 
-        <div className="plr-scroll min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6 sm:pb-6">
+        <div className="plr-scroll plr-scroll-body min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6 sm:pb-6">
           {children}
         </div>
 
         {footer && (
-          // Wraps rather than overflows: three buttons at a phone's width put
-          // themselves on two rows instead of pushing off the edge.
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.5 px-5 pb-5 sm:px-6 sm:pb-6">
+          // On a phone the buttons stack, full width, in the order they were
+          // given — so the primary, which comes last, lands at the bottom
+          // under the thumb, instead of wrapping onto a row of its own. From
+          // `sm` up they sit in a row on the right. The hairline above is what
+          // keeps them from reading as the last line of the form when the body
+          // has scrolled up under them.
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.5 px-5 py-4 shadow-[0_-1px_0_var(--hair-soft)] max-sm:flex-col max-sm:items-stretch sm:px-6">
             {footer}
           </div>
         )}

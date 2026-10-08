@@ -125,7 +125,9 @@ const timeRange = (start: Date, end: Date, timeZone: string) => {
     hour: "numeric",
     minute: "2-digit",
   });
-  return `${fmt.format(start)}–${endFmt.format(end)}`;
+  // A plain hyphen: this range is read in the app's conflict panels, which
+  // write every other range the same way.
+  return `${fmt.format(start)}-${endFmt.format(end)}`;
 };
 
 /**

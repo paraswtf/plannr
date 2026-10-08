@@ -1,32 +1,61 @@
 import type { ReactNode } from "react";
 
+import { Icon, type IconName } from "./icon";
+
 export type BadgeTone =
   "neutral" | "slate" | "red" | "green" | "orange" | "gradient";
 
-const TONES: Record<BadgeTone, { background: string; color: string }> = {
-  neutral: { background: "rgba(44,49,53,0.07)", color: "var(--muted)" },
-  slate: { background: "rgba(68,88,121,0.10)", color: "#324464" },
-  red: { background: "rgba(220,56,72,0.10)", color: "#b02636" },
-  green: { background: "rgba(78,125,58,0.12)", color: "#3f6a2e" },
-  orange: { background: "rgba(246,167,59,0.16)", color: "#a2660f" },
-  gradient: { background: "var(--grad-brand)", color: "#fff" },
+/*
+ * The tones are named for their colour, as they always were, but each one is
+ * a state from globals.css underneath: red is `bad`, green `good`, orange
+ * `warn`, slate `info`. So a badge and a callout saying the same thing are the
+ * same red, and every ink clears 5.5:1 on its wash — the orange one used to be
+ * a 4.1:1 amber that an 11px label could not afford.
+ */
+const TONES: Record<BadgeTone, string> = {
+  neutral: "bg-neutral-wash text-muted",
+  slate: "bg-info-wash text-info",
+  red: "bg-bad-wash text-bad",
+  green: "bg-good-wash text-good",
+  orange: "bg-warn-wash text-warn",
+  // The brand gradient as a wash rather than a fill: white type on the solid
+  // gradient fell to 2:1 over its orange end, and an 11px label cannot spare
+  // that. Laid thinly under a deep violet ink it still reads as the brand's
+  // own colour, which is what marks a "Major" out from the plain tones.
+  gradient:
+    "bg-[linear-gradient(120deg,rgba(122,46,143,0.14),rgba(232,69,94,0.13)_58%,rgba(246,167,59,0.18))] text-[#6b2880]",
 };
 
 const DOT_COLOR: Partial<Record<BadgeTone, string>> = {
   red: "var(--red)",
-  green: "#4e7d3a",
+  green: "var(--green)",
   orange: "var(--orange)",
   slate: "var(--slate)",
 };
 
+/**
+ * A short status word.
+ *
+ * `dot` is for state that is live or decided — a room in use now, a verdict on
+ * a request — and is meant to be rare: a dot in front of every label is
+ * decoration, and the deck's rule is that a dot always means something.
+ */
 export function Badge({
   children,
   tone = "neutral",
   dot = false,
+  icon,
+  className = "",
 }: {
   children: ReactNode;
   tone?: BadgeTone;
   dot?: boolean;
+  /**
+   * A glyph before the words, for a badge whose meaning must not rest on its
+   * colour alone ("No teacher" with an alert). Drawn in the badge's own ink.
+   */
+  icon?: IconName;
+  className?: string;
 }) {
   return (
     // `whitespace-nowrap` keeps a badge on one line, but on its own it also lets
@@ -36,9 +65,9 @@ export function Badge({
     // the truncation bound it to whatever room it is given; the dot is held at
     // its size so the label is what gives way.
     <span
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold whitespace-nowrap"
-      style={TONES[tone]}
+      className={`text-2xs inline-flex max-w-full items-center gap-1.5 rounded-[6px] px-2 py-1 font-semibold whitespace-nowrap ${TONES[tone]} ${className}`}
     >
+      {icon && <Icon name={icon} size={12} stroke={2.2} className="shrink-0" />}
       {dot && (
         <span
           className="h-[6px] w-[6px] shrink-0 rounded-full"

@@ -157,7 +157,7 @@ describe("spanHolds", () => {
 describe("formatWeekLabel", () => {
   it("says the month once when the week does not straddle one", () => {
     expect(formatWeekLabel(day("2026-08-09T18:30:00Z"), IST)).toBe(
-      "10–16 Aug 2026",
+      "10-16 Aug 2026",
     );
   });
 
@@ -167,14 +167,14 @@ describe("formatWeekLabel", () => {
     // elsewhere in the app, so it is left alone rather than forced into three
     // letters here and nowhere else.
     expect(formatWeekLabel(day("2026-09-27T18:30:00Z"), IST)).toBe(
-      "28 Sept – 4 Oct 2026",
+      "28 Sept - 4 Oct 2026",
     );
   });
 
   it("names both years across new year", () => {
     // Monday 28 December 2026 to Sunday 3 January 2027.
     expect(formatWeekLabel(day("2026-12-27T18:30:00Z"), IST)).toBe(
-      "28 Dec 2026 – 3 Jan 2027",
+      "28 Dec 2026 - 3 Jan 2027",
     );
   });
 });

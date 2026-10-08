@@ -1,7 +1,9 @@
 import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { PlannrMark } from "~/components/ui/brand";
+import { StandalonePanel } from "~/components/app/shell/standalone-panel";
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { env } from "~/env";
 import { homeFor } from "~/lib/role-nav";
 import { auth, signIn } from "~/server/auth";
@@ -32,63 +34,46 @@ export default async function LoginPage({
   }
 
   const error = params.error
-    ? (ERROR_MESSAGES[params.error] ?? "Something went wrong signing you in.")
+    ? (ERROR_MESSAGES[params.error] ??
+      "Sign-in did not finish. Try again, or ask the administrator if it keeps happening.")
     : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      <div
-        className="bg-surface w-full max-w-[420px] rounded-[var(--radius-card)] p-10"
-        style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
+    <StandalonePanel
+      title="Sign in to Plannr"
+      lede="Timetables, room bookings and clash-free scheduling for the whole campus."
+      // The rule about which accounts may sign in is said once: by the error
+      // when there is one, and by this line when there is not.
+      footer={
+        error ? undefined : `@${env.GOOGLE_WORKSPACE_DOMAIN} accounts only`
+      }
+    >
+      {error && (
+        <Callout tone="bad" role="alert" className="mb-5">
+          {error}
+        </Callout>
+      )}
+
+      <form
+        action={async () => {
+          "use server";
+          await signIn("google", {
+            redirectTo: params.callbackUrl ?? "/",
+          });
+        }}
       >
-        <div className="mb-7 flex">
-          <PlannrMark height={46} alt="Plannr" />
-        </div>
-
-        <h1 className="font-display text-title text-[30px] leading-tight font-bold tracking-[-0.02em]">
-          Sign in to Plannr
-        </h1>
-        <p className="text-muted mt-2 text-[14.5px]">
-          Timetables, room bookings and clash-free scheduling for the whole
-          campus.
-        </p>
-
-        {error && (
-          <div
-            className="mt-6 rounded-xl p-3.5 text-[13px] leading-relaxed font-medium text-[#b02636]"
-            style={{
-              background: "rgba(220,56,72,0.07)",
-              boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <form
-          className="mt-7"
-          action={async () => {
-            "use server";
-            await signIn("google", {
-              redirectTo: params.callbackUrl ?? "/",
-            });
-          }}
-        >
-          <button
-            type="submit"
-            className="plr-clip flex w-full cursor-pointer items-center justify-center gap-3 rounded-[var(--radius-btn)] px-5 py-3.5 text-[15px] font-semibold text-white"
-            style={{ background: "var(--slate)" }}
-          >
+        <Button type="submit" variant="primary" size="lg" block>
+          {/*
+           * Google's mark keeps its own four colours, on a white disc so they
+           * are not laid straight onto slate, where the blue all but vanished.
+           */}
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
             <GoogleMark />
-            Continue with Google
-          </button>
-        </form>
-
-        <p className="text-faint mt-6 text-center font-mono text-[11.5px]">
-          @{env.GOOGLE_WORKSPACE_DOMAIN} accounts only
-        </p>
-      </div>
-    </main>
+          </span>
+          Continue with Google
+        </Button>
+      </form>
+    </StandalonePanel>
   );
 }
 

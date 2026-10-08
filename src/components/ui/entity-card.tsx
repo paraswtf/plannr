@@ -49,17 +49,17 @@ export function EntityCardAvatar({
     return (
       <span
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px]"
-        style={{ background: `color-mix(in srgb, ${tone} 14%, #fff)` }}
+        style={{ background: `color-mix(in srgb, ${tone} 12%, #fff)` }}
       >
         <Icon name={avatar.name} size={15} color={tone} stroke={1.9} />
       </span>
     );
   }
+  // A person is a rounded square in the selected wash, as `Avatar` draws
+  // them; a list of results is a list of other people, and forty solid slate
+  // discs down a dropdown were forty dark blots.
   return (
-    <span
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-      style={{ background: "var(--slate)" }}
-    >
+    <span className="bg-tint-strong text-slate-ink text-2xs flex h-7 w-7 shrink-0 items-center justify-center rounded-[30%] font-semibold shadow-[inset_0_0_0_1px_var(--hair-soft)]">
       {avatar.text}
     </span>
   );
@@ -78,7 +78,7 @@ export function EntityCardBody({ card }: { card: EntityCard }) {
          * is space for one.
          */}
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="text-title min-w-0 flex-1 truncate text-[13px] font-semibold">
+          <span className="text-title min-w-0 flex-1 truncate text-sm font-semibold">
             {card.title}
           </span>
           {card.badges?.slice(0, 3).map((b) => (
@@ -88,12 +88,12 @@ export function EntityCardBody({ card }: { card: EntityCard }) {
           ))}
         </span>
         {card.subtitle && (
-          <span className="text-muted mt-0.5 block truncate text-[11.5px]">
+          <span className="text-muted mt-0.5 block truncate text-xs">
             {card.subtitle}
           </span>
         )}
         {card.meta && card.meta.length > 0 && (
-          <span className="text-faint mt-1 block truncate font-mono text-[11.5px]">
+          <span className="text-faint mt-1 block truncate font-mono text-xs">
             {card.meta.join(" · ")}
           </span>
         )}

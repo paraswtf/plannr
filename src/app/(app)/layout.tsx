@@ -54,7 +54,24 @@ export default async function AppLayout({
        * calendar sync panel — resolved to nothing at all: sonner drops a toast
        * with no `Toaster` mounted to receive it, silently and without warning.
        */}
-      <Toaster position="bottom-right" closeButton />
+      <Toaster
+        position="bottom-right"
+        closeButton
+        // Sonner draws its own card; these bring it into the house style — the
+        // body face, the raised height of a popover, a hairline ring for an
+        // edge — so a toast reads as part of the app rather than a library's
+        // default sitting on top of it.
+        toastOptions={{
+          style: {
+            fontFamily: "var(--font-body)",
+            fontSize: "13px",
+            color: "var(--app-ink)",
+            borderRadius: "12px",
+            border: "none",
+            boxShadow: "var(--ring), var(--shadow-md)",
+          },
+        }}
+      />
     </HydrateClient>
   );
 }

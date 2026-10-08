@@ -222,6 +222,31 @@ const PATHS = {
       <path d="M5 15.5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2" />
     </>
   ),
+  /** Edit: a pencil, for changing a row in place. */
+  pencil: (
+    <>
+      <path d="M15.5 4.5 19.5 8.5 8.5 19.5H4.5V15.5z" />
+      <path d="m13 7 4 4" />
+    </>
+  ),
+  /** A remark in a thread: the review discussion. */
+  comment: (
+    <>
+      <path d="M20 12.5a7.5 7.5 0 0 1-10.9 6.7L4 20.5l1.4-4.6A7.5 7.5 0 1 1 20 12.5z" />
+    </>
+  ),
+  /**
+   * A tray with something in it — the approvals queue. Drawn so the sidebar's
+   * folded rail has a glyph for every screen: Approvals used to borrow
+   * Attendance's tick, and with the labels folded away the two were the same
+   * button.
+   */
+  inbox: (
+    <>
+      <path d="M3 13.5 5.6 5.4A1.5 1.5 0 0 1 7 4.4h10a1.5 1.5 0 0 1 1.4 1L21 13.5V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z" />
+      <path d="M3 13.5h5l1.5 2.5h5l1.5-2.5h5" />
+    </>
+  ),
   /** Rolling a credential: the same thing, come round again. */
   rotate: (
     <>

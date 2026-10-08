@@ -23,10 +23,20 @@ import {
  * never the privileged act.
  */
 
+/**
+ * Which stretch of the sidebar an item belongs to. Drawn as a gap and a
+ * hairline between runs, never as a heading: the groups are obvious once they
+ * are apart, and a label over three links is a label nobody reads. Order is
+ * still the array's order — `homeFor` depends on it — so a section is only
+ * ever a run of neighbours.
+ */
+export type NavSection = "day" | "work" | "rooms" | "institution" | "settings";
+
 export interface NavItem {
   href: string;
   label: string;
   icon: string;
+  section: NavSection;
   /** Any one of these is enough to reach the screen. */
   requires: PermissionName[];
 }
@@ -40,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/schedule",
     label: "Schedule",
     icon: "calendar",
+    section: "day",
     requires: ["ViewOwnEvents"],
   },
   // The campus day, open to anybody who has one of their own. A student stands
@@ -52,6 +63,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/timetable",
     label: "Timetable",
     icon: "grid",
+    section: "day",
     requires: ["ViewOwnEvents"],
   },
   // Two screens in one, and the looser of the two requirements is the one that
@@ -63,12 +75,14 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/attendance",
     label: "Attendance",
     icon: "checkCircle",
+    section: "day",
     requires: ["ViewOwnEvents", "ViewAttendance"],
   },
   {
     href: "/planner",
     label: "Schedule builder",
     icon: "sparkles",
+    section: "work",
     requires: ["ViewSchedulePlans"],
   },
   // Where a coordinator clears the queue. It sits above the room screens
@@ -77,7 +91,8 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: "/approvals",
     label: "Approvals",
-    icon: "checkCircle",
+    icon: "inbox",
+    section: "work",
     requires: ["ApproveBookings"],
   },
   // Both listed, for the reason /attendance lists both: the looser requirement
@@ -89,14 +104,28 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/rooms",
     label: "Rooms",
     icon: "door",
+    section: "rooms",
     requires: ["ViewOwnEvents", "ViewRooms"],
   },
-  { href: "/book", label: "Book a room", icon: "plus", requires: ["BookRoom"] },
-  { href: "/people", label: "People", icon: "users", requires: ["ViewUsers"] },
+  {
+    href: "/book",
+    label: "Book a room",
+    icon: "plus",
+    section: "rooms",
+    requires: ["BookRoom"],
+  },
+  {
+    href: "/people",
+    label: "People",
+    icon: "users",
+    section: "institution",
+    requires: ["ViewUsers"],
+  },
   {
     href: "/groups",
     label: "Groups",
     icon: "layers",
+    section: "institution",
     requires: ["ViewGroups"],
   },
   // The subjects taught this semester. It shares ViewGroups rather than owning
@@ -109,6 +138,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/courses",
     label: "Courses",
     icon: "book",
+    section: "institution",
     requires: ["ViewGroups"],
   },
   // The shape of the institution in one picture, for whoever has to arrange it.
@@ -119,6 +149,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/setup",
     label: "Setup",
     icon: "building",
+    section: "institution",
     requires: ["ManageGroups", "ManageProgrammes"],
   },
   // Two audiences behind one door, which the index screen sorts out for
@@ -131,6 +162,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/settings",
     label: "Settings",
     icon: "settings",
+    section: "settings",
     requires: ["ViewOwnEvents", "ManageSettings"],
   },
 ];

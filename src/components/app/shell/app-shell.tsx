@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { Avatar } from "~/components/ui/avatar";
 import { PlannrLogo } from "~/components/ui/brand";
+import { IconButton, iconButtonClass } from "~/components/ui/button";
 import { Icon, type IconName } from "~/components/ui/icon";
 import { contactAddress, personName } from "~/lib/people";
 import { navFor } from "~/lib/role-nav";
@@ -95,21 +97,22 @@ export function AppShell({
     <div className="flex min-h-screen flex-col lg:flex-row">
       {/* The bar that replaces the sidebar once there is no room for one. */}
       <header
-        className="bg-surface sticky top-0 z-30 flex h-[52px] shrink-0 items-center gap-2 px-3 lg:hidden"
-        style={{ boxShadow: "0 1px 0 var(--hair)" }}
+        className="sticky top-0 z-30 flex h-[52px] shrink-0 items-center gap-2 px-3 backdrop-blur-md lg:hidden"
+        style={{
+          background: "var(--glass-white)",
+          boxShadow: "0 1px 0 var(--hair)",
+        }}
       >
-        <button
+        <IconButton
           ref={hamburger}
-          type="button"
+          icon="menu"
+          label="Open the menu"
+          variant="quiet"
+          iconSize={18}
           onClick={() => setOpen(true)}
-          aria-label="Open the menu"
           aria-expanded={open}
           aria-controls="app-nav"
-          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px]"
-          style={{ background: "rgba(68,88,121,0.07)" }}
-        >
-          <Icon name="menu" size={18} color="var(--slate)" stroke={2.2} />
-        </button>
+        />
         <Link href="/" className="flex min-w-0 items-center">
           <PlannrLogo height={24} wordmarkSize={17} />
         </Link>
@@ -142,8 +145,8 @@ export function AppShell({
             type="button"
             aria-label="Close the menu"
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 cursor-default lg:hidden"
-            style={{ background: "rgba(16,22,33,0.42)" }}
+            className="plr-fade fixed inset-0 z-40 cursor-default lg:hidden"
+            style={{ background: "var(--scrim)" }}
           />
           <div
             id="app-nav"
@@ -152,22 +155,22 @@ export function AppShell({
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="bg-surface fixed top-0 left-0 z-50 flex h-full w-[272px] max-w-[86vw] flex-col gap-1 overflow-y-auto px-4 py-5 outline-none lg:hidden"
-            style={{ boxShadow: "0 0 40px rgba(16,22,33,0.28)" }}
+            // It slides in from the edge it lives at, all the way from off the
+            // screen: a menu that faded in where it stands would be a panel
+            // that appeared rather than one that came from somewhere.
+            className="plr-drawer-in bg-surface fixed top-0 left-0 z-50 flex h-full w-[272px] max-w-[86vw] flex-col gap-1 overflow-y-auto px-4 py-5 outline-none lg:hidden"
+            style={{ boxShadow: "var(--shadow-float)" }}
           >
             <div className="mb-6 flex items-center justify-between">
               <Link href="/" className="flex items-center">
                 <PlannrLogo height={26} wordmarkSize={18} />
               </Link>
-              <button
-                type="button"
+              <IconButton
+                icon="x"
+                label="Close the menu"
+                variant="quiet"
                 onClick={() => setOpen(false)}
-                aria-label="Close the menu"
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px]"
-                style={{ background: "rgba(68,88,121,0.07)" }}
-              >
-                <Icon name="x" size={16} color="var(--slate)" stroke={2.2} />
-              </button>
+              />
             </div>
             <SidebarBody
               items={items}
@@ -213,107 +216,112 @@ function SidebarBody({
     <>
       {onFold && (
         <div
-          className={`mb-7 flex items-center ${folded ? "justify-center" : "justify-between px-2"}`}
+          className={`mb-6 flex items-center ${folded ? "justify-center" : "justify-between pl-2"}`}
         >
           {!folded && (
-            <Link href="/" className="flex items-center">
+            <Link href="/" className="flex items-center rounded-[8px]">
               <PlannrLogo height={28} wordmarkSize={19} />
             </Link>
           )}
-          <button
-            type="button"
+          <IconButton
+            icon="panelFold"
+            label={folded ? "Expand the sidebar" : "Fold the sidebar"}
+            size="sm"
             onClick={onFold}
-            aria-label={folded ? "Expand the sidebar" : "Fold the sidebar"}
-            title={folded ? "Expand the sidebar" : "Fold the sidebar"}
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px]"
-            style={{ background: "rgba(68,88,121,0.07)" }}
-          >
-            <Icon
-              name="panelFold"
-              size={16}
-              color="var(--slate)"
-              className={folded ? "rotate-180" : undefined}
-            />
-          </button>
+            className={folded ? "[&>svg]:rotate-180" : undefined}
+          />
         </div>
       )}
 
-      <div
-        className={`mb-5 flex items-center gap-2.5 rounded-[10px] py-2.5 ${folded ? "justify-center px-0" : "px-3"}`}
-        style={folded ? undefined : { boxShadow: "var(--ring)" }}
-        title={folded ? orgName : undefined}
-      >
-        <span
-          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
-          style={{ background: "color-mix(in srgb, var(--slate) 16%, #fff)" }}
-        >
-          <Icon name="building" size={16} color="var(--slate)" stroke={2} />
-        </span>
-        {!folded && (
+      {/*
+       * Where you are and as whom. It used to sit in a ringed box, which is the
+       * shape of a workspace switcher, and nothing happens when it is clicked —
+       * so it is now drawn as what it is, a line of identity, and the ring is
+       * left for things that can be pressed. The folded rail leaves it out: a
+       * building on its own would only repeat Setup's glyph and say nothing.
+       */}
+      {!folded && (
+        <div className="mb-4 flex items-center gap-2.5 px-2 py-1">
+          <span className="bg-tint text-slate flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] shadow-[inset_0_0_0_1px_var(--hair-soft)]">
+            <Icon name="building" size={16} stroke={2} />
+          </span>
           <span className="min-w-0">
-            <span className="font-display text-title block truncate text-[13.5px] font-bold">
+            <span className="font-display text-title block truncate text-sm font-semibold">
               {orgName}
             </span>
-            <span className="text-muted block truncate text-[11px]">
-              {roleNames.length > 0 ? roleNames.join(" · ") : "No role"}
+            <span className="text-faint text-2xs block truncate">
+              {roleNames.length > 0 ? roleNames.join(", ") : "No role"}
             </span>
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
-      <nav className="flex flex-col gap-1">
-        {items.map((item) => {
+      <nav className="flex flex-col gap-0.5">
+        {items.map((item, index) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
+          // A hairline and a little air between the runs of the nav: your
+          // own day, the work queues, the rooms, the institution, settings.
+          const startsSection =
+            index > 0 && items[index - 1]!.section !== item.section;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              // A folded rail has no label to read, so the name has to reach a
-              // screen reader some other way.
-              aria-label={folded ? item.label : undefined}
-              title={folded ? item.label : undefined}
-              className={`plr-clip flex items-center gap-2.5 rounded-[10px] py-2.5 text-[14px] font-semibold ${
-                folded ? "justify-center px-0" : "px-3"
-              }`}
-              style={
-                active
-                  ? {
-                      background: "var(--slate)",
-                      color: "#fff",
-                      boxShadow: "0 2px 10px rgba(68,88,121,0.32)",
-                    }
-                  : { color: "var(--muted)" }
-              }
-            >
-              <Icon
-                name={item.icon as IconName}
-                size={17}
-                color={active ? "#fff" : "var(--muted)"}
-              />
-              {!folded && item.label}
-            </Link>
+            <div key={item.href} className="contents">
+              {startsSection && (
+                <span
+                  aria-hidden
+                  className="mx-3 my-2 h-px shrink-0"
+                  style={{ background: "var(--hair-soft)" }}
+                />
+              )}
+              <Link
+                href={item.href}
+                // A folded rail has no label to read, so the name has to reach
+                // a screen reader some other way.
+                aria-label={folded ? item.label : undefined}
+                aria-current={active ? "page" : undefined}
+                title={folded ? item.label : undefined}
+                className={`plr-clip group flex min-h-10 items-center gap-2.5 rounded-[10px] text-base font-semibold active:scale-[0.98] ${
+                  folded ? "justify-center px-0" : "px-3"
+                } ${
+                  // The current screen is a wash of slate with slate ink, not a
+                  // slate fill: filled slate is the primary button's colour, and
+                  // a nav that wore it on every screen out-shouted the one
+                  // action each screen is for.
+                  active
+                    ? "bg-tint-selected text-slate-ink shadow-[inset_0_0_0_1px_var(--hair-soft)]"
+                    : "text-muted hover:bg-tint-hover hover:text-title"
+                }`}
+              >
+                <Icon
+                  name={item.icon as IconName}
+                  size={18}
+                  stroke={active ? 2.1 : 1.85}
+                  className={
+                    active
+                      ? "text-slate"
+                      : "text-faint group-hover:text-muted transition-colors duration-150"
+                  }
+                />
+                {!folded && <span className="truncate">{item.label}</span>}
+              </Link>
+            </div>
           );
         })}
       </nav>
 
       <div
-        className={`mt-auto flex items-center gap-2.5 pt-4 ${folded ? "flex-col" : ""}`}
+        className={`mt-auto flex items-center gap-2.5 pt-4 ${folded ? "flex-col" : "px-1"}`}
         style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
       >
-        <span
-          className="mt-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
-          style={{ background: "var(--slate)" }}
-          title={folded ? personName(user) : undefined}
-        >
-          {personName(user).charAt(0).toUpperCase()}
+        <span title={folded ? personName(user) : undefined} className="mt-4">
+          <Avatar name={personName(user)} size={32} tone="solid" />
         </span>
         {!folded && (
           <span className="mt-4 min-w-0 flex-1">
-            <span className="text-title block truncate text-[13px] font-semibold">
+            <span className="text-title block truncate text-sm font-semibold">
               {personName(user)}
             </span>
-            <span className="text-faint block truncate text-[11px]">
+            <span className="text-faint text-2xs block truncate">
               {contactAddress(user.email)}
             </span>
           </span>
@@ -322,9 +330,9 @@ function SidebarBody({
           href="/api/auth/signout"
           title="Sign out"
           aria-label="Sign out"
-          className={`flex h-8 w-8 items-center justify-center rounded-lg ${folded ? "" : "mt-4"}`}
+          className={iconButtonClass("ghost", "sm", folded ? "" : "mt-4")}
         >
-          <Icon name="logout" size={16} color="var(--faint)" />
+          <Icon name="logout" size={16} stroke={2} />
         </Link>
       </div>
     </>

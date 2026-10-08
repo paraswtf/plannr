@@ -11,10 +11,10 @@ import { appUrl } from "~/env";
 import { TRPCReactProvider } from "~/trpc/react";
 
 const APP_NAME = "Plannr";
-const APP_TITLE = "Plannr — campus timetables & room booking";
+const APP_TITLE = "Plannr · Campus timetables & room booking";
 /** One sentence, under 160 characters, so previews never truncate it. */
 const APP_DESCRIPTION =
-  "Clash-free timetables, live room availability, one-tap room bookings and class attendance — one scheduling system for the whole campus.";
+  "Clash-free timetables, live room availability, one-tap room bookings and class attendance, in one scheduling system for the whole campus.";
 
 /**
  * `metadataBase` turns every relative asset below into an absolute URL, which
@@ -79,10 +79,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   colorScheme: "light",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#eef0f3" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
-  ],
+  // The paper under both schemes: the app is light-only, and a dark OS used
+  // to paint the browser's chrome near-black above a pale page.
+  themeColor: "#eef0f3",
 };
 
 // Display face: headings, room numerals, stat values.

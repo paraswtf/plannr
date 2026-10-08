@@ -8,6 +8,8 @@ import {
   fromWallTime,
   toWallTime,
 } from "~/lib/dates";
+import { Button } from "./button";
+import { triggerClass } from "./field";
 import { Icon } from "./icon";
 import { Popover } from "./popover";
 
@@ -51,6 +53,7 @@ export function DatePicker({
   ariaLabel = "Date",
   label,
   className,
+  id,
 }: {
   /** The chosen day, as an instant; read in `timeZone`. */
   value: Date;
@@ -67,6 +70,11 @@ export function DatePicker({
    */
   label?: string;
   className?: string;
+  /**
+   * The trigger's id, for a `<label htmlFor>` to name. A visible label then
+   * names the control; `ariaLabel` is still read when there is none.
+   */
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -144,20 +152,19 @@ export function DatePicker({
     shiftDays(firstOfMonth, i - leadIn),
   );
 
-  const pad =
-    size === "sm" ? "px-2.5 py-1 text-[12px]" : "px-3 py-2 text-[13px]";
-
   return (
     <div className={className} ref={boxRef}>
       <button
+        id={id}
         type="button"
-        aria-label={ariaLabel}
+        // A label tied by id is the better name; the prop is the fallback for
+        // the pickers that stand alone in a toolbar with no label beside them.
+        aria-label={id ? undefined : ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKeyDown}
-        className={`bg-surface text-title flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] text-left font-medium lg:min-h-0 ${pad}`}
-        style={{ boxShadow: "var(--ring)" }}
+        className={triggerClass(size)}
       >
         {/*
           `truncate` has to sit on the text itself. On the row it used to be on
@@ -171,7 +178,7 @@ export function DatePicker({
           <Icon
             name="calendar"
             size={size === "sm" ? 13 : 15}
-            color="var(--muted)"
+            color="var(--faint)"
             className="shrink-0"
           />
           <span className="truncate">
@@ -198,8 +205,8 @@ export function DatePicker({
         // the start of the month is worth more than square cells — and scrolls
         // rather than run past the bottom of one too short, which a phone in
         // landscape with a keyboard up genuinely is.
-        className="bg-surface plr-scroll w-[312px] overflow-y-auto rounded-[12px] p-2.5 sm:w-[268px]"
-        style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+        className="bg-surface plr-scroll w-[312px] overflow-y-auto rounded-[14px] p-2.5 sm:w-[268px]"
+        style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
       >
         <div className="mb-2 flex items-center justify-between">
           <MonthStep
@@ -213,7 +220,7 @@ export function DatePicker({
               )
             }
           />
-          <span className="font-display text-title text-[13.5px] font-bold">
+          <span className="font-display text-title text-base font-semibold">
             {formatMonthLabel(view.year, view.month)}
           </span>
           <MonthStep
@@ -233,7 +240,7 @@ export function DatePicker({
           {WEEKDAYS.map((letter, i) => (
             <span
               key={i}
-              className="text-faint pb-1 text-center font-mono text-[10.5px] font-bold"
+              className="text-muted text-2xs pb-1 text-center font-semibold"
             >
               {letter}
             </span>
@@ -251,23 +258,17 @@ export function DatePicker({
                 aria-current={isSelected ? "date" : undefined}
                 onClick={() => choose(cell)}
                 onMouseEnter={() => setCursor(cell)}
-                className="plr-clip flex h-10 cursor-pointer items-center justify-center rounded-[8px] text-[12.5px] font-semibold sm:h-8"
-                style={{
-                  background: isSelected
-                    ? "var(--slate)"
-                    : isCursor
-                      ? "rgba(68,88,121,0.08)"
-                      : "transparent",
-                  color: isSelected
-                    ? "#fff"
-                    : inMonth
-                      ? "var(--app-title)"
-                      : "var(--faint)",
-                  boxShadow:
-                    isToday && !isSelected
-                      ? "inset 0 0 0 1px var(--slate-muted)"
-                      : undefined,
-                }}
+                className={`plr-clip flex h-10 cursor-pointer items-center justify-center rounded-[8px] text-sm font-semibold tabular-nums sm:h-8 ${
+                  isSelected
+                    ? "bg-slate text-white shadow-[0_1px_2px_rgba(22,32,51,0.16)]"
+                    : `${isCursor ? "bg-tint-selected" : ""} ${inMonth ? "text-title" : "text-faint font-medium"}`
+                } ${
+                  // Today is ringed rather than filled, so it stays findable
+                  // without ever looking like the day that has been chosen.
+                  isToday && !isSelected
+                    ? "text-slate-ink shadow-[inset_0_0_0_1.5px_var(--slate)]"
+                    : ""
+                }`}
               >
                 {cell.day}
               </button>
@@ -275,14 +276,15 @@ export function DatePicker({
           })}
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="quiet"
+          size="sm"
+          block
           onClick={() => choose(today)}
-          className="text-slate mt-2 w-full cursor-pointer rounded-[8px] py-2.5 text-[12.5px] font-semibold sm:py-1.5"
-          style={{ background: "rgba(68,88,121,0.07)" }}
+          className="mt-2"
         >
           Today
-        </button>
+        </Button>
       </Popover>
     </div>
   );
@@ -309,10 +311,9 @@ function MonthStep({
       // grid was opened in rather than around it. Keeping focus where it was
       // costs nothing — the button is reached with a pointer either way.
       onMouseDown={(e) => e.preventDefault()}
-      className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg sm:h-7 sm:w-7"
-      style={{ background: "rgba(68,88,121,0.07)" }}
+      className="bg-tint text-slate hover:bg-tint-strong flex h-10 w-10 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-150 sm:h-7 sm:w-7"
     >
-      <Icon name={icon} size={13} color="var(--slate)" stroke={2.2} />
+      <Icon name={icon} size={13} stroke={2.2} />
     </button>
   );
 }

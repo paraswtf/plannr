@@ -10,10 +10,10 @@ import { type MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Plannr — campus timetables & room booking",
+    name: "Plannr · Campus timetables & room booking",
     short_name: "Plannr",
     description:
-      "Clash-free timetables, live room availability, one-tap room bookings and class attendance — one scheduling system for the whole campus.",
+      "Clash-free timetables, live room availability, one-tap room bookings and class attendance, in one scheduling system for the whole campus.",
     id: "/",
     start_url: "/",
     scope: "/",

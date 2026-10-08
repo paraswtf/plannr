@@ -10,7 +10,28 @@ const TONE_HEX: Record<StatTone, string> = {
   violet: "#7a2e8f",
 };
 
-/** Headline number with a label, an icon chip and an optional delta pill. */
+/*
+ * Words in a tone have to be readable, which the bright half of the palette
+ * is not: orange at 11px on white is 2:1. The glyph keeps the bright colour,
+ * where it is a shape rather than text; the delta is set in the state's ink.
+ */
+const TONE_INK: Record<StatTone, string> = {
+  slate: "var(--info-ink)",
+  red: "var(--bad-ink)",
+  green: "var(--good-ink)",
+  orange: "var(--warn-ink)",
+  violet: "#6b2880",
+};
+
+/**
+ * Headline number with a label, an optional glyph and an optional delta.
+ *
+ * The number is the point, so it leads: display face, tabular figures so a
+ * column of these lines up digit for digit, and everything else stepped down
+ * in size and ink beneath it. The glyph is small and sits beside the label
+ * rather than on a coloured plate of its own — a row of tinted icon chips is
+ * the dashboard everyone has seen, and the chip said nothing the label did not.
+ */
 export function Stat({
   label,
   value,
@@ -28,41 +49,30 @@ export function Stat({
   delta?: string;
   deltaTone?: StatTone;
 }) {
-  const hex = TONE_HEX[tone];
   return (
-    <div
-      className="bg-surface rounded-[var(--radius-card)] p-[18px]"
-      style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="text-muted text-[12.5px] font-medium">{label}</span>
+    <div className="bg-surface rounded-[var(--radius-card)] p-[18px] shadow-[var(--ring),var(--shadow-card)]">
+      <div className="flex items-center gap-1.5">
         {icon && (
-          <span
-            className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px]"
-            style={{ background: `color-mix(in srgb, ${hex} 14%, #fff)` }}
-          >
-            <Icon name={icon} size={16} color={hex} stroke={1.9} />
-          </span>
+          <Icon name={icon} size={14} color={TONE_HEX[tone]} stroke={2} />
         )}
+        <span className="text-muted text-xs font-medium">{label}</span>
       </div>
 
-      <div className="mt-2.5 flex items-baseline gap-2">
-        <span className="font-display text-title text-[28px] leading-none font-bold tracking-[-0.02em]">
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className="font-display text-title text-[28px] leading-none font-semibold tracking-[-0.025em] tabular-nums">
           {value}
         </span>
         {delta && (
           <span
-            className="text-[12px] font-bold"
-            style={{ color: TONE_HEX[deltaTone] }}
+            className="text-xs font-semibold"
+            style={{ color: TONE_INK[deltaTone] }}
           >
             {delta}
           </span>
         )}
       </div>
 
-      {note && (
-        <div className="text-faint mt-1.5 font-mono text-[11.5px]">{note}</div>
-      )}
+      {note && <div className="text-faint mt-2 text-xs">{note}</div>}
     </div>
   );
 }

@@ -258,10 +258,13 @@ export function formatWeekLabel(monday: Date, timeZone: string): string {
     new Intl.DateTimeFormat("en-GB", { ...opts, timeZone }).format(instant);
 
   if (from.year !== to.year) {
-    return `${part(monday, { day: "numeric", month: "short", year: "numeric" })} – ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+    return `${part(monday, { day: "numeric", month: "short", year: "numeric" })} - ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
   }
   if (from.month !== to.month) {
-    return `${part(monday, { day: "numeric", month: "short" })} – ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+    return `${part(monday, { day: "numeric", month: "short" })} - ${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
   }
-  return `${from.day}–${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
+  // Ranges are joined with a plain hyphen, as everywhere else the app writes
+  // one: the en dash is the typographer's choice, and on a screen at this size
+  // it only reads as a hyphen that came from somewhere else.
+  return `${from.day}-${part(sunday, { day: "numeric", month: "short", year: "numeric" })}`;
 }

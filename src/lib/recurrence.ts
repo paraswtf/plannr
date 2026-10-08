@@ -151,7 +151,7 @@ export function validateRRule(
     return {
       ok: false,
       error:
-        "A repeating event must end — set an end date (UNTIL) or a number of occurrences (COUNT).",
+        "A repeating event must end: set an end date (UNTIL) or a number of occurrences (COUNT).",
     };
   }
 

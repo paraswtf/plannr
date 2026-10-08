@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { triggerClass } from "./field";
 import { Icon } from "./icon";
 import { Popover } from "./popover";
 
@@ -31,6 +32,7 @@ export function Select<T extends string | number>({
   placeholder = "Select…",
   ariaLabel,
   className,
+  id,
 }: {
   value: T;
   options: SelectOption<T>[];
@@ -39,6 +41,12 @@ export function Select<T extends string | number>({
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
+  /**
+   * The trigger's id, for a `<label htmlFor>` to name — pass the id `Field`
+   * hands its render function and drop `ariaLabel`, so the visible label is
+   * the one a screen reader hears.
+   */
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -107,23 +115,20 @@ export function Select<T extends string | number>({
     }
   };
 
-  const pad =
-    size === "sm" ? "px-2.5 py-1 text-[12px]" : "px-3 py-2 text-[13px]";
-
   return (
     <div className={className} ref={boxRef}>
       <button
+        id={id}
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKeyDown}
-        className={`bg-surface text-ink flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] text-left font-medium lg:min-h-0 ${pad}`}
-        style={{ boxShadow: "var(--ring)" }}
+        className={triggerClass(size)}
       >
         <span
-          className={`min-w-0 truncate ${selected ? "text-title" : "text-faint"}`}
+          className={`min-w-0 truncate ${selected ? "text-title" : "text-placeholder"}`}
         >
           {selected?.label ?? placeholder}
         </span>
@@ -147,8 +152,8 @@ export function Select<T extends string | number>({
         // shrinks them when the window has less room than they asked for.
         match="min-width"
         maxHeight={280}
-        className="bg-surface plr-scroll w-max overflow-y-auto rounded-[10px] p-1.5"
-        style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+        className="bg-surface plr-scroll w-max overflow-y-auto rounded-[12px] p-1.5"
+        style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
       >
         {options.map((option, i) => {
           const isSelected = option.value === value;
@@ -161,25 +166,35 @@ export function Select<T extends string | number>({
               onMouseEnter={() => setActive(i)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(i)}
-              className="flex min-h-10 items-center gap-2 rounded-lg px-2.5 py-1.5 lg:min-h-0"
-              style={{
-                background: option.disabled
-                  ? "transparent"
-                  : isSelected
-                    ? "rgba(68,88,121,0.08)"
-                    : i === active
-                      ? "rgba(68,88,121,0.06)"
-                      : "transparent",
-                cursor: option.disabled ? "not-allowed" : "pointer",
-                opacity: option.disabled ? 0.45 : 1,
-              }}
+              className={`flex min-h-10 items-center gap-2 rounded-[8px] px-2.5 py-1.5 lg:min-h-0 ${
+                // A disabled option keeps its words readable — the hint is
+                // usually the reason it cannot be chosen ("Closed for
+                // renovation"), and at 45% opacity nobody could read it.
+                option.disabled
+                  ? "cursor-not-allowed"
+                  : `cursor-pointer ${
+                      isSelected
+                        ? "bg-tint-selected"
+                        : i === active
+                          ? "bg-tint-hover"
+                          : ""
+                    }`
+              }`}
             >
               <span className="min-w-0 flex-1">
-                <span className="text-title block truncate text-[12.5px] font-medium">
+                <span
+                  className={`block truncate text-sm ${
+                    option.disabled
+                      ? "text-muted font-normal"
+                      : isSelected
+                        ? "text-title font-semibold"
+                        : "text-title font-medium"
+                  }`}
+                >
                   {option.label}
                 </span>
                 {option.hint && (
-                  <span className="text-faint block truncate text-[11px]">
+                  <span className="text-faint text-2xs block truncate">
                     {option.hint}
                   </span>
                 )}

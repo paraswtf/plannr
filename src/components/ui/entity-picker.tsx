@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { EntityCardBody, type EntityCard } from "./entity-card";
+import { triggerClass } from "./field";
 import { Icon } from "./icon";
 import { Popover } from "./popover";
 
@@ -91,12 +92,9 @@ function useActiveIndex(
   return { active, setActive, onKeyDown };
 }
 
+/** The wash behind a result: chosen beats hovered, and neither is a fill. */
 const rowBackground = (selected: boolean, active: boolean) =>
-  selected
-    ? "rgba(68,88,121,0.08)"
-    : active
-      ? "rgba(68,88,121,0.06)"
-      : "transparent";
+  selected ? "bg-tint-selected" : active ? "bg-tint-hover" : "";
 
 /**
  * Multi-select over a list too long to render in full.
@@ -117,6 +115,7 @@ export function EntityPicker({
   placeholder = "Search…",
   emptyLabel = "Nothing selected",
   listId,
+  id,
 }: {
   selected: PickerOption[];
   onChange: (ids: string[]) => void;
@@ -129,6 +128,12 @@ export function EntityPicker({
   placeholder?: string;
   emptyLabel?: string;
   listId?: string;
+  /**
+   * The id of the search box, which is what a `<label htmlFor>` should name:
+   * it is the part that takes the caret. Pass the id `Field` hands its render
+   * function, and the visible label becomes the control's accessible name.
+   */
+  id?: string;
 }) {
   const selectedIds = selected.map((s) => s.id);
   const [open, setOpen] = useState(false);
@@ -157,8 +162,10 @@ export function EntityPicker({
           selected.map((s) => (
             <span
               key={s.id}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full py-1.5 pr-2 pl-3 text-[12.5px] font-semibold text-white"
-              style={{ background: "var(--slate)" }}
+              // A chosen item is a tile in the selected wash, not a slate pill:
+              // a dialog with a dozen students picked was a dozen dark blots,
+              // each louder than the button that saves them.
+              className="bg-tint-selected text-slate-ink inline-flex max-w-full items-center gap-1.5 rounded-[8px] py-1 pr-1.5 pl-2.5 text-xs font-semibold shadow-[inset_0_0_0_1px_var(--hair)]"
             >
               {/*
                * A chip is one line, and a room or group with a long name is
@@ -175,16 +182,15 @@ export function EntityPicker({
                   // The cross stays the size the chip was drawn at; what grows
                   // for a finger is an invisible pad around it, since a 40px
                   // button would be taller than the chip holding it.
-                  className="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full before:absolute before:-inset-2.5 before:content-['']"
-                  style={{ background: "rgba(255,255,255,0.25)" }}
+                  className="hover:bg-tint-strong relative flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-[5px] transition-colors duration-150 before:absolute before:-inset-2.5 before:content-['']"
                 >
-                  <Icon name="x" size={10} color="#fff" stroke={3} />
+                  <Icon name="x" size={10} stroke={3} />
                 </button>
               )}
             </span>
           ))
         ) : (
-          <span className="text-faint py-1.5 text-[12.5px]">{emptyLabel}</span>
+          <span className="text-faint py-1.5 text-sm">{emptyLabel}</span>
         )}
       </div>
 
@@ -213,6 +219,7 @@ export function EntityPicker({
                 onKeyDown(e);
               }}
               placeholder={placeholder}
+              id={id}
               role="combobox"
               aria-expanded={open}
               aria-controls={`${base}-list`}
@@ -225,8 +232,7 @@ export function EntityPicker({
               // Text below 16px makes mobile Safari zoom the page in the moment
               // the field takes focus, and a zoomed page is one that scrolls
               // sideways; the pointer size comes back at the first breakpoint.
-              className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:min-h-0 sm:text-[13px]"
-              style={{ boxShadow: "var(--ring)" }}
+              className="bg-field text-title placeholder:text-placeholder min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] shadow-[inset_0_0_0_1px_var(--field-line)] transition-[box-shadow] duration-150 outline-none hover:shadow-[inset_0_0_0_1px_var(--field-line-hover)] focus:shadow-[inset_0_0_0_1.5px_var(--focus),0_0_0_3px_var(--focus-halo)] sm:min-h-0 sm:text-sm"
             />
           </div>
 
@@ -235,11 +241,10 @@ export function EntityPicker({
               id={`${base}-list`}
               role="listbox"
               aria-multiselectable
-              className="plr-scroll max-h-[280px] overflow-y-auto rounded-[10px]"
-              style={{ boxShadow: "var(--ring)" }}
+              className="plr-scroll bg-surface max-h-[280px] overflow-y-auto rounded-[12px] shadow-[var(--ring)]"
             >
               {loading && !page ? (
-                <p className="text-muted p-3 text-[12.5px]">Searching…</p>
+                <p className="text-muted p-3 text-sm">Searching…</p>
               ) : rows.length > 0 ? (
                 <>
                   {rows.map((o, i) => {
@@ -254,18 +259,14 @@ export function EntityPicker({
                         // Keeps focus in the input so typing continues to work.
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => toggle(o.id)}
-                        className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2.5 text-left"
-                        style={{
-                          boxShadow: "inset 0 -1px 0 var(--hair-soft)",
-                          background: rowBackground(on, i === active),
-                        }}
+                        className={`flex w-full cursor-pointer items-start gap-2.5 px-3 py-2.5 text-left shadow-[inset_0_-1px_0_var(--hair-soft)] ${rowBackground(on, i === active)}`}
                       >
                         <span
-                          className="mt-0.5 flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[4px]"
-                          style={{
-                            background: on ? "var(--slate)" : "var(--surface)",
-                            boxShadow: on ? "none" : "var(--ring)",
-                          }}
+                          className={`mt-0.5 flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[4px] ${
+                            on
+                              ? "bg-slate"
+                              : "bg-surface shadow-[inset_0_0_0_1px_var(--field-line)]"
+                          }`}
                         >
                           {on && (
                             <Icon
@@ -284,14 +285,14 @@ export function EntityPicker({
                     <button
                       type="button"
                       onClick={onLoadMore}
-                      className="text-slate min-h-10 w-full cursor-pointer px-3 py-2 text-[12.5px] font-semibold lg:min-h-0"
+                      className="text-slate hover:bg-tint-hover min-h-10 w-full cursor-pointer px-3 py-2 text-sm font-semibold transition-colors duration-150 lg:min-h-0"
                     >
-                      Load more ({page.total - rows.length} more)
+                      Show {page.total - rows.length} more
                     </button>
                   )}
                 </>
               ) : (
-                <p className="text-muted p-3 text-[12.5px]">
+                <p className="text-muted p-3 text-sm">
                   {query ? "No matches." : "Type to search."}
                 </p>
               )}
@@ -330,6 +331,7 @@ export function SearchSelect({
   placeholder = "Search…",
   emptyOption,
   listId,
+  id,
 }: {
   value: PickerOption | null;
   onChange: (id: string | null) => void;
@@ -343,6 +345,11 @@ export function SearchSelect({
   /** Label for a "none" choice, when the field is optional. */
   emptyOption?: string;
   listId?: string;
+  /**
+   * The id of the trigger button, for a `<label htmlFor>` to name — pass the
+   * id `Field` hands its render function.
+   */
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -369,19 +376,16 @@ export function SearchSelect({
     <div ref={boxRef}>
       <button
         ref={triggerRef}
+        id={id}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="bg-surface flex min-h-10 w-full items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0"
-        style={{
-          boxShadow: "var(--ring)",
-          cursor: disabled ? "default" : "pointer",
-        }}
+        className={triggerClass("md", disabled ? "cursor-default" : "")}
       >
         <span
-          className={`min-w-0 truncate ${value ? "text-title font-medium" : "text-faint"}`}
+          className={`min-w-0 truncate ${value ? "text-title font-medium" : "text-placeholder font-normal"}`}
         >
           {value?.label ?? emptyOption ?? placeholder}
         </span>
@@ -397,8 +401,8 @@ export function SearchSelect({
         // search box stays put and only the results give ground when the
         // placement has less height to offer than the list would like.
         match="width"
-        className="bg-surface flex flex-col rounded-[10px] p-1.5"
-        style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+        className="bg-surface flex flex-col rounded-[12px] p-1.5"
+        style={{ boxShadow: "var(--ring), var(--shadow-md)" }}
       >
         <div className="relative mb-1.5 shrink-0">
           <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
@@ -431,7 +435,7 @@ export function SearchSelect({
             }
             // 16px on a phone for the same reason as the multi-select's
             // field: anything smaller and Safari zooms the page on focus.
-            className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
+            className="bg-paper text-title placeholder:text-placeholder min-h-10 w-full rounded-[8px] py-1.5 pr-2 pl-8 text-[16px] outline-none focus:shadow-[inset_0_0_0_1px_var(--field-line-hover)] sm:min-h-0 sm:text-sm"
           />
         </div>
 
@@ -448,13 +452,13 @@ export function SearchSelect({
             <button
               type="button"
               onClick={() => pick(null)}
-              className="text-muted min-h-10 w-full cursor-pointer rounded-lg px-2.5 py-1.5 text-left text-[12.5px] lg:min-h-0"
+              className="text-muted hover:bg-tint-hover min-h-10 w-full cursor-pointer rounded-[8px] px-2.5 py-1.5 text-left text-sm lg:min-h-0"
             >
               {emptyOption}
             </button>
           )}
           {loading && !page ? (
-            <p className="text-muted p-2 text-[12.5px]">Searching…</p>
+            <p className="text-muted p-2 text-sm">Searching…</p>
           ) : rows.length > 0 ? (
             <>
               {rows.map((o, i) => (
@@ -467,14 +471,11 @@ export function SearchSelect({
                   onMouseEnter={() => setActive(i)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => !o.disabled && pick(o.id)}
-                  className="flex min-h-10 items-start gap-2.5 rounded-lg px-2.5 py-2 lg:min-h-0"
-                  style={{
-                    background: o.disabled
-                      ? "transparent"
-                      : rowBackground(o.id === value?.id, i === active),
-                    cursor: o.disabled ? "not-allowed" : "pointer",
-                    opacity: o.disabled ? 0.45 : 1,
-                  }}
+                  className={`flex min-h-10 items-start gap-2.5 rounded-[8px] px-2.5 py-2 lg:min-h-0 ${
+                    o.disabled
+                      ? "[&_*]:text-muted cursor-not-allowed"
+                      : `cursor-pointer ${rowBackground(o.id === value?.id, i === active)}`
+                  }`}
                 >
                   <EntityCardBody card={toCard(o)} />
                 </div>
@@ -488,14 +489,14 @@ export function SearchSelect({
                   // from reaching the search box above it, and Tab from here
                   // walks out of the dialog rather than around it.
                   onMouseDown={(e) => e.preventDefault()}
-                  className="text-slate min-h-10 w-full cursor-pointer px-2.5 py-1.5 text-[12px] font-semibold lg:min-h-0"
+                  className="text-slate hover:bg-tint-hover min-h-10 w-full cursor-pointer rounded-[8px] px-2.5 py-1.5 text-xs font-semibold lg:min-h-0"
                 >
-                  Load more ({page.total - rows.length} more)
+                  Show {page.total - rows.length} more
                 </button>
               )}
             </>
           ) : (
-            <p className="text-muted p-2 text-[12.5px]">No matches.</p>
+            <p className="text-muted p-2 text-sm">No matches.</p>
           )}
         </div>
       </Popover>
