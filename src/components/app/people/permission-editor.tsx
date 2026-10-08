@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { Icon } from "~/components/ui/icon";
+import { Checkbox } from "~/components/ui/checkbox";
 import {
   expandPermissions,
   impliedPermissions,
@@ -56,11 +56,24 @@ export function PermissionEditor({
       {PERMISSION_CATEGORIES.map((category) => {
         const items = PERMISSION_CATALOG.filter((p) => p.category === category);
         if (items.length === 0) return null;
+        // How many of the category are on, ticked or implied: a sense of where
+        // the list stands without scrolling through twenty-odd rows to count.
+        const on = items.filter(
+          (p) => ((granted | implied) & PermissionFlags[p.name]) !== 0n,
+        ).length;
 
         return (
           <div key={category}>
-            <div className="text-faint mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
+            {/*
+             * Sentence case in the body face, with the count beside it, where
+             * this used to be spaced-out mono capitals: a heading to read, not
+             * a label to decode.
+             */}
+            <div className="text-title mb-1.5 px-3 text-sm font-semibold">
               {category}
+              <span className="text-faint ml-2 font-mono text-xs font-normal tabular-nums">
+                {on} of {items.length}
+              </span>
             </div>
             <div className="flex flex-col gap-1">
               {items.map((p) => {
@@ -70,53 +83,40 @@ export function PermissionEditor({
                 const checked = checkedDirectly || isImplied;
                 const lockedByImplication = isImplied && !disabled;
                 const source = isImplied ? sourceOf(bit) : null;
+                const interactive = !disabled && !lockedByImplication;
 
+                /*
+                 * Implied by another permission: the box is ticked and locked,
+                 * with the note beside the name saying which one granted it, so
+                 * it reads as "on, but not your doing". The shared checkbox
+                 * dims a disabled row, which is the cue that it cannot be
+                 * changed here.
+                 */
                 return (
-                  <label
+                  <Checkbox
                     key={p.name}
-                    className="flex cursor-pointer items-start gap-3 rounded-[10px] px-3 py-2.5"
-                    style={{
-                      background: checked
-                        ? "rgba(68,88,121,0.06)"
-                        : "transparent",
-                      cursor:
-                        disabled || lockedByImplication ? "default" : "pointer",
-                      opacity: disabled ? 0.6 : 1,
-                    }}
-                  >
-                    <span
-                      className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px]"
-                      style={{
-                        background: checked ? "var(--slate)" : "var(--surface)",
-                        boxShadow: checked ? "none" : "var(--ring)",
-                        opacity: lockedByImplication ? 0.55 : 1,
-                      }}
-                    >
-                      {checked && (
-                        <Icon name="check" size={12} color="#fff" stroke={3} />
-                      )}
-                    </span>
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={checked}
-                      disabled={disabled || lockedByImplication}
-                      onChange={() => toggle(bit)}
-                    />
-                    <span className="min-w-0">
-                      <span className="text-title block text-[13.5px] font-semibold">
+                    checked={checked}
+                    disabled={disabled || lockedByImplication}
+                    onChange={() => toggle(bit)}
+                    label={
+                      <>
                         {p.label}
                         {isImplied && source && (
-                          <span className="text-faint ml-2 text-[11.5px] font-medium">
+                          <span className="text-faint ml-2 text-xs font-medium">
                             granted by {source}
                           </span>
                         )}
-                      </span>
-                      <span className="text-muted block text-[12.5px]">
-                        {p.description}
-                      </span>
-                    </span>
-                  </label>
+                      </>
+                    }
+                    description={p.description}
+                    className={`gap-3 rounded-[10px] px-3 transition-colors duration-150 ${
+                      checked
+                        ? "bg-tint"
+                        : interactive
+                          ? "hover:bg-tint-hover"
+                          : ""
+                    }`}
+                  />
                 );
               })}
             </div>

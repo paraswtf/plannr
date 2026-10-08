@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SearchSelect } from "~/components/ui/entity-picker";
+import { Field } from "~/components/ui/field";
 import { roomShortfalls, type FittableRoom, type RoomNeeds } from "./room-fit";
 
 /**
@@ -43,31 +44,33 @@ export function RoomPicker({
   const selected = rooms.find((room) => room.id === value);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
-      <SearchSelect
-        value={selected ? { id: selected.id, label: selected.code } : null}
-        onChange={(id) => id && onChange(id)}
-        page={{
-          rows: matches.slice(0, limit).map((room) => {
-            const shortfalls = roomShortfalls(room, needs);
-            return {
-              id: room.id,
-              label: room.code,
-              hint: shortfalls.length
-                ? shortfalls.join(" · ")
-                : `${room.building?.name ? `${room.building.name} · ` : ""}seats ${room.capacity}`,
-              disabled: shortfalls.length > 0,
-            };
-          }),
-          total: matches.length,
-          hasMore: matches.length > limit,
-        }}
-        query={query}
-        onQueryChange={setQuery}
-        onLoadMore={() => setLimit((n) => n + pageSize)}
-        placeholder="Search rooms…"
-      />
-    </div>
+    <Field label={label}>
+      {(id) => (
+        <SearchSelect
+          id={id}
+          value={selected ? { id: selected.id, label: selected.code } : null}
+          onChange={(id) => id && onChange(id)}
+          page={{
+            rows: matches.slice(0, limit).map((room) => {
+              const shortfalls = roomShortfalls(room, needs);
+              return {
+                id: room.id,
+                label: room.code,
+                hint: shortfalls.length
+                  ? shortfalls.join(" · ")
+                  : `${room.building?.name ? `${room.building.name} · ` : ""}seats ${room.capacity}`,
+                disabled: shortfalls.length > 0,
+              };
+            }),
+            total: matches.length,
+            hasMore: matches.length > limit,
+          }}
+          query={query}
+          onQueryChange={setQuery}
+          onLoadMore={() => setLimit((n) => n + pageSize)}
+          placeholder="Search rooms…"
+        />
+      )}
+    </Field>
   );
 }

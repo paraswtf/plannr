@@ -66,7 +66,9 @@ export const facultyCard = (f: {
       title: f.name,
       subtitle: f.department ?? "No department",
       badges:
-        f.isActive === false ? [{ text: "inactive", tone: "red" as const }] : [],
+        f.isActive === false
+          ? [{ text: "inactive", tone: "red" as const }]
+          : [],
       meta: [
         // A card is glanced at rather than read, so an address that is not
         // there is left out rather than announced in the row of counts.

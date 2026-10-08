@@ -3,6 +3,7 @@
 import { useLongPress } from "~/components/ui/use-long-press";
 import { courseTone } from "~/lib/course-colour";
 import { formatDayLabel, formatHourLabel, toWallTime } from "~/lib/dates";
+import { blockPaint } from "./block-paint";
 import type { DayCalendarEvent } from "./day-calendar";
 import { MONTH_ROW_HEIGHT, type MonthCell } from "./month-layout";
 
@@ -39,18 +40,18 @@ export function MonthGrid({
   onEventPress?: (event: DayCalendarEvent) => void;
 }) {
   return (
-    <div
-      className="bg-surface overflow-hidden rounded-[var(--radius-card)]"
-      style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
-    >
-      <div
-        className="grid grid-cols-7"
-        style={{ boxShadow: "0 1px 0 var(--hair)" }}
-      >
+    /*
+     * The ring is drawn by a pseudo-element over the cells rather than as the
+     * box's own inset shadow, which paints under its children: a lead-in or
+     * lead-out day, on the paper, would otherwise paint over the card's edge
+     * and its rounded corner and run straight into the page.
+     */
+    <div className="bg-surface relative overflow-hidden rounded-[var(--radius-card)] shadow-[var(--shadow-card)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[var(--ring)]">
+      <div className="grid grid-cols-7 shadow-[0_1px_0_var(--hair)]">
         {DAY_NAMES.map((name) => (
           <div
             key={name}
-            className="text-muted py-2 text-center text-[11.5px] font-semibold"
+            className="text-muted py-2 text-center text-xs font-semibold"
           >
             {/* Two letters is all a 50px cell can hold, and "Mo" is no less
                 legible above a column of numbers than "Mon" is. */}
@@ -103,8 +104,13 @@ function Cell({
   const wall = toWallTime(cell.day, timeZone);
 
   return (
+    /*
+     * A day outside the month sits on the paper rather than the surface, so
+     * "not this month" no longer reads the same as "already happened": past
+     * chips are paler now, and lead-in days are a different ground.
+     */
     <div
-      className="relative"
+      className={`relative ${cell.inMonth ? "" : "bg-paper"}`}
       style={{
         height: MONTH_ROW_HEIGHT,
         boxShadow: [
@@ -125,20 +131,23 @@ function Cell({
         type="button"
         aria-label={`Open ${formatDayLabel(cell.day, timeZone)}`}
         onClick={() => onDayClick(cell.day)}
-        className="absolute inset-0 cursor-pointer"
+        // A wash under the pointer says the whole cell is the target, and the
+        // ring is inset: the card clips its edges and the next cell paints
+        // over anything drawn outside this one.
+        className="hover:bg-tint-hover absolute inset-0 cursor-pointer transition-colors focus-visible:outline-offset-[-2px]"
       />
 
       <div className="pointer-events-none relative flex h-full flex-col gap-[3px] p-1.5">
         <div className="flex shrink-0 items-center justify-between">
+          {/* 18px tall, which `DATE_LINE` in month-layout.ts budgets for. */}
           <span
-            className={`font-display flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11.5px] font-bold ${
+            className={`font-display flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-xs font-semibold ${
               cell.isToday
-                ? "text-white"
+                ? "bg-slate text-white"
                 : cell.inMonth
                   ? "text-title"
                   : "text-faint"
             }`}
-            style={cell.isToday ? { background: "var(--slate)" } : undefined}
           >
             {wall.day}
           </span>
@@ -158,12 +167,19 @@ function Cell({
         {cell.more > 0 && (
           // A disclosure rather than a class, so it takes no press gesture: it
           // drops into the day, which is where the rest of them are full size.
+          //
+          // A chip's height, 20px, rather than a line of text: it is its own
+          // stop for a keyboard and its own target for a finger, and it is
+          // exactly the overflow slot `monthLayout` leaves for it. Below `sm` the
+          // word goes to a screen reader only, because "+2 m…" truncated said
+          // less than "+2" does.
           <button
             type="button"
             onClick={() => onDayClick(cell.day)}
-            className="text-muted pointer-events-auto shrink-0 cursor-pointer truncate px-1 text-left text-[10.5px] font-semibold"
+            className="text-muted hover:bg-tint hover:text-title pointer-events-auto flex h-5 shrink-0 cursor-pointer items-center self-start rounded-[6px] px-1.5 font-mono text-[10.5px] font-semibold transition-colors focus-visible:outline-offset-[-2px]"
           >
-            +{cell.more} more
+            +{cell.more}
+            <span className="max-sm:sr-only">&nbsp;more</span>
           </button>
         )}
       </div>
@@ -195,23 +211,31 @@ function Chip({
       onClick={onClick ? () => onClick(event) : undefined}
       {...press}
       title={`${formatHourLabel(event.start, timeZone)} · ${event.title}`}
-      className="pointer-events-auto flex h-5 shrink-0 items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left select-none"
+      /*
+       * The 20px slot is the chip at every width, because `CHIP_HEIGHT` in
+       * month-layout.ts counts it. What is painted inside it changes: from `sm`
+       * the fill is the whole slot with the time and title on it, and below,
+       * where a 50px cell could only show "Ma…", it is a 6px bar of the
+       * course's colour with the words kept for a screen reader and on the
+       * `title`. The cell behind is the target either way.
+       */
+      className="pointer-events-auto relative flex h-5 shrink-0 items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left select-none hover:brightness-[0.97] focus-visible:outline-offset-[-2px]"
       style={{
-        background: live ? "var(--live-fill)" : tone.fill,
-        boxShadow: live
-          ? "inset 0 0 0 1px var(--red)"
-          : `inset 0 0 0 1px ${tone.ring}`,
-        opacity: past && !live ? 0.62 : 1,
         cursor: onClick ? "pointer" : "default",
         WebkitTouchCallout: "none",
       }}
     >
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-[6px] max-sm:inset-y-[7px] max-sm:rounded-full"
+        style={blockPaint(tone, { live, past: past && !live })}
+      />
       {/* The time is the first thing to go: a 50px cell has room for a title or
           a time, and the title is what tells one busy day from another. */}
-      <span className="text-faint hidden shrink-0 font-mono text-[9.5px] sm:inline">
+      <span className="text-ink relative hidden shrink-0 font-mono text-[9.5px] font-medium sm:inline">
         {formatHourLabel(event.start, timeZone)}
       </span>
-      <span className="text-title min-w-0 truncate text-[10.5px] font-semibold">
+      <span className="text-title relative min-w-0 truncate text-[10.5px] font-semibold max-sm:sr-only">
         {event.title}
       </span>
     </button>

@@ -1,3 +1,4 @@
+import { Skeleton } from "~/components/ui/skeleton";
 import { GUTTER, HourGrid, ROW_HEIGHT } from "./day-calendar";
 
 /**
@@ -24,7 +25,7 @@ import { GUTTER, HourGrid, ROW_HEIGHT } from "./day-calendar";
 const BLOCKS = [
   { at: 0.08, span: 0.13 },
   { at: 0.3, span: 0.09 },
-  { at: 0.520, span: 0.17 },
+  { at: 0.52, span: 0.17 },
 ];
 
 export function DaySkeleton({
@@ -47,25 +48,25 @@ export function DaySkeleton({
       className="relative"
       style={{ height }}
     >
-      <HourGrid
-        startHour={startHour}
-        endHour={endHour}
-        rowHeight={rowHeight}
-      />
+      <HourGrid startHour={startHour} endHour={endHour} rowHeight={rowHeight} />
 
       {BLOCKS.map((block) => (
+        // An opaque base under the shared pulse, so the hour rules do not
+        // show through a shape that stands in for a solid block. The paper,
+        // because the day is drawn straight on it: a white base came out the
+        // same grey as the ground once the wash was over it, and vanished.
         <div
           key={block.at}
-          className="absolute animate-pulse rounded-xl motion-reduce:animate-none"
+          className="bg-paper absolute overflow-hidden rounded-xl"
           style={{
             top: block.at * height + 2,
             height: block.span * height - 4,
             left: GUTTER,
             right: 4,
-            background: "rgba(68,88,121,0.07)",
-            boxShadow: "inset 0 0 0 1px var(--card-ring)",
           }}
-        />
+        >
+          <Skeleton className="h-full w-full" />
+        </div>
       ))}
     </div>
   );

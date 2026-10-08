@@ -203,7 +203,7 @@
    * not resize the grid under the reader's finger. The floor is what stops the
    * ceiling becoming the problem on a short landscape screen.
    */
-  --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 216px));
+  --tt-ceiling: max(420px, calc(100svh - var(--topbar-h) - 204px));
 
   /*
    * Elevation is a drawn hairline plus a soft shadow, never a border.

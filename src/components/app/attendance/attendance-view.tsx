@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
+import { Avatar } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { formatFullDate, formatHourLabel } from "~/lib/dates";
@@ -59,8 +62,12 @@ export function AttendanceView({
 
   const mark = api.attendance.mark.useMutation({
     onSuccess: async (result) => {
+      // Said as a time first, and the server's count second and in its own
+      // words: the server counts late as present, so "17 of 22 present" beside
+      // a tally reading "16 present, 2 late" looked like two answers to one
+      // question.
       setSaved(
-        `${result.present} of ${result.marked} present · saved ${formatHourLabel(new Date(), "Asia/Kolkata")}`,
+        `Saved at ${formatHourLabel(new Date(), "Asia/Kolkata")}, ${result.present} of ${result.marked} counted present`,
       );
       await utils.attendance.invalidate();
       router.refresh();
@@ -71,14 +78,12 @@ export function AttendanceView({
     return (
       <>
         <PageHeader title="Attendance" subtitle={sitting.title} />
-        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
-          <Card>
-            <p className="text-muted m-0 text-[14px]">
-              This lecture has no group attending it, so there is no register to
-              take. Add a group to the class first.
-            </p>
-          </Card>
-        </div>
+        <PageBody width="narrow">
+          <EmptyState icon="users" title="No register to take">
+            This lecture has no group attending it, so there is no register to
+            take. Add a group to the class first.
+          </EmptyState>
+        </PageBody>
       </>
     );
   }
@@ -92,36 +97,35 @@ export function AttendanceView({
   const setAll = (status: Status) =>
     setMarks(Object.fromEntries(group.students.map((s) => [s.id, status])));
 
+  // A reader looking at a register nobody has taken. The marks are seeded as
+  // present for the person taking it, so counting them here would announce a
+  // full house for a lecture with no register at all.
+  const untakenForReader = !canMark && !group.markedAt;
+
   return (
     <>
       <PageHeader
         title="Attendance"
-        subtitle={`${sitting.title} · ${formatFullDate(sitting.start, "Asia/Kolkata")} · ${formatHourLabel(sitting.start, "Asia/Kolkata")}–${formatHourLabel(sitting.end, "Asia/Kolkata")}`}
-        actions={
-          <Link
-            href="/timetable"
-            className="text-muted inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            Back to timetable
-          </Link>
-        }
+        subtitle={`${sitting.title} · ${formatFullDate(sitting.start, "Asia/Kolkata")}, ${formatHourLabel(sitting.start, "Asia/Kolkata")}-${formatHourLabel(sitting.end, "Asia/Kolkata")}`}
+        back={{ href: "/timetable", label: "Back to timetable" }}
       />
 
-      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
+      {/*
+        A column rather than the full width: on a laptop the marks sat 800px
+        from the names they belonged to, and a register is read along the row.
+      */}
+      <PageBody width="narrow">
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <Badge tone="slate">{sitting.room.code}</Badge>
           {sitting.facultyName && (
-            <span className="text-muted text-[13px]">
-              {sitting.facultyName}
-            </span>
+            <span className="text-muted text-sm">{sitting.facultyName}</span>
           )}
           {sitting.groups.length > 1 && (
             // A line of its own on a phone: three divisions' names beside the
             // room and the teacher's name would leave the tabs a few pixels
             // each. How the strip behaves when it is still too wide is the
             // pill group's own business — it scrolls inside itself.
-            <div className="w-full min-w-0 sm:w-auto">
+            <div className="w-full min-w-0 sm:ml-auto sm:w-auto">
               <Segmented
                 items={sitting.groups.map((g) => ({
                   value: g.id,
@@ -133,75 +137,79 @@ export function AttendanceView({
               />
             </div>
           )}
-          <span className="text-faint font-mono text-[12px] sm:ml-auto">
-            {group.markedAt
-              ? `last taken by ${group.markedBy ?? "someone"}`
-              : "not taken yet"}
-          </span>
         </div>
 
         <Card pad={0}>
-          <div
-            className="flex flex-wrap items-center gap-3 px-4 py-3"
-            style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)" }}
-          >
-            <span className="font-display text-title text-[15px] font-bold">
-              {group.label}
-            </span>
-            <span className="text-muted text-[12.5px]">
-              {present} of {group.students.length} present
-            </span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 shadow-[inset_0_-1px_0_var(--hair-soft)]">
+            {/*
+              Whether this register has been taken lives with the group it is
+              about, under its name, rather than as a mono label orphaned at
+              the end of the strip above (on a phone it fell to a line of its
+              own under the tabs).
+            */}
+            <div className="min-w-0">
+              <p className="font-display text-title text-md font-semibold tracking-[-0.01em]">
+                {group.label}
+              </p>
+              <p className="text-muted text-xs">
+                {untakenForReader ? (
+                  "No register has been taken for this lecture yet"
+                ) : (
+                  <>
+                    <span className="tabular-nums">
+                      {present} of {group.students.length} present
+                    </span>
+                    {" · "}
+                    {group.markedAt
+                      ? `Last taken by ${group.markedBy ?? "someone"}`
+                      : "Not taken yet"}
+                  </>
+                )}
+              </p>
+            </div>
             {canMark && (
               // Their own line on a phone, sharing it half and half: these are
               // the two strokes that start a register, and reaching them should
               // not mean aiming at a chip wedged beside the group's name.
               <span className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => setAll("PRESENT")}
-                  className="text-slate min-h-10 flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold sm:flex-none lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
+                  className="flex-1 sm:flex-none"
                 >
                   All present
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="sm"
                   onClick={() => setAll("ABSENT")}
-                  className="text-muted min-h-10 flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold sm:flex-none lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
+                  className="flex-1 sm:flex-none"
                 >
                   All absent
-                </button>
+                </Button>
               </span>
             )}
           </div>
 
           {group.students.length === 0 ? (
-            <p className="text-muted m-0 px-4 py-6 text-[14px]">
-              Nobody is in this group yet.
-            </p>
+            <EmptyState
+              compact
+              icon="users"
+              title="Nobody is in this group yet"
+            />
           ) : (
             group.students.map((student, i) => (
               <div
                 key={student.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5"
-                style={
-                  i > 0
-                    ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
-                    : undefined
-                }
+                className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 ${
+                  i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""
+                }`}
               >
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                  style={{ background: "var(--slate)" }}
-                >
-                  {student.name.charAt(0).toUpperCase()}
-                </span>
+                <Avatar name={student.name} size={32} />
                 <span className="min-w-0 flex-1">
-                  <span className="text-title block truncate text-[13.5px] font-semibold">
+                  <span className="text-title block truncate text-base font-semibold">
                     {student.name}
                   </span>
-                  <span className="text-faint block truncate font-mono text-[11.5px]">
+                  <span className="text-faint block truncate font-mono text-xs">
                     {student.prn}
                   </span>
                 </span>
@@ -213,7 +221,8 @@ export function AttendanceView({
                     width evenly, which buys each of them a target a finger can
                     actually hit; squeezed onto the name's line they came out
                     around 24px tall and 40px wide. The row they sat in returns
-                    at `lg`, where there is a mouse and the width to spare.
+                    at `sm`, and the marks settle to 32px tall at `lg`, where
+                    there is a mouse.
                   */
                   <span className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-1">
                     {STATUSES.map((status) => {
@@ -229,15 +238,11 @@ export function AttendanceView({
                               [student.id]: status.value,
                             }))
                           }
-                          className="plr-clip min-h-10 flex-1 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] font-semibold sm:flex-none lg:min-h-0"
-                          style={
+                          className={`plr-clip min-h-10 flex-1 cursor-pointer rounded-[8px] px-2.5 text-xs font-semibold active:scale-[0.97] sm:flex-none lg:min-h-8 ${
                             on
-                              ? { background: status.tone, color: "#fff" }
-                              : {
-                                  color: "var(--muted)",
-                                  boxShadow: "var(--ring)",
-                                }
-                          }
+                              ? status.pressed
+                              : "text-muted hover:bg-tint-hover hover:text-title shadow-[inset_0_0_0_1px_var(--hair)]"
+                          }`}
                         >
                           {status.label}
                         </button>
@@ -245,15 +250,27 @@ export function AttendanceView({
                     })}
                   </span>
                 ) : student.marked ? (
-                  <Badge tone={markMeta(student.status)?.badge ?? "neutral"}>
-                    {markMeta(student.status)?.label ?? "—"}
-                  </Badge>
-                ) : (
+                  // Read back, present is the ordinary case and stays quiet;
+                  // only the exceptions are badged, so the three absences in a
+                  // list of twenty are what the eye lands on.
+                  student.status === "PRESENT" ? (
+                    // Padded like a badge, so its word lines up with theirs.
+                    <span className="text-muted px-2 text-xs font-semibold">
+                      Present
+                    </span>
+                  ) : (
+                    <Badge tone={markMeta(student.status)?.badge ?? "neutral"}>
+                      {markMeta(student.status)?.label ?? "No mark"}
+                    </Badge>
+                  )
+                ) : untakenForReader ? null : (
                   // The marking side seeds everyone as present, because that is
                   // how a register is taken. Reflecting that back at somebody
                   // who cannot mark would show an untaken register as a full
-                  // house, so a reader is told there is nothing here instead.
-                  <span className="text-faint text-[12px] font-semibold">
+                  // house, so a reader is told there is nothing here instead —
+                  // once, in the header, when nobody's register was taken, and
+                  // on the row for somebody missing from one that was.
+                  <span className="text-faint text-xs font-semibold">
                     No register taken
                   </span>
                 )}
@@ -263,26 +280,43 @@ export function AttendanceView({
         </Card>
 
         {canMark && group.students.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-muted text-[12.5px]">
-              {counts
-                .filter((c) => c.count > 0)
-                .map((c) => `${c.count} ${c.label.toLowerCase()}`)
-                .join(" · ")}
-            </span>
-            {saved && (
-              <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#3f6a2e]">
-                <Icon name="checkCircle" size={15} color="#4e7d3a" stroke={2} />
-                {saved}
-              </span>
-            )}
-            {mark.error && (
-              <span className="text-[12.5px] font-medium text-[#b02636]">
-                {mark.error.message}
-              </span>
-            )}
-            <button
-              type="button"
+          /*
+            The tally and the save ride along the bottom of the screen while
+            the list scrolls under them. A register is marked at the top of a
+            sixty-name list and committed once; at the end of the list the save
+            was 2800px down a phone and below the fold of any class larger than
+            a dozen. Sticky within the column, so at the end of the list it
+            settles under the card instead of covering the last row, and lifted
+            off the bottom edge by the phone's home indicator where there is one.
+          */
+          <div className="bg-surface sticky bottom-[calc(12px+env(safe-area-inset-bottom))] z-10 mt-3 flex items-center gap-3 rounded-[var(--radius-card)] py-2.5 pr-2.5 pl-4 shadow-[var(--ring),var(--shadow-md)]">
+            <div className="min-w-0 flex-1">
+              <p className="text-ink text-sm font-medium tabular-nums">
+                {counts
+                  .filter((c) => c.count > 0)
+                  .map((c) => `${c.count} ${c.label.toLowerCase()}`)
+                  .join(", ")}
+              </p>
+              <div role="status" aria-live="polite">
+                {saved && !mark.error && (
+                  <p className="text-good flex items-center gap-1.5 text-xs font-semibold">
+                    <Icon name="checkCircle" size={13} stroke={2} />
+                    {saved}
+                  </p>
+                )}
+              </div>
+              {mark.error && (
+                <p
+                  role="alert"
+                  className="text-bad flex items-center gap-1.5 text-xs font-semibold"
+                >
+                  <Icon name="alert" size={13} stroke={2} />
+                  {mark.error.message}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="primary"
               disabled={mark.isPending}
               onClick={() =>
                 mark.mutate({
@@ -294,22 +328,16 @@ export function AttendanceView({
                   })),
                 })
               }
-              className="min-h-10 w-full rounded-[var(--radius-btn)] px-5 py-2.5 text-[14px] font-semibold text-white sm:ml-auto sm:w-auto lg:min-h-0"
-              style={{
-                background: "var(--grad-brand)",
-                opacity: mark.isPending ? 0.5 : 1,
-                cursor: mark.isPending ? "not-allowed" : "pointer",
-              }}
             >
               {mark.isPending
                 ? "Saving…"
                 : group.markedAt
                   ? "Update register"
                   : "Save register"}
-            </button>
+            </Button>
           </div>
         )}
-      </div>
+      </PageBody>
     </>
   );
 }

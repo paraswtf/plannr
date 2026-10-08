@@ -216,7 +216,7 @@ export function PlanWeekGrid({
                 {dayBusy.map((block, index) => (
                   <div
                     key={`${block.startMinutes}-${index}`}
-                    title={`${block.label} — already on the timetable`}
+                    title={`${block.label} (already on the timetable)`}
                     className="pointer-events-none absolute right-1 left-1 rounded-md"
                     style={{
                       top: top(block.startMinutes),
@@ -227,8 +227,8 @@ export function PlanWeekGrid({
                           2,
                       ),
                       background:
-                        "repeating-linear-gradient(45deg, rgba(68,88,121,0.07) 0 6px, transparent 6px 12px)",
-                      boxShadow: "inset 0 0 0 1px rgba(68,88,121,0.12)",
+                        "repeating-linear-gradient(45deg, var(--tint) 0 6px, transparent 6px 12px)",
+                      boxShadow: "inset 0 0 0 1px var(--hair-soft)",
                     }}
                   />
                 ))}
@@ -244,7 +244,16 @@ export function PlanWeekGrid({
                       title={`${session.title} · ${session.groupLabel}${
                         session.roomCode ? ` · ${session.roomCode}` : ""
                       }`}
-                      className="plr-clip absolute overflow-hidden rounded-[8px] px-2 py-1.5 text-left"
+                      // Colour lives in classes so a block can answer the pointer;
+                      // everything that places it stays inline, computed from
+                      // the minutes. A selected block is filled slate and raised
+                      // on the same shadow a popover uses, rather than a glow
+                      // of its own.
+                      className={`plr-clip absolute overflow-hidden rounded-[8px] px-2 py-1.5 text-left ${
+                        selected
+                          ? "bg-slate text-white shadow-[var(--shadow-md)]"
+                          : "text-slate-ink bg-[color-mix(in_srgb,var(--slate)_11%,var(--surface))] shadow-[inset_0_0_0_1px_var(--info-line)] hover:bg-[color-mix(in_srgb,var(--slate)_17%,var(--surface))]"
+                      }`}
                       style={{
                         top: top(session.startMinutes!) + 1,
                         height: Math.max(
@@ -254,23 +263,22 @@ export function PlanWeekGrid({
                         left: `calc(4px + ${lane} * ${width})`,
                         width,
                         cursor: onSelect ? "pointer" : "default",
-                        background: selected
-                          ? "var(--slate)"
-                          : "color-mix(in srgb, var(--slate) 11%, #fff)",
-                        color: selected ? "#fff" : "#324464",
-                        boxShadow: selected
-                          ? "0 2px 10px rgba(68,88,121,0.32)"
-                          : "inset 0 0 0 1px rgba(68,88,121,0.22)",
                       }}
                     >
                       <span className="flex items-center gap-1">
+                        {/* The dot is the mark a reader sees; the words are
+                            for a screen reader, which the dot said nothing
+                            to. Out of flow, so the block measures the same. */}
                         {session.pinned && (
-                          <span
-                            className="inline-block h-[5px] w-[5px] shrink-0 rounded-full"
-                            style={{
-                              background: selected ? "#fff" : "var(--orange)",
-                            }}
-                          />
+                          <>
+                            <span
+                              aria-hidden
+                              className={`inline-block h-[5px] w-[5px] shrink-0 rounded-full ${
+                                selected ? "bg-white" : "bg-orange"
+                              }`}
+                            />
+                            <span className="sr-only">Pinned. </span>
+                          </>
                         )}
                         <span className="truncate text-[11.5px] font-bold">
                           {session.title}

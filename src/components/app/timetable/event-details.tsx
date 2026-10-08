@@ -4,7 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { Badge } from "~/components/ui/badge";
-import { Icon, type IconName } from "~/components/ui/icon";
+import { Button, buttonClass } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
+import { type IconName } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { formatDayLabel, formatDuration, formatHourLabel } from "~/lib/dates";
 import { api } from "~/trpc/react";
@@ -46,7 +48,7 @@ export function eventHeading(
   return {
     icon: event.kind === "CLASS" ? "book" : "calendar",
     title: event.title,
-    subtitle: `${formatDayLabel(event.start, timeZone)} · ${formatHourLabel(event.start, timeZone)}–${formatHourLabel(event.end, timeZone)}`,
+    subtitle: `${formatDayLabel(event.start, timeZone)} · ${formatHourLabel(event.start, timeZone)}-${formatHourLabel(event.end, timeZone)}`,
   };
 }
 
@@ -56,6 +58,11 @@ export function eventHeading(
  * A function rather than a component on purpose: `Drawer` and `Dialog` both
  * draw their footer chrome on `footer && …`, so a component returning `null`
  * would still be truthy and both surfaces would grow an empty strip.
+ *
+ * The register is the one primary in either frame: slate, like every screen's
+ * one main action, where it used to wear the brand gradient — white type on
+ * the gradient's orange end fell to about 2:1. Cancelling lives in the body as
+ * a quiet danger zone, so the footer never holds two loud buttons at once.
  */
 export function eventActions(
   event: GridEvent,
@@ -65,8 +72,7 @@ export function eventActions(
   return (
     <Link
       href={`/attendance/${event.occurrenceId}`}
-      className="rounded-[var(--radius-btn)] px-5 py-2.5 text-[14px] font-semibold text-white"
-      style={{ background: "var(--grad-brand)" }}
+      className={buttonClass("primary", "md")}
     >
       {event.attendanceMarked ? "Update register" : "Take the register"}
     </Link>
@@ -90,14 +96,24 @@ export function EventDetails({
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="slate">{event.roomCode ?? "Room"}</Badge>
-        <Badge tone={event.kind === "CLASS" ? "orange" : "neutral"}>
+    <div className="flex flex-col gap-5">
+      {/*
+       * What it is, in one quiet row. Every chip is the same slate tint now:
+       * the kind used to be orange — a near neighbour of the gold that means
+       * "yours" on the grid — and "Repeats" green, which everywhere else means
+       * something went right. Facts about a block are not states, so none of
+       * them gets a state's colour. The room is a code, so it is set in the
+       * mono face every other room code in the app is.
+       */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge tone="slate">
+          <span className="font-mono">{event.roomCode ?? "Room"}</span>
+        </Badge>
+        <Badge tone="slate">
           {event.kind === "CLASS" ? "Class" : "Booking"}
         </Badge>
-        {event.isRecurring && <Badge tone="green">Repeats</Badge>}
-        <span className="text-faint font-mono text-[11.5px]">
+        {event.isRecurring && <Badge tone="slate">Repeats</Badge>}
+        <span className="text-muted ml-1 text-xs tabular-nums">
           {formatDuration(minutes)}
         </span>
       </div>
@@ -112,29 +128,20 @@ export function EventDetails({
             ))}
           </span>
         ) : (
-          <span className="text-faint text-[13px]">No group attending</span>
+          <span className="text-muted text-sm">No group attending</span>
         )}
       </Detail>
 
       {event.facultyName && (
         <Detail label="Taught by">
-          <span className="text-title text-[13.5px]">{event.facultyName}</span>
+          <span className="text-title text-base font-medium">
+            {event.facultyName}
+          </span>
         </Detail>
       )}
 
       {event.attendanceMarked && (
-        <div
-          className="flex items-center gap-2.5 rounded-xl p-3"
-          style={{
-            background: "rgba(78,125,58,0.08)",
-            boxShadow: "inset 0 0 0 1px rgba(78,125,58,0.3)",
-          }}
-        >
-          <Icon name="checkCircle" size={17} color="#4e7d3a" stroke={2} />
-          <span className="text-[12.5px] font-semibold text-[#3f6a2e]">
-            Register taken for this sitting.
-          </span>
-        </div>
+        <Callout tone="good">Register taken for this sitting.</Callout>
       )}
 
       {canEdit && (
@@ -146,10 +153,14 @@ export function EventDetails({
        * the action: a reader who cannot move a block should not be told to try
        * and then find that the drag does nothing. Suppressed in the modal
        * whatever the permission, because the calendar it names is the thing the
-       * modal is laid over.
+       * modal is laid over — and, from CSS alone, on a device with no fine
+       * pointer anywhere, because a finger cannot drag this grid at all (only a
+       * mouse, a trackpad or a pen can). `any-pointer`, not `pointer`: an iPad
+       * with a trackpad attached reports a coarse *primary* pointer and can
+       * still drag, and it is the one reader who would never find out.
        */}
       {canEdit && !overlay && (
-        <p className="text-faint m-0 text-[11.5px]">
+        <p className="text-faint m-0 hidden text-xs any-pointer-fine:block">
           Drag the block on the calendar to move it to another time or room.
         </p>
       )}
@@ -195,24 +206,26 @@ function CancelPanel({
   });
 
   return (
-    <div
-      className="flex flex-col gap-2.5 rounded-xl p-3"
-      style={{ boxShadow: "inset 0 0 0 1px var(--hair)" }}
-    >
-      <span className="text-ink text-[13px] font-semibold">
-        Cancel this lecture
+    /*
+     * A danger zone rather than a card inside the panel: a hairline above and
+     * the space of a new group, which is enough to say "this part is
+     * different" without boxing it. The way in is quiet red, and only the
+     * confirming step is filled — the order every destructive action in the
+     * app takes.
+     */
+    <div className="flex flex-col gap-3 pt-5 shadow-[inset_0_1px_0_var(--hair-soft)]">
+      {/*
+       * Named for what it is. A booking — a placement talk, a club's hour —
+       * was being offered as "Cancel this lecture".
+       */}
+      <span className="text-title text-sm font-semibold">
+        {event.kind === "CLASS" ? "Cancel this lecture" : "Cancel this booking"}
       </span>
 
       {error && (
-        <div
-          className="rounded-lg p-2.5 text-[12.5px] font-medium text-[#b02636]"
-          style={{
-            background: "rgba(220,56,72,0.07)",
-            boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-          }}
-        >
+        <Callout tone="bad" role="alert">
           {error}
-        </div>
+        </Callout>
       )}
 
       {/*
@@ -225,20 +238,19 @@ function CancelPanel({
       )}
 
       {!confirmCancel ? (
-        <button
-          type="button"
+        <Button
+          variant="danger-quiet"
+          className="self-start"
           onClick={() => setConfirmCancel(true)}
-          className="min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0 lg:py-1.5"
-          style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
         >
           Cancel…
-        </button>
+        </Button>
       ) : (
         // The question and its two answers only sit on one line where the panel
         // is wide; on a phone the sentence would be squeezed to a word per line
         // to make room for them.
-        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <span className="text-ink text-[12.5px]">
+        <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <span className="text-title text-sm font-medium">
             {event.isRecurring && scope !== "occurrence"
               ? scope === "series"
                 ? "Cancel every date of this series?"
@@ -246,15 +258,9 @@ function CancelPanel({
               : "Cancel this one date?"}
           </span>
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmCancel(false)}
-              className="text-muted min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
-            >
-              Keep
-            </button>
-            <button
-              type="button"
+            <Button onClick={() => setConfirmCancel(false)}>Keep</Button>
+            <Button
+              variant="danger"
               disabled={cancel.isPending}
               onClick={() =>
                 cancel.mutate({
@@ -263,11 +269,9 @@ function CancelPanel({
                   originalStart: event.originalStart,
                 })
               }
-              className="min-h-10 cursor-pointer rounded-lg px-3 text-[12.5px] font-semibold text-white lg:min-h-0 lg:py-1.5"
-              style={{ background: "var(--red)" }}
             >
               {cancel.isPending ? "Cancelling…" : "Cancel it"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -275,6 +279,11 @@ function CancelPanel({
   );
 }
 
+/**
+ * A label over its value. The label is the quieter of the two by ink and
+ * weight, not by a half-pixel of size: 12px semibold muted over a 14px value
+ * in the title ink.
+ */
 function Detail({
   label,
   children,
@@ -284,7 +293,7 @@ function Detail({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
+      <span className="text-muted text-xs font-semibold">{label}</span>
       {children}
     </div>
   );

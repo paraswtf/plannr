@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
-import { Badge } from "~/components/ui/badge";
+import { Button, IconButton } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
-import { Icon } from "~/components/ui/icon";
 import { tokenHandle } from "~/components/app/api-keys/controls";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { SIRI_ENDPOINTS, siriUrl } from "./endpoints";
@@ -84,25 +85,22 @@ export function SiriView({ keys, origin }: { keys: Key[]; origin: string }) {
         subtitle="Ask your phone when your next lecture is"
       />
 
-      <div className="flex max-w-[760px] flex-col gap-5 px-4 pt-2 pb-10 sm:px-6 lg:px-9">
-        <Card pad={20}>
-          <h2 className="font-display text-title m-0 text-[15px] font-bold">
-            What this does
-          </h2>
-          <p className="text-muted mt-2 mb-0 text-[13.5px] leading-relaxed">
+      {/* The same narrow column as the other settings screens: a walkthrough
+          is read top to bottom, and a line of it longer than this is harder to
+          keep your place in. */}
+      <PageBody width="narrow" className="flex flex-col gap-5">
+        <Card title="What this does">
+          <p className="text-ink text-base leading-relaxed">
             You make a key, then build a shortcut on your phone that calls
             Plannr and reads the answer out. After that, saying{" "}
             <em>&ldquo;Hey Siri, next lecture&rdquo;</em> gets you something
             like:
           </p>
-          <p
-            className="text-title mt-3 mb-0 rounded-xl p-3.5 text-[13.5px] italic"
-            style={{ background: "var(--card-soft)" }}
-          >
+          <p className="bg-tint text-title mt-3 rounded-[12px] px-4 py-3.5 text-base italic">
             &ldquo;Your next class is tomorrow, Design Thinking at 9am, in room
             4&nbsp;0&nbsp;3.&rdquo;
           </p>
-          <p className="text-faint mt-3 mb-0 text-[12.5px] leading-relaxed">
+          <p className="text-muted mt-3 text-sm leading-relaxed">
             The key only ever answers questions about your own timetable. It
             cannot book a room, change a class or read anybody else&rsquo;s day,
             and it stops working the moment your account does.
@@ -120,51 +118,61 @@ export function SiriView({ keys, origin }: { keys: Key[]; origin: string }) {
 
         <StepTwo origin={origin} token={token} />
 
-        <Card pad={20}>
-          <h2 className="font-display text-title m-0 text-[15px] font-bold">
-            The four you can build
-          </h2>
-          <p className="text-muted mt-2 mb-3 text-[13.5px]">
-            Same steps each time — only the URL and the name change.
+        <Card title="The four you can build">
+          <p className="text-muted -mt-2 text-sm">
+            Same steps each time. Only the URL and the name change.
           </p>
-          <div className="flex flex-col gap-3">
+          {/*
+           * One list divided by hairlines rather than four ringed boxes in a
+           * card. No day chip either: the day is already in the phrase beside
+           * it and spelled into the URL under it.
+           */}
+          <ul className="mt-2">
             {SIRI_ENDPOINTS.map((endpoint) => (
-              <div
+              <li
                 key={endpoint.path}
-                className="rounded-xl p-3.5"
-                style={{ boxShadow: "var(--ring)" }}
+                className="py-4 shadow-[inset_0_1px_0_var(--hair-soft)] first:shadow-none"
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-display text-title text-[13.5px] font-bold">
-                    &ldquo;Hey Siri, {endpoint.phrase.toLowerCase()}&rdquo;
-                  </span>
-                  {endpoint.day && <Badge tone="slate">{endpoint.day}</Badge>}
-                </div>
-                <p className="text-muted mt-1 mb-2.5 text-[12.5px]">
+                <p className="font-display text-title text-base font-semibold">
+                  &ldquo;Hey Siri, {spoken(endpoint.phrase)}&rdquo;
+                </p>
+                <p className="text-muted mt-0.5 mb-2.5 text-sm">
                   {endpoint.blurb}
                 </p>
                 <Copyable
                   label={`URL for ${endpoint.phrase}`}
                   value={siriUrl(origin, endpoint)}
                 />
-                <p className="text-faint mt-2 mb-0 text-[12px] italic">
+                <p className="text-muted mt-2 text-sm italic">
                   {endpoint.specimen}
                 </p>
-              </div>
+              </li>
             ))}
-          </div>
-          <p className="text-faint mt-3.5 mb-0 text-[12.5px] leading-relaxed">
-            Change <code className="font-mono">day=tomorrow</code> to{" "}
-            <code className="font-mono">today</code>, a weekday like{" "}
-            <code className="font-mono">monday</code>, or a date like{" "}
-            <code className="font-mono">2026-09-15</code>. A weekday means the
-            next one, today included; say{" "}
-            <code className="font-mono">next monday</code> for the one after.
+          </ul>
+          <p className="text-muted mt-1 pt-4 text-sm leading-relaxed shadow-[inset_0_1px_0_var(--hair-soft)]">
+            Change{" "}
+            <code className="text-ink font-mono text-xs">day=tomorrow</code> to{" "}
+            <code className="text-ink font-mono text-xs">today</code>, a weekday
+            like <code className="text-ink font-mono text-xs">monday</code>, or
+            a date like{" "}
+            <code className="text-ink font-mono text-xs">2026-09-15</code>. A
+            weekday means the next one, today included; say{" "}
+            <code className="text-ink font-mono text-xs">next monday</code> for
+            the one after.
           </p>
         </Card>
-      </div>
+      </PageBody>
     </>
   );
+}
+
+/**
+ * A shortcut's name as you would say it after "Hey Siri,": only the first
+ * letter dropped to lower case. Lowering the whole phrase turned "Do I have
+ * class tomorrow" into "do i have class tomorrow".
+ */
+function spoken(phrase: string): string {
+  return phrase.charAt(0).toLowerCase() + phrase.slice(1);
 }
 
 /** The key: making one, seeing it once, and switching it off. */
@@ -183,56 +191,50 @@ function StepOne({
   onCreate: () => void;
   onRevoke: (id: string) => void;
 }) {
+  /*
+   * Primary only while there is no key: making one is then the whole of this
+   * step and the next thing to do on the page. Once a key exists the next job
+   * is Step 2, so "Make another" steps down to secondary rather than being the
+   * loudest thing on the screen.
+   */
+  const first = live.length === 0;
+
   return (
-    <Card pad={20}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-title m-0 text-[15px] font-bold">
-          Step 1 — make a key
-        </h2>
-        <button
-          type="button"
+    <Card
+      title="Step 1: make a key"
+      action={
+        <Button
+          variant={first ? "primary" : "secondary"}
+          icon={first ? "key" : "plus"}
           disabled={creating}
           onClick={onCreate}
-          className="inline-flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-          style={{
-            background: "var(--grad-brand)",
-            opacity: creating ? 0.6 : 1,
-          }}
         >
-          {creating
-            ? "Making…"
-            : live.length > 0
-              ? "Make another"
-              : "Make a key"}
-        </button>
-      </div>
-
+          {creating ? "Making…" : first ? "Make a key" : "Make another"}
+        </Button>
+      }
+    >
       {token ? (
-        <div
-          className="mt-3.5 rounded-xl p-3.5"
-          style={{
-            background: "rgba(246,167,59,0.10)",
-            boxShadow: "inset 0 0 0 1px var(--mine-ring)",
-          }}
+        /*
+         * Amber, the app's "read this before you go on", rather than the gold
+         * it used to be: gold means "yours" on the timetable and nothing else.
+         * And the same tone for the same warning wherever a key is shown once.
+         */
+        <Callout
+          tone="warn"
+          title="Copy this now. It is not shown again, and nobody can look it up."
         >
-          <div className="flex items-center gap-2">
-            <Icon name="alert" size={16} color="#a2660f" stroke={2} />
-            <span className="text-[12.5px] font-semibold text-[#a2660f]">
-              Copy this now. It is not shown again, and nobody can look it up.
-            </span>
-          </div>
           <div className="mt-2.5">
-            <Copyable label="Your key" value={token} secret />
+            <Copyable label="Your key" value={token} />
           </div>
-          <p className="text-muted mt-2 mb-0 text-[12px]">
-            If you lose it, switch this key off and make another — that is
+          <p className="text-muted mt-2 text-xs">
+            If you lose it, switch this key off and make another. That is
             quicker than it sounds, and safer than writing it somewhere.
           </p>
-        </div>
+        </Callout>
       ) : (
-        <p className="text-muted mt-2 mb-0 text-[13.5px] leading-relaxed">
+        <p className="text-muted text-base leading-relaxed">
           {live.length > 0
-            ? "You already have a key. Its secret was only shown when you made it — if you no longer have it, switch that one off and make a new one."
+            ? "You already have a key. Its secret was only shown when you made it. If you no longer have it, switch that one off and make a new one."
             : "One tap. You will see the key once, so have the Shortcuts app ready, or paste it somewhere safe first."}
         </p>
       )}
@@ -249,34 +251,34 @@ function keysList(
 ) {
   if (live.length === 0) return null;
   return (
-    <div className="mt-3.5 flex flex-col gap-2">
+    // Plain rows under a hairline rather than ringed boxes inside the card.
+    <ul className="mt-4">
       {live.map((key) => (
-        <div
+        <li
           key={key.id}
-          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl px-3.5 py-2.5"
-          style={{ boxShadow: "var(--ring)" }}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 shadow-[inset_0_1px_0_var(--hair-soft)]"
         >
-          <span className="text-title text-[13px] font-semibold">
-            {key.name}
-          </span>
-          <span className="text-faint font-mono text-[12px]">
+          <span className="text-title text-sm font-semibold">{key.name}</span>
+          <span className="text-muted font-mono text-xs break-all">
             {tokenHandle(key.prefix, key.last4)}
           </span>
-          <span className="text-faint text-[12px]">
+          <span className="text-muted text-xs">
             {key.lastUsedAt ? "in use" : "never used"}
           </span>
-          <button
-            type="button"
+          {/* The quiet red: switching a key off is final for that key, but it
+              is one tap with no confirmation, and the way back is another key. */}
+          <Button
+            variant="danger-quiet"
+            size="sm"
             disabled={revoking === key.id}
             onClick={() => onRevoke(key.id)}
-            className="ml-auto inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0 lg:py-1.5"
-            style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
+            className="ml-auto"
           >
             {revoking === key.id ? "Switching off…" : "Switch off"}
-          </button>
-        </div>
+          </Button>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -294,14 +296,11 @@ function StepTwo({ origin, token }: { origin: string; token: string | null }) {
   const header = token ? `Bearer ${token}` : "Bearer <your key>";
 
   return (
-    <Card pad={20}>
-      <h2 className="font-display text-title m-0 text-[15px] font-bold">
-        Step 2 — build the shortcut
-      </h2>
-      <p className="text-muted mt-2 mb-3.5 text-[13.5px] leading-relaxed">
-        On your iPhone, in the <strong>Shortcuts</strong> app. This builds
-        &ldquo;next lecture&rdquo;; the other three are the same with a
-        different URL.
+    <Card title="Step 2: build the shortcut">
+      <p className="text-muted -mt-2 mb-4 text-base leading-relaxed">
+        On your iPhone, in the <strong className="text-ink">Shortcuts</strong>{" "}
+        app. This builds &ldquo;next lecture&rdquo;; the other three are the
+        same with a different URL.
       </p>
 
       {/*
@@ -310,8 +309,13 @@ function StepTwo({ origin, token }: { origin: string; token: string | null }) {
        * a numbered walkthrough silently loses its numbers, which are the only
        * thing telling somebody on a phone where they had got to. Margins
        * instead, and the markers stay both drawn and announced.
+       *
+       * `list-decimal` is spelled out because Tailwind's preflight sets every
+       * `ol` to `list-style: none`, which had been hiding the numbers all
+       * along. The markers are set in the mono face, which is for counts, in
+       * the muted ink so they guide rather than shout.
        */}
-      <ol className="text-ink m-0 flex-none space-y-3.5 pl-5 text-[13.5px] leading-relaxed [&>li]:pl-1">
+      <ol className="text-ink marker:text-muted list-decimal space-y-3.5 pl-6 text-base leading-relaxed marker:font-mono marker:text-sm [&>li]:pl-1.5">
         <li>
           Open <strong>Shortcuts</strong> and tap <strong>+</strong> at the top
           right.
@@ -335,16 +339,13 @@ function StepTwo({ origin, token }: { origin: string; token: string | null }) {
           Type <strong>Authorization</strong> as the key, and paste this as the
           value:
           <div className="mt-2">
-            <Copyable
-              label="Authorization header"
-              value={header}
-              secret={Boolean(token)}
-            />
+            <Copyable label="Authorization header" value={header} />
           </div>
           {!token && (
-            <span className="text-faint mt-1.5 block text-[12px]">
-              Replace <code className="font-mono">&lt;your key&gt;</code> with
-              the key from step 1 — the word <strong>Bearer</strong>, a space,
+            <span className="text-muted mt-1.5 block text-sm">
+              Replace{" "}
+              <code className="font-mono text-xs">&lt;your key&gt;</code> with
+              the key from step 1: the word <strong>Bearer</strong>, a space,
               then the key.
             </span>
           )}
@@ -352,7 +353,8 @@ function StepTwo({ origin, token }: { origin: string; token: string | null }) {
         <li>
           Tap <strong>Add Action</strong> again, search for{" "}
           <strong>Get Dictionary Value</strong>, and tap it. Set{" "}
-          <strong>Key</strong> to <code className="font-mono">speech</code>.
+          <strong>Key</strong> to{" "}
+          <code className="font-mono text-sm">speech</code>.
         </li>
         <li>
           Tap <strong>Add Action</strong> once more, search for{" "}
@@ -362,40 +364,37 @@ function StepTwo({ origin, token }: { origin: string; token: string | null }) {
         <li>
           Tap the shortcut&rsquo;s name at the top, choose{" "}
           <strong>Rename</strong>, and call it <strong>{first.phrase}</strong>.
-          That name is what you say — so keep it short and say it out loud once
+          That name is what you say, so keep it short and say it out loud once
           to check it sounds like something you would actually ask.
         </li>
         <li>
           Tap <strong>Done</strong>, then run it once from the list to check it
-          speaks. The first run asks permission to contact {hostOf(origin)} —
-          allow it.
+          speaks. The first run asks permission to contact {hostOf(origin)}.
+          Allow it.
         </li>
         <li>
-          Say <em>&ldquo;Hey Siri, {first.phrase.toLowerCase()}&rdquo;</em>.
+          Say <em>&ldquo;Hey Siri, {spoken(first.phrase)}&rdquo;</em>.
         </li>
       </ol>
 
-      <div
-        className="mt-4 rounded-xl p-3.5"
-        style={{ background: "var(--card-soft)" }}
+      <Callout
+        tone="neutral"
+        icon="star"
+        title="Worth doing while you are here"
+        className="mt-5"
       >
-        <span className="text-title text-[13px] font-semibold">
-          Worth doing while you are here
-        </span>
-        <p className="text-muted mt-1.5 mb-0 text-[12.5px] leading-relaxed">
-          In the shortcut&rsquo;s settings (the <strong>i</strong> button), turn
-          on <strong>Show on Lock Screen</strong>, or add it to{" "}
-          <strong>Back Tap</strong> under Settings &rarr; Accessibility &rarr;
-          Touch. Asking without speaking is the difference between using this
-          and forgetting it exists.
-        </p>
-      </div>
+        In the shortcut&rsquo;s settings (the <strong>i</strong> button), turn
+        on <strong>Show on Lock Screen</strong>, or add it to{" "}
+        <strong>Back Tap</strong> under Settings &rarr; Accessibility &rarr;
+        Touch. Asking without speaking is the difference between using this and
+        forgetting it exists.
+      </Callout>
 
-      <p className="text-faint mt-3.5 mb-0 text-[12.5px] leading-relaxed">
+      <p className="text-muted mt-4 text-sm leading-relaxed">
         If Siri says nothing at all, the usual cause is the header: it must be
-        the word <strong>Bearer</strong>, one space, then the key, with no
-        quotes and no line break. Run the shortcut from the Shortcuts app rather
-        than by voice to see the error.
+        the word <strong className="text-ink">Bearer</strong>, one space, then
+        the key, with no quotes and no line break. Run the shortcut from the
+        Shortcuts app rather than by voice to see the error.
       </p>
     </Card>
   );
@@ -418,15 +417,7 @@ function hostOf(origin: string): string {
  * a different app on the same small screen, and one wrong character produces
  * silence rather than an error.
  */
-function Copyable({
-  label,
-  value,
-  secret = false,
-}: {
-  label: string;
-  value: string;
-  secret?: boolean;
-}) {
+function Copyable({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -443,33 +434,28 @@ function Copyable({
   };
 
   return (
-    <div
-      className="bg-surface flex items-center gap-2 rounded-lg py-1.5 pr-1.5 pl-2.5"
-      style={{ boxShadow: "var(--ring)" }}
-    >
+    // 14px outside, 4px of padding, the button's own 10px inside it:
+    // concentric, so the button reads as seated in the well rather than
+    // dropped on it.
+    <div className="bg-surface flex items-center gap-2 rounded-[14px] p-1 pl-3 shadow-[inset_0_0_0_1px_var(--hair)]">
       {/*
        * `select-all` so a tap selects the whole value where the clipboard API
        * is unavailable — an insecure origin, or a browser that refuses it — and
        * `break-all` because a token has no spaces to wrap at and would
        * otherwise push the card off a phone.
        */}
-      <code className="text-ink min-w-0 flex-1 font-mono text-[12px] break-all select-all">
+      <code className="text-ink min-w-0 flex-1 py-1.5 font-mono text-xs break-all select-all">
         {value}
       </code>
-      <button
-        type="button"
-        aria-label={`Copy ${label}`}
+      {/* The copy glyph for every value, the key among them — a key glyph on a
+          copy button said "key", not "copy" — and a tick once it is done. */}
+      <IconButton
+        icon={copied ? "check" : "copy"}
+        label={`Copy ${label}`}
+        variant="quiet"
+        size="sm"
         onClick={() => void copy()}
-        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-8 lg:w-8"
-        style={{ background: "rgba(68,88,121,0.07)" }}
-      >
-        <Icon
-          name={copied ? "checkCircle" : secret ? "key" : "copy"}
-          size={14}
-          color={copied ? "#4e7d3a" : "var(--slate)"}
-          stroke={2}
-        />
-      </button>
+      />
     </div>
   );
 }

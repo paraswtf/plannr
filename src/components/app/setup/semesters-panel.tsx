@@ -3,9 +3,14 @@
 import { useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
 import { DatePicker } from "~/components/ui/date-picker";
 import { Dialog } from "~/components/ui/dialog";
+import { EmptyState } from "~/components/ui/empty-state";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Field, Input } from "~/components/ui/field";
 import { Icon } from "~/components/ui/icon";
 import { DEFAULT_TIMEZONE, formatFullDate } from "~/lib/dates";
 import { api, type RouterOutputs } from "~/trpc/react";
@@ -46,55 +51,70 @@ export function SemestersPanel({ initial }: { initial: Semesters }) {
     <Card
       title="Semesters"
       action={
-        <button
-          type="button"
+        // The one primary on Setup: opening the next term is the thing this
+        // page exists to let someone do.
+        <Button
+          variant="primary"
+          size="sm"
+          icon="plus"
           onClick={() => setOpening(true)}
-          className="inline-flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg px-3 py-1.5 text-[12.5px] font-semibold whitespace-nowrap text-white lg:min-h-0"
-          style={{ background: "var(--grad-brand)" }}
         >
           Open a semester
-        </button>
+        </Button>
       }
     >
       {semesters.length === 0 ? (
-        <p className="text-muted m-0 text-[14px]">
-          No semester yet. Everything in the app is dated against one, so this
-          is the first thing to set up.
-        </p>
+        <EmptyState compact icon="calendar" title="No semester yet">
+          Everything in the app is dated against one, so this is the first thing
+          to set up.
+        </EmptyState>
       ) : (
-        <div className="flex flex-col">
+        <div className="-mx-2 flex flex-col">
           {semesters.map((semester, i) => (
-            <button
-              key={semester.id}
-              type="button"
-              onClick={() => setEditing(semester)}
-              className="flex w-full cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-1 py-3 text-left"
-              style={
-                i === 0
-                  ? undefined
-                  : { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
-              }
-            >
-              <span className="text-title text-[14px] font-semibold">
-                {semester.name}
-              </span>
-              {semester.current && (
-                <Badge tone="green" dot>
-                  Running now
-                </Badge>
+            <div key={semester.id}>
+              {/* The hairline is its own element rather than an edge of the
+                  row, so a hovered row's rounded wash does not bend it. */}
+              {i > 0 && (
+                <span aria-hidden className="bg-hair-soft mx-2 block h-px" />
               )}
-              <span className="text-muted font-mono text-[12px]">
-                {formatFullDate(semester.startDate, DEFAULT_TIMEZONE)} –{" "}
-                {formatFullDate(semester.endDate, DEFAULT_TIMEZONE)}
-              </span>
-              {/* On a phone the name, the dates and this tally each take a line
-                  of their own, and a lone right-aligned line reads as a stray;
-                  it is only flung to the far end once it shares one. */}
-              <span className="text-faint font-mono text-[11.5px] sm:ml-auto">
-                {semester._count.batches} intakes · {semester._count.courses}{" "}
-                courses · {semester._count.groups} groups
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setEditing(semester)}
+                // Each row opens the semester for editing, so it answers the
+                // pointer like any other row that does something, and ends in
+                // the arrow every such row in the app ends in.
+                className="plr-clip hover:bg-tint-hover flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-3 text-left"
+              >
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="text-title text-base font-semibold">
+                    {semester.name}
+                  </span>
+                  {semester.current && (
+                    <Badge tone="green" dot>
+                      Running now
+                    </Badge>
+                  )}
+                  <span className="text-muted font-mono text-xs">
+                    {formatFullDate(semester.startDate, DEFAULT_TIMEZONE)} -{" "}
+                    {formatFullDate(semester.endDate, DEFAULT_TIMEZONE)}
+                  </span>
+                  {/* On a phone the name, the dates and this tally each take a
+                      line of their own, and a lone right-aligned line reads as
+                      a stray; it is only flung to the far end once it shares
+                      one. */}
+                  <span className="text-faint font-mono text-xs tabular-nums sm:ml-auto">
+                    {semester._count.batches} intakes, {semester._count.courses}{" "}
+                    courses, {semester._count.groups} groups
+                  </span>
+                </span>
+                <Icon
+                  name="chevronRight"
+                  size={14}
+                  color="var(--faint)"
+                  className="shrink-0"
+                />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -149,16 +169,11 @@ function OpenSemester({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!valid || create.isPending}
             onClick={() =>
               create.mutate({
@@ -168,79 +183,47 @@ function OpenSemester({
                 carryFrom: carry && carryFrom ? carryFrom.id : undefined,
               })
             }
-            className="inline-flex min-h-10 items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: valid && !create.isPending ? 1 : 0.5,
-              cursor: valid && !create.isPending ? "pointer" : "not-allowed",
-            }}
           >
             {create.isPending ? "Opening…" : "Open semester"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
-        <Field label="Name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Spring 2027"
-            // 16px on a phone: below that, Safari zooms the page in as the
-            // field takes focus, which on a dialog leaves it half off screen.
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Field>
-
-        {/* The month grid this pops open is 268px wide, which is more than half
-            a phone: side by side the two fields would each open a calendar that
-            hangs off the dialog. */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Starts">
-            <DatePicker
-              value={startDate}
-              onChange={setStartDate}
-              timeZone={DEFAULT_TIMEZONE}
-            />
-          </Field>
-          <Field label="Ends">
-            <DatePicker
-              value={endDate}
-              onChange={setEndDate}
-              timeZone={DEFAULT_TIMEZONE}
-            />
-          </Field>
-        </div>
-
-        {carryFrom && (
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={carry}
-              onChange={(e) => setCarry(e.target.checked)}
-              className="mt-1"
-            />
-            <span className="text-[13px]">
-              <span className="text-title font-semibold">
-                Carry the intakes forward from {carryFrom.name}
-              </span>
-              <span className="text-muted mt-0.5 block">
-                Each intake arrives one semester further on — a year in its
-                seventh becomes its eighth. One in its final semester has
-                finished the degree and is left behind.
-              </span>
-            </span>
-          </label>
+      <div className="flex flex-col gap-4">
+        {create.error && (
+          <Callout tone="bad" role="alert">
+            {create.error.message}
+          </Callout>
         )}
 
-        {create.error && (
-          <p
-            className="m-0 text-[13px] font-semibold"
-            style={{ color: "var(--red)" }}
-          >
-            {create.error.message}
-          </p>
+        <Field label="Name">
+          {(id) => (
+            <Input
+              id={id}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Spring 2027"
+            />
+          )}
+        </Field>
+
+        <DateFields
+          startDate={startDate}
+          endDate={endDate}
+          onStart={setStartDate}
+          onEnd={setEndDate}
+        />
+
+        {carryFrom && (
+          // The whole box is the checkbox's label, so the explanation is part
+          // of the target rather than small print beside the tick.
+          <Checkbox
+            checked={carry}
+            onChange={setCarry}
+            label={`Carry the intakes forward from ${carryFrom.name}`}
+            description="Each intake arrives one semester further on: a year in its seventh becomes its eighth. One in its final semester has finished the degree and is left behind."
+            className="hover:bg-tint-hover gap-3 rounded-[12px] px-3.5 !py-3 shadow-[inset_0_0_0_1px_var(--hair)] transition-colors"
+          />
         )}
       </div>
     </Dialog>
@@ -276,28 +259,24 @@ function EditSemester({
       onClose={onClose}
       footer={
         <>
-          {/* Offered only while it is empty; the server refuses either way. */}
+          {/* Offered only while it is empty; the server refuses either way.
+              Removing is final the moment it is pressed, so it wears the
+              filled red, kept apart from the save on the dialog's other end. */}
           {held === 0 && (
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              className="sm:mr-auto"
               disabled={remove.isPending}
               onClick={() => remove.mutate({ id: semester.id })}
-              className="mr-auto inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-              style={{ color: "var(--red)", boxShadow: "var(--ring)" }}
             >
               {remove.isPending ? "Removing…" : "Remove"}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!valid || update.isPending}
             onClick={() =>
               update.mutate({
@@ -307,81 +286,83 @@ function EditSemester({
                 endDate,
               })
             }
-            className="inline-flex min-h-10 items-center rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: valid && !update.isPending ? 1 : 0.5,
-              cursor: valid && !update.isPending ? "pointer" : "not-allowed",
-            }}
           >
             {update.isPending ? "Saving…" : "Save changes"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-4">
+        {error && (
+          <Callout tone="bad" role="alert">
+            {error.message}
+          </Callout>
+        )}
+
         <Field label="Name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            // 16px on a phone: below that, Safari zooms the page in as the
-            // field takes focus, which on a dialog leaves it half off screen.
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
+          {(id) => (
+            <Input
+              id={id}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          )}
         </Field>
 
-        {/* The month grid this pops open is 268px wide, which is more than half
-            a phone: side by side the two fields would each open a calendar that
-            hangs off the dialog. */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Starts">
-            <DatePicker
-              value={startDate}
-              onChange={setStartDate}
-              timeZone={DEFAULT_TIMEZONE}
-            />
-          </Field>
-          <Field label="Ends">
-            <DatePicker
-              value={endDate}
-              onChange={setEndDate}
-              timeZone={DEFAULT_TIMEZONE}
-            />
-          </Field>
-        </div>
+        <DateFields
+          startDate={startDate}
+          endDate={endDate}
+          onStart={setStartDate}
+          onEnd={setEndDate}
+        />
 
-        <p className="text-faint m-0 flex items-start gap-2 text-[12.5px]">
-          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+        <Callout tone="neutral">
           {held === 0
             ? "Nothing is filed under this semester yet, so it can still be removed."
             : `${semester._count.courses} courses, ${semester._count.groups} groups and ${semester._count.events} lectures are filed under it. Moving its dates moves the term they belong to; it does not move any lecture.`}
-        </p>
-
-        {error && (
-          <p
-            className="m-0 text-[13px] font-semibold"
-            style={{ color: "var(--red)" }}
-          >
-            {error.message}
-          </p>
-        )}
+        </Callout>
       </div>
     </Dialog>
   );
 }
 
-function Field({
-  label,
-  children,
+/** The two dates, as both dialogs ask for them. */
+function DateFields({
+  startDate,
+  endDate,
+  onStart,
+  onEnd,
 }: {
-  label: string;
-  children: React.ReactNode;
+  startDate: Date;
+  endDate: Date;
+  onStart: (day: Date) => void;
+  onEnd: (day: Date) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-muted text-[12.5px] font-semibold">{label}</span>
-      {children}
+    // The month grid this pops open is 268px wide, which is more than half a
+    // phone: side by side the two fields would each open a calendar that hangs
+    // off the dialog.
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+      <Field label="Starts">
+        {(id) => (
+          <DatePicker
+            id={id}
+            value={startDate}
+            onChange={onStart}
+            timeZone={DEFAULT_TIMEZONE}
+          />
+        )}
+      </Field>
+      <Field label="Ends">
+        {(id) => (
+          <DatePicker
+            id={id}
+            value={endDate}
+            onChange={onEnd}
+            timeZone={DEFAULT_TIMEZONE}
+          />
+        )}
+      </Field>
     </div>
   );
 }

@@ -4,7 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
+import { Button, buttonClass } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
+import { Icon, type IconName } from "~/components/ui/icon";
+import { Skeleton } from "~/components/ui/skeleton";
 import { api } from "~/trpc/react";
 
 /**
@@ -107,9 +112,24 @@ export function CalendarSync() {
    * deserves a sentence rather than a blank page.
    */
   if (!data) {
+    // The connected panel's shape, so the card does not grow under the eye
+    // when the answer lands: the commonest answer, for anybody who comes back.
     return (
       <Card>
-        <p className="text-muted m-0 text-[14px]">Checking your calendar…</p>
+        <div role="status" aria-label="Checking your calendar…">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-[12px]" />
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          </div>
+          <Skeleton className="mt-5 h-3 w-56" />
+          <div className="mt-5 flex gap-2">
+            <Skeleton className="h-10 w-24 rounded-[var(--radius-btn)] lg:h-9" />
+            <Skeleton className="h-10 w-28 rounded-[var(--radius-btn)] lg:h-9" />
+          </div>
+        </div>
       </Card>
     );
   }
@@ -117,10 +137,13 @@ export function CalendarSync() {
   if (!data.available) {
     return (
       <Card>
-        <p className="text-muted m-0 text-[14px]">
-          Google Calendar sync is not switched on for this institution. Nothing
-          here needs your attention.
-        </p>
+        <EmptyState
+          compact
+          icon="calendar"
+          title="Google Calendar sync is not switched on for this institution."
+        >
+          Nothing here needs your attention.
+        </EmptyState>
       </Card>
     );
   }
@@ -128,96 +151,163 @@ export function CalendarSync() {
   const connected = data.connected;
   const revoked = connected && data.revoked;
 
-  return (
-    <Card>
-      {!connected ? (
-        <div className="text-[13px]">
-          <p className="text-muted m-0">
-            Your classes are copied into a calendar of their own — created by
-            Plannr, kept beside your own — so they show up on your phone
-            alongside everything else. When a class is cancelled or moved, the
-            entry changes with it.
-          </p>
-          <ul className="text-faint mt-3 mb-4 list-disc space-y-1 pl-4">
-            <li>
-              Plannr can only see the calendar it creates. Your existing
-              calendars stay private to you.
-            </li>
-            <li>
-              Deleting that calendar in Google undoes everything, and nothing
-              else goes with it.
-            </li>
-          </ul>
-          <a
-            href="/api/calendar/connect"
-            className="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-            style={{ background: "var(--ink, #1f2937)", color: "white" }}
-          >
-            Connect Google Calendar
-          </a>
-        </div>
-      ) : (
-        <div className="text-[13px]">
-          {revoked ? (
-            <p className="m-0 mb-3" style={{ color: "var(--danger, #b3261e)" }}>
-              Google has withdrawn the permission — this happens if you removed
-              Plannr from your account, or changed your password. Reconnect to
-              start syncing again; nothing already in your calendar was lost.
-            </p>
-          ) : (
-            <p className="text-muted m-0 mb-3">
-              Syncing to <strong>{data.email}</strong>.{" "}
-              {data.pending > 0
-                ? `Catching up on ${data.pending} change${data.pending === 1 ? "" : "s"}.`
-                : data.syncedAt
-                  ? `Last checked ${relative(new Date(data.syncedAt))}.`
-                  : "Waiting for the first pass."}
-            </p>
-          )}
+  // A plain link rather than a button or a client-side `Link`: connecting is a
+  // full navigation to an OAuth route, which leaves for Google and comes back.
+  const connect = (label: string) => (
+    <a href="/api/calendar/connect" className={buttonClass("primary", "md")}>
+      {label}
+    </a>
+  );
 
-          <div className="flex flex-wrap gap-2">
-            {revoked ? (
-              <a
-                href="/api/calendar/connect"
-                className="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-                style={{ background: "var(--ink, #1f2937)", color: "white" }}
-              >
-                Reconnect
-              </a>
-            ) : (
-              <button
-                type="button"
-                disabled={resync.isPending}
-                onClick={() => {
-                  rounds.current = 0;
-                  changed.current = 0;
-                  resync.mutate({});
-                }}
-                className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-                style={{
-                  background: "rgba(68,88,121,0.07)",
-                  color: "var(--slate)",
-                }}
-              >
-                {resync.isPending ? "Syncing…" : "Sync now"}
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={disconnect.isPending}
-              onClick={() => disconnect.mutate({})}
-              className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-              style={{
-                background: "rgba(200,60,60,0.08)",
-                color: "var(--danger, #b3261e)",
-              }}
-            >
-              {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
-            </button>
+  /*
+   * Disconnecting is set apart on the trailing edge and drawn as the quiet
+   * red: it deletes the calendar Plannr made, so it is not the routine action
+   * "Sync now" is, and the two used to be the same size, weight and place.
+   */
+  const disconnectButton = (
+    <Button
+      variant="danger-quiet"
+      disabled={disconnect.isPending}
+      onClick={() => disconnect.mutate({})}
+      className="ml-auto"
+    >
+      {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+    </Button>
+  );
+
+  if (!connected) {
+    return (
+      <Card>
+        <StatusHead icon="calendar" title="Not connected" />
+        <p className="text-ink mt-4 max-w-[62ch] text-sm leading-relaxed">
+          Your classes are copied into a calendar of their own (created by
+          Plannr, kept beside your own), so they show up on your phone alongside
+          everything else. When a class is cancelled or moved, the entry changes
+          with it.
+        </p>
+        <ul className="text-muted marker:text-faint mt-3 list-disc space-y-1 pl-5 text-sm">
+          <li>
+            Plannr can only see the calendar it creates. Your existing calendars
+            stay private to you.
+          </li>
+          <li>
+            Deleting that calendar in Google undoes everything, and nothing else
+            goes with it.
+          </li>
+        </ul>
+        <div className="mt-5">{connect("Connect Google Calendar")}</div>
+      </Card>
+    );
+  }
+
+  if (revoked) {
+    return (
+      <Card>
+        <div className="flex flex-col gap-4">
+          {/* Amber: the permission went at Google's end and nothing is lost,
+              so this asks for a decision rather than reporting a failure in
+              red. The way out sits under it, in the row the connected panel
+              keeps its buttons in, rather than squeezed beside the sentence on
+              a phone. */}
+          <Callout tone="warn" title="Google has withdrawn the permission.">
+            This happens if you removed Plannr from your account, or changed
+            your password. Reconnect to start syncing again; nothing already in
+            your calendar was lost.
+          </Callout>
+          <div className="flex flex-wrap gap-2.5">
+            {connect("Reconnect")}
+            {disconnectButton}
           </div>
         </div>
-      )}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <StatusHead
+        icon="checkCircle"
+        tone="good"
+        title="Connected"
+        detail={
+          <>
+            Syncing to{" "}
+            <span className="text-title font-medium">{data.email}</span>
+          </>
+        }
+      />
+
+      <p className="text-ink mt-4 flex items-center gap-2 text-sm">
+        {data.pending > 0 ? (
+          <>
+            <Icon name="rotate" size={14} stroke={2} className="text-info" />
+            <span className="tabular-nums">
+              {`Catching up on ${data.pending} change${data.pending === 1 ? "" : "s"}.`}
+            </span>
+          </>
+        ) : (
+          <>
+            <Icon name="clock" size={14} stroke={2} className="text-faint" />
+            <span>
+              {data.syncedAt
+                ? `Last checked ${relative(new Date(data.syncedAt))}.`
+                : "Waiting for the first pass."}
+            </span>
+          </>
+        )}
+      </p>
+
+      <div className="mt-5 flex flex-wrap gap-2.5">
+        <Button
+          disabled={resync.isPending}
+          onClick={() => {
+            rounds.current = 0;
+            changed.current = 0;
+            resync.mutate({});
+          }}
+        >
+          {resync.isPending ? "Syncing…" : "Sync now"}
+        </Button>
+        {disconnectButton}
+      </div>
     </Card>
+  );
+}
+
+/**
+ * The line that answers "is it working?" before anything else is read: a
+ * glyph on a plate, the state in words, and whose calendar it is.
+ */
+function StatusHead({
+  icon,
+  tone = "neutral",
+  title,
+  detail,
+}: {
+  icon: IconName;
+  /** `good` once it is connected; the plain wash before that. */
+  tone?: "good" | "neutral";
+  title: string;
+  detail?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] ${
+          tone === "good"
+            ? "bg-good-wash text-good shadow-[inset_0_0_0_1px_var(--good-line)]"
+            : "bg-tint text-slate shadow-[inset_0_0_0_1px_var(--hair-soft)]"
+        }`}
+      >
+        <Icon name={icon} size={19} stroke={1.9} />
+      </span>
+      <div className="min-w-0">
+        <h2 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
+          {title}
+        </h2>
+        {detail && <p className="text-muted text-sm break-words">{detail}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -230,7 +320,7 @@ export function CalendarSync() {
  */
 const OUTCOMES: Record<string, string> = {
   connected: "Connected. Your classes appear in Google Calendar shortly.",
-  declined: "Not connected — you cancelled at Google's permission screen.",
+  declined: "Not connected: you cancelled at Google's permission screen.",
   scope:
     "Not connected: the calendar permission was left unticked. Connecting again and allowing it is all that is needed.",
   norefresh:

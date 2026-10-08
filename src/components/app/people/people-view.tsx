@@ -2,13 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
+import { Avatar } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
+import { Button, IconButton } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
+import { Checkbox } from "~/components/ui/checkbox";
+import { EmptyState } from "~/components/ui/empty-state";
+import { Input } from "~/components/ui/field";
 import { Icon } from "~/components/ui/icon";
 import { SearchSelect, useDebounced } from "~/components/ui/entity-picker";
 import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
+import { Skeleton } from "~/components/ui/skeleton";
 import { roleCard } from "./entity-cards";
 import { personName } from "~/lib/people";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
@@ -46,6 +54,10 @@ export function PeopleView({ permissions }: { permissions: string }) {
   const [openUserId, setOpenUserId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Held here rather than in the role manager so that "New role" can sit in
+  // the same slot "Add person" does: the one action a tab is for stays put
+  // when the tab changes, instead of jumping down a row.
+  const [creatingRole, setCreatingRole] = useState(false);
 
   const utils = api.useUtils();
   const [roleQuery, setRoleQuery] = useState("");
@@ -131,13 +143,18 @@ export function PeopleView({ permissions }: { permissions: string }) {
     });
   };
 
+  /** No rows yet because the first page is still on its way. */
+  const loadingFirst = list.isLoading && rows.length === 0;
+  /** No rows because the list could not be fetched, not because none match. */
+  const failed = Boolean(list.error) && rows.length === 0;
+
   return (
     <>
       <PageHeader
         title="People"
         subtitle="Everyone on the system, and what they can do"
       />
-      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
+      <PageBody>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <Segmented
             items={[
@@ -146,79 +163,97 @@ export function PeopleView({ permissions }: { permissions: string }) {
             ]}
             value={tab}
             onChange={setTab}
+            // Two strips on one screen: unnamed, both are announced as the
+            // same anonymous radio group.
+            ariaLabel="View"
           />
 
-          {tab === "people" && (
+          {/*
+           * Each tab's actions in the one slot, so the button a tab is for is
+           * always in the same place. Adding is the primary on the directory
+           * and importing its alternative; on the roles tab, a new role.
+           */}
+          {tab === "people" && (canImport || canManage) && (
             <div className="flex flex-wrap items-center gap-2.5">
               {canImport && (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  icon="upload"
                   onClick={() => setImporting(true)}
-                  className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
                 >
-                  <Icon name="upload" size={15} color="var(--slate)" />
                   Import CSV
-                </button>
+                </Button>
               )}
               {canManage && (
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  icon="plus"
                   onClick={() => setAdding(true)}
-                  // Buttons in this app are drawn at 34px, which is under the
-                  // thumb-sized minimum; the floor is lifted only where a
-                  // pointer is not the assumed input, so desktop is untouched.
-                  className="min-h-10 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-                  style={{ background: "var(--grad-brand)" }}
                 >
-                  + Add person
-                </button>
+                  Add person
+                </Button>
               )}
             </div>
+          )}
+          {tab === "roles" && canManageRoles && (
+            <Button
+              variant="primary"
+              icon="plus"
+              onClick={() => setCreatingRole(true)}
+            >
+              New role
+            </Button>
           )}
         </div>
 
         {tab === "roles" ? (
-          <RoleManager canManage={canManageRoles} />
+          <RoleManager
+            canManage={canManageRoles}
+            creating={creatingRole}
+            onCreatingChange={setCreatingRole}
+          />
         ) : (
           <>
             {notice && (
-              <div
-                className="mb-4 flex items-center justify-between gap-3 rounded-xl p-3.5 text-[13px]"
-                style={{
-                  background: "rgba(68,88,121,0.07)",
-                  boxShadow: "inset 0 0 0 1px var(--card-ring)",
-                }}
+              <Callout
+                tone="info"
+                role="status"
+                className="mb-4"
+                action={
+                  <IconButton
+                    icon="x"
+                    label="Dismiss"
+                    size="sm"
+                    onClick={() => setNotice(null)}
+                    className="-my-1.5"
+                  />
+                }
               >
-                <span className="text-ink">{notice}</span>
-                <button
-                  onClick={() => setNotice(null)}
-                  aria-label="Dismiss"
-                  className="-my-2 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:my-0 lg:h-6 lg:w-6"
-                >
-                  <Icon name="x" size={14} color="var(--muted)" />
-                </button>
-              </div>
+                {notice}
+              </Callout>
             )}
 
+            {/*
+             * The search leads the toolbar, because finding a person is what
+             * the screen is for; the filters that narrow it follow, and the
+             * page size and count sit at the far end where they are read
+             * rather than used.
+             */}
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <div className="relative w-full sm:w-64">
-                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-                  <Icon name="search" size={15} color="var(--faint)" />
-                </span>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search name, email or PRN…"
-                  // 16px on a phone: below that, Safari zooms the page in as
-                  // the field takes focus, and a zoomed page is one that
-                  // scrolls sideways.
-                  className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
-              </div>
+              <Input
+                icon="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, email or PRN…"
+                // The lens and the placeholder say what the field is; a label
+                // above it would only repeat them, so it is named for a
+                // screen reader instead. Phones get 16px type from the global
+                // `pointer: coarse` rule, so Safari does not zoom in on focus.
+                aria-label="Search people"
+                className="w-full sm:w-72"
+              />
               {query !== debounced && preview.data !== undefined && (
-                <span className="text-faint font-mono text-[12px]">
+                <span className="text-muted font-mono text-xs tabular-nums">
                   {preview.data} match{preview.data === 1 ? "" : "es"}
                 </span>
               )}
@@ -259,11 +294,12 @@ export function PeopleView({ permissions }: { permissions: string }) {
                     setPage(1);
                   }}
                   size="sm"
+                  ariaLabel="Account status"
                 />
               </div>
 
               <div className="ml-auto flex items-center gap-3">
-                <div className="text-faint flex items-center gap-2 text-[12px]">
+                <div className="text-muted flex items-center gap-2 text-xs">
                   Show
                   <Select
                     ariaLabel="Rows per page"
@@ -279,34 +315,39 @@ export function PeopleView({ permissions }: { permissions: string }) {
                     }}
                   />
                 </div>
-                <span className="text-faint font-mono text-[12px]">
+                <span className="text-muted font-mono text-xs tabular-nums">
                   {list.data?.total ?? 0} total
                 </span>
               </div>
             </div>
 
             {canManage && selected.size > 0 && (
-              <div
-                className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl px-4 py-2.5"
-                style={{
-                  background: "rgba(68,88,121,0.08)",
-                  boxShadow: "inset 0 0 0 1px var(--card-ring)",
-                }}
-              >
-                <span className="text-[13px] font-semibold">
+              <div className="bg-tint-selected mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-[12px] px-4 py-2 shadow-[inset_0_0_0_1px_var(--hair)]">
+                <span className="text-title text-sm font-semibold tabular-nums">
                   {selected.size} selected
                 </span>
-                <button
-                  type="button"
+                {/* Removal happens on this press, with no second step, so it
+                    is drawn as the final, destructive one. */}
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon="trash"
                   disabled={bulkDelete.isPending}
                   onClick={() => bulkDelete.mutate({ ids: [...selected] })}
-                  className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                  style={{ background: "var(--red)" }}
                 >
-                  <Icon name="trash" size={13} color="#fff" />
                   Remove selected
-                </button>
+                </Button>
               </div>
+            )}
+
+            {failed && (
+              <Callout
+                tone="bad"
+                className="mb-4"
+                title="Could not load people"
+              >
+                {list.error?.message} Reload the page to try again.
+              </Callout>
             )}
 
             {/*
@@ -330,172 +371,190 @@ export function PeopleView({ permissions }: { permissions: string }) {
              * by reading it top to bottom, and the whole row stays on screen
              * where a scrolling table would hide the status off the right edge.
              */}
-            <Card pad={8} className="md:hidden">
-              {canManage && rows.length > 0 && (
-                <label className="flex min-h-11 cursor-pointer items-center gap-3 px-2">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    aria-label="Select all"
-                    className="h-4.5 w-4.5"
-                  />
-                  <span className="text-muted text-[12px] font-bold tracking-wider uppercase">
-                    Select all
-                  </span>
-                </label>
-              )}
-              {rows.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex items-center gap-1 px-1 py-1"
-                  style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)" }}
-                >
-                  {canManage && (
-                    <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
-                      <input
-                        type="checkbox"
+            {!failed && (
+              <Card pad={8} className="md:hidden">
+                {canManage && rows.length > 0 && (
+                  <div className="px-3 shadow-[inset_0_-1px_0_var(--hair-soft)]">
+                    <Checkbox
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      label="Select all"
+                      className="text-muted"
+                    />
+                  </div>
+                )}
+                {rows.map((u) => (
+                  <div
+                    key={u.id}
+                    // One left edge for the checkbox's column, one for the
+                    // avatar and one for the name, and everything under the
+                    // name (address, PRN, badges) hangs from the name's edge.
+                    className="flex items-start gap-1 py-1 shadow-[inset_0_-1px_0_var(--hair-soft)] last:shadow-none"
+                  >
+                    {canManage && (
+                      <Checkbox
                         checked={selected.has(u.id)}
                         onChange={() => toggleOne(u.id)}
-                        aria-label={`Select ${personName(u, u.prn ?? "this person")}`}
-                        className="h-4.5 w-4.5"
+                        ariaLabel={`Select ${personName(u, u.prn ?? "this person")}`}
+                        className="h-12 w-10 shrink-0 items-center justify-center py-0"
                       />
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setOpenUserId(u.id)}
-                    className="flex min-h-11 min-w-0 flex-1 cursor-pointer flex-col gap-2 px-2 py-2 text-left"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                        style={{ background: "var(--slate)" }}
-                      >
-                        {personName(u, "?").charAt(0).toUpperCase()}
-                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setOpenUserId(u.id)}
+                      className={`hover:bg-tint-hover active:bg-tint flex min-h-12 min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-[10px] py-2 pr-2 text-left transition-colors duration-150 ${canManage ? "pl-1" : "pl-2"}`}
+                    >
+                      <Avatar
+                        name={personName(u, u.prn ?? "?")}
+                        size={32}
+                        tone="soft"
+                        className="mt-px"
+                      />
                       <span className="min-w-0 flex-1">
-                        <span className="text-title block truncate text-[13.5px] font-semibold">
-                          {u.name ?? "—"}
+                        <span className="text-title block truncate text-base font-semibold">
+                          {personName(u, u.prn ?? "Unnamed")}
                         </span>
                         <PersonAddress email={u.email} />
-                      </span>
-                    </span>
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {u.prn && (
-                        <span className="text-muted font-mono text-[12px]">
-                          {u.prn}
-                        </span>
-                      )}
-                      <RoleBadges roles={u.roles} />
-                      <StatusBadge user={u} />
-                    </span>
-                  </button>
-                </div>
-              ))}
-              {rows.length === 0 && (
-                <p className="text-muted m-0 px-2 py-7 text-center text-[13.5px]">
-                  {list.isLoading
-                    ? "Loading…"
-                    : "Nobody matches those filters."}
-                </p>
-              )}
-            </Card>
-
-            <Card pad={8} className="hidden md:block">
-              {/* Long role names can still outrun a tablet; the card scrolls. */}
-              <div className="plr-scroll overflow-x-auto">
-                <table className="w-full min-w-155 border-collapse">
-                  <thead>
-                    <tr>
-                      {canManage && (
-                        <Th style={{ width: 36 }}>
-                          <input
-                            type="checkbox"
-                            checked={allSelected}
-                            onChange={toggleAll}
-                            aria-label="Select all"
-                          />
-                        </Th>
-                      )}
-                      <Th>Person</Th>
-                      <Th>PRN</Th>
-                      <Th>Roles</Th>
-                      <Th>Status</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((u) => (
-                      <tr
-                        key={u.id}
-                        className="cursor-pointer"
-                        onClick={() => setOpenUserId(u.id)}
-                      >
-                        {canManage && (
-                          <Td onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selected.has(u.id)}
-                              onChange={() => toggleOne(u.id)}
-                              aria-label={`Select ${personName(u, u.prn ?? "this person")}`}
-                            />
-                          </Td>
-                        )}
-                        <Td>
-                          <span className="flex items-center gap-2.5">
-                            <span
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                              style={{ background: "var(--slate)" }}
-                            >
-                              {personName(u, "?").charAt(0).toUpperCase()}
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {u.prn && (
+                            <span className="text-muted font-mono text-xs tabular-nums">
+                              {u.prn}
                             </span>
-                            <span className="min-w-0">
-                              <span className="text-title block truncate font-semibold">
-                                {u.name ?? "—"}
-                              </span>
-                              <PersonAddress email={u.email} />
-                            </span>
-                          </span>
-                        </Td>
-                        <Td>
-                          <span className="text-muted font-mono text-[12.5px]">
-                            {u.prn ?? "—"}
-                          </span>
-                        </Td>
-                        <Td>
-                          <span className="flex flex-wrap gap-1.5">
-                            <RoleBadges roles={u.roles} />
-                          </span>
-                        </Td>
-                        <Td>
+                          )}
+                          <RoleBadges roles={u.roles} />
                           <StatusBadge user={u} />
-                        </Td>
-                      </tr>
-                    ))}
-                    {rows.length === 0 && (
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                ))}
+                {loadingFirst && <ListSkeleton />}
+                {rows.length === 0 && !list.isLoading && (
+                  <NoMatches
+                    query={debounced}
+                    filtered={roleId !== undefined || status !== "all"}
+                  />
+                )}
+              </Card>
+            )}
+
+            {!failed && (
+              <Card pad={8} className="hidden md:block">
+                {/* Long role names can still outrun a tablet; the card scrolls. */}
+                <div className="plr-scroll overflow-x-auto">
+                  <table className="w-full min-w-155 border-collapse">
+                    <thead>
                       <tr>
-                        {/*
-                          Across every column, or the row is laid out inside the
-                          first one — which is the 36px checkbox column whenever
-                          the reader can manage users, so a centred message ends
-                          up centred in 36px, well left of the table it belongs to.
-                        */}
-                        <Td
-                          colSpan={canManage ? 5 : 4}
-                          style={{ textAlign: "center", padding: "28px 0" }}
-                        >
-                          <span className="text-muted text-[13.5px]">
-                            {list.isLoading
-                              ? "Loading…"
-                              : "Nobody matches those filters."}
-                          </span>
-                        </Td>
+                        {canManage && (
+                          <Th className="w-11">
+                            {/* Nothing to select on an empty page, so no box. */}
+                            {rows.length > 0 && (
+                              <Checkbox
+                                checked={allSelected}
+                                onChange={toggleAll}
+                                ariaLabel="Select all"
+                                className="-my-2 h-9 items-center justify-center py-0"
+                              />
+                            )}
+                          </Th>
+                        )}
+                        <Th>Person</Th>
+                        <Th>PRN</Th>
+                        <Th>Roles</Th>
+                        <Th>Status</Th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                    </thead>
+                    <tbody>
+                      {rows.map((u) => (
+                        <tr
+                          key={u.id}
+                          // The row is the pointer's target, the name the
+                          // keyboard's: a click anywhere opens the record, and
+                          // the name is a real button so Tab reaches it.
+                          className="hover:bg-tint-hover focus-within:bg-tint-hover cursor-pointer transition-colors duration-150 [&:last-child>td]:shadow-none"
+                          onClick={() => setOpenUserId(u.id)}
+                        >
+                          {canManage && (
+                            <Td onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selected.has(u.id)}
+                                onChange={() => toggleOne(u.id)}
+                                ariaLabel={`Select ${personName(u, u.prn ?? "this person")}`}
+                                className="-my-2 h-11 items-center justify-center py-0"
+                              />
+                            </Td>
+                          )}
+                          <Td>
+                            <span className="flex items-center gap-3">
+                              <Avatar
+                                name={personName(u, u.prn ?? "?")}
+                                size={32}
+                                tone="soft"
+                              />
+                              <span className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    // The row would open it too; once is enough.
+                                    e.stopPropagation();
+                                    setOpenUserId(u.id);
+                                  }}
+                                  className="text-title block max-w-full cursor-pointer truncate rounded-[4px] text-left text-base font-semibold"
+                                >
+                                  {personName(u, u.prn ?? "Unnamed")}
+                                </button>
+                                <PersonAddress email={u.email} />
+                              </span>
+                            </span>
+                          </Td>
+                          <Td>
+                            {/* Staff have no PRN; the cell is left empty rather
+                                than filled with a dash that reads as data. */}
+                            {u.prn && (
+                              <span className="text-muted font-mono text-xs tabular-nums">
+                                {u.prn}
+                              </span>
+                            )}
+                          </Td>
+                          <Td>
+                            <span className="flex flex-wrap gap-1.5">
+                              <RoleBadges roles={u.roles} />
+                            </span>
+                          </Td>
+                          <Td>
+                            <StatusBadge user={u} />
+                          </Td>
+                        </tr>
+                      ))}
+                      {rows.length === 0 && (
+                        // The card's own edge closes the table; a hairline
+                        // under the message as well would draw it twice.
+                        <tr className="[&>td]:shadow-none">
+                          {/*
+                            Across every column, or the row is laid out inside the
+                            first one — which is the checkbox column whenever the
+                            reader can manage users, so a centred message ends up
+                            centred in 44px, well left of the table it belongs to.
+                          */}
+                          <Td colSpan={canManage ? 5 : 4}>
+                            {list.isLoading ? (
+                              <ListSkeleton />
+                            ) : (
+                              <NoMatches
+                                query={debounced}
+                                filtered={
+                                  roleId !== undefined || status !== "all"
+                                }
+                              />
+                            )}
+                          </Td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
 
             {/*
              * The foot of the list. Empty and zero-height when there is one
@@ -517,29 +576,25 @@ export function PeopleView({ permissions }: { permissions: string }) {
                * be clutter under a pager nobody has to scroll to reach.
                */}
               {rows.length > 10 && (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => window.scrollTo({ top: 0 })}
-                  className="mt-4 flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[8px] px-3.5 text-[12.5px] font-semibold lg:hidden"
-                  style={{
-                    background: "var(--surface)",
-                    color: "var(--muted)",
-                    boxShadow: "var(--ring)",
-                  }}
+                  className="mt-4 lg:hidden"
                 >
                   <Icon
                     name="chevronDown"
                     size={14}
-                    color="currentColor"
+                    stroke={2}
                     className="rotate-180"
                   />
                   Back to search
-                </button>
+                </Button>
               )}
             </div>
           </>
         )}
-      </div>
+      </PageBody>
 
       {adding && (
         <AddPersonDialog
@@ -565,6 +620,44 @@ export function PeopleView({ permissions }: { permissions: string }) {
   );
 }
 
+/**
+ * The rows that stand in for the first page while it loads: an avatar tile and
+ * two lines, the shape of a person, so nothing jumps when they arrive.
+ */
+function ListSkeleton() {
+  return (
+    <div role="status" aria-label="Loading people" className="flex flex-col">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 px-3 py-3">
+          <Skeleton round className="h-8 w-8 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-40 max-w-full" />
+            <Skeleton className="h-3 w-56 max-w-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The filters matched nobody. Says so, and echoes the search when there was
+ * one, so the reader can see which word to change. The role and status are
+ * only named when one is actually set, so the hint never points at a filter
+ * the reader has not touched.
+ */
+function NoMatches({ query, filtered }: { query: string; filtered: boolean }) {
+  return (
+    <EmptyState icon="search" title="Nobody matches those filters" compact>
+      {query
+        ? `Nothing found for “${query}”${filtered ? " with the role and status chosen" : ""}.`
+        : filtered
+          ? "Try another role or status."
+          : "Try a different search."}
+    </EmptyState>
+  );
+}
+
 /** The roles a person holds, drawn the same way in the cards and the table. */
 function RoleBadges({
   roles,
@@ -572,10 +665,12 @@ function RoleBadges({
   roles: { id: string; name: string; key: string | null }[];
 }) {
   if (roles.length === 0) return <Badge tone="orange">No role</Badge>;
+  // Every role is slate, Administrator included: red is kept for the live
+  // lamp and for danger, and holding a powerful role is neither.
   return (
     <>
       {roles.map((r) => (
-        <Badge key={r.id} tone={r.key === "admin" ? "red" : "slate"}>
+        <Badge key={r.id} tone="slate">
           {r.name}
         </Badge>
       ))}
@@ -583,7 +678,13 @@ function RoleBadges({
   );
 }
 
-/** Whether the account works, and if not, whose fault that is. */
+/**
+ * Whether the account works, and if not, whose fault that is.
+ *
+ * The ordinary case is said in quiet text and only the exceptions get a badge:
+ * thirty green "active" pills down a page were noise, and the rows somebody is
+ * scanning for are the ones that are not.
+ */
 function StatusBadge({
   user,
 }: {
@@ -592,36 +693,27 @@ function StatusBadge({
   if (!user.isActive && !user.email) {
     // Shut out by the college's paperwork rather than by anybody here, which is
     // not the same as disabled and should not be read in red across 133 rows.
-    return <Badge tone="neutral">waiting on an address</Badge>;
+    return <Badge tone="neutral">Waiting on an address</Badge>;
   }
   if (!user.isActive) {
-    return (
-      <Badge tone="red" dot>
-        disabled
-      </Badge>
-    );
+    return <Badge tone="red">Disabled</Badge>;
   }
   if (user.hasSignedIn) {
-    return (
-      <Badge tone="green" dot>
-        active
-      </Badge>
-    );
+    return <span className="text-muted text-sm">Active</span>;
   }
-  return <Badge tone="neutral">not signed in</Badge>;
+  return <Badge tone="neutral">Not signed in</Badge>;
 }
 
 function Th({
   children,
-  style,
+  className = "",
 }: {
   children?: React.ReactNode;
-  style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
     <th
-      className="text-muted px-3.5 py-2.5 text-left text-[11px] font-bold tracking-[0.05em] uppercase"
-      style={{ boxShadow: "inset 0 -1px 0 var(--hair)", ...style }}
+      className={`text-muted text-2xs px-3 py-2 text-left font-semibold shadow-[inset_0_-1px_0_var(--hair)] ${className}`}
     >
       {children}
     </th>
@@ -630,12 +722,10 @@ function Th({
 
 function Td({
   children,
-  style,
   onClick,
   colSpan,
 }: {
   children?: React.ReactNode;
-  style?: React.CSSProperties;
   onClick?: (e: React.MouseEvent) => void;
   colSpan?: number;
 }) {
@@ -643,8 +733,7 @@ function Td({
     <td
       onClick={onClick}
       colSpan={colSpan}
-      className="text-ink px-3.5 py-3 align-middle text-[13.5px]"
-      style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)", ...style }}
+      className="text-ink px-3 py-2.5 align-middle text-sm shadow-[inset_0_-1px_0_var(--hair-soft)]"
     >
       {children}
     </td>
@@ -669,51 +758,66 @@ function Pagination({
     .sort((a, b) => a - b);
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-      <PageBtn disabled={page === 1} onClick={() => onChange(page - 1)}>
-        <Icon name="chevronLeft" size={14} color="currentColor" />
-      </PageBtn>
+    <nav
+      aria-label="Pages"
+      className="mt-4 flex flex-wrap items-center justify-center gap-1.5"
+    >
+      <IconButton
+        icon="chevronLeft"
+        label="Previous page"
+        variant="secondary"
+        size="sm"
+        iconSize={14}
+        disabled={page === 1}
+        onClick={() => onChange(page - 1)}
+      />
       {pages.map((p, i) => (
         <span key={p} className="flex items-center gap-1.5">
           {i > 0 && pages[i - 1]! < p - 1 && (
-            <span className="text-faint px-1 text-[12px]">…</span>
+            <span className="text-faint px-1 text-xs">…</span>
           )}
           <PageBtn active={p === page} onClick={() => onChange(p)}>
             {p}
           </PageBtn>
         </span>
       ))}
-      <PageBtn disabled={page === pageCount} onClick={() => onChange(page + 1)}>
-        <Icon name="chevronRight" size={14} color="currentColor" />
-      </PageBtn>
-    </div>
+      <IconButton
+        icon="chevronRight"
+        label="Next page"
+        variant="secondary"
+        size="sm"
+        iconSize={14}
+        disabled={page === pageCount}
+        onClick={() => onChange(page + 1)}
+      />
+    </nav>
   );
 }
 
+/**
+ * One page number. The current page is a selected state, so it wears the
+ * slate wash a chosen row does rather than the slate fill of a primary button,
+ * which would put a second "do this" beside "Add person".
+ */
 function PageBtn({
   children,
   active,
-  disabled,
   onClick,
 }: {
   children: React.ReactNode;
   active?: boolean;
-  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onClick}
-      className="flex h-10 min-w-10 cursor-pointer items-center justify-center rounded-[8px] px-2 text-[12.5px] font-semibold lg:h-8 lg:min-w-8"
-      style={{
-        background: active ? "var(--slate)" : "var(--surface)",
-        color: active ? "#fff" : "var(--muted)",
-        boxShadow: active ? "none" : "var(--ring)",
-        opacity: disabled ? 0.4 : 1,
-        cursor: disabled ? "default" : "pointer",
-      }}
+      aria-current={active ? "page" : undefined}
+      className={`flex h-10 min-w-10 cursor-pointer items-center justify-center rounded-[var(--radius-btn)] px-2 font-mono text-xs font-semibold tabular-nums transition-[background-color,color,scale] duration-150 ease-out active:scale-[0.95] lg:h-8 lg:min-w-8 ${
+        active
+          ? "bg-tint-selected text-slate-ink shadow-[inset_0_0_0_1px_var(--hair)]"
+          : "bg-surface text-muted hover:bg-surface-hover hover:text-title shadow-[inset_0_0_0_1px_var(--card-ring)]"
+      }`}
     >
       {children}
     </button>

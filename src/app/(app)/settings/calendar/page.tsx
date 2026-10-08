@@ -2,6 +2,7 @@ import { type Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { CalendarSync } from "~/components/app/settings/calendar-sync";
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { canOpen } from "~/lib/role-nav";
 import { auth } from "~/server/auth";
@@ -34,9 +35,11 @@ export default async function CalendarSettingsPage() {
         title="Google Calendar"
         subtitle="Your classes, in the calendar you already look at"
       />
-      <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
+      {/* Narrow, like Siri beside it: one panel of status and two buttons,
+          which at full width was a sentence adrift in a 1100px box. */}
+      <PageBody width="narrow">
         <CalendarSync />
-      </div>
+      </PageBody>
     </>
   );
 }

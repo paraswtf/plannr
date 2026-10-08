@@ -1,9 +1,10 @@
 "use client";
 
+import { Field, Input, Textarea } from "~/components/ui/field";
 import { Select, type SelectOption } from "~/components/ui/select";
 import { DEFAULT_TIMEZONE, formatFullDate } from "~/lib/dates";
 import type { ScopeName } from "~/lib/api-scopes";
-import { Field, INPUT_CLASS, TextInput } from "./controls";
+import { TextInput } from "./controls";
 import { ScopePicker, type ScopeCatalog } from "./scope-picker";
 
 /**
@@ -130,63 +131,78 @@ export function KeyFields({
 
   return (
     <div className="flex flex-col gap-4">
+      {/*
+       * Each field is named twice over, by the `<label>` above it and by an
+       * `aria-label` saying the same word, so a screen reader still hears it
+       * once. The second is how the console's checks have always reached these
+       * fields, and the rate limit's spells out the unit the visible label
+       * leaves to its hint.
+       */}
       <Field
         label="Name"
-        hint="Shown wherever this key acts — “scheduled by” on every lecture it books."
+        hint="Shown wherever this key acts, as “scheduled by” on every lecture it books."
       >
-        <TextInput
-          value={draft.name}
-          onChange={(v) => set("name", v)}
-          placeholder="e.g. Foyer room display"
-          maxLength={80}
-          disabled={disabled}
-          // `Field` draws its label as prose, not as a `<label>`, so a control
-          // that does not name itself has no name at all — the expiry and the
-          // throttle below already say theirs for the same reason.
-          ariaLabel="Name"
-        />
+        {(id) => (
+          <TextInput
+            id={id}
+            value={draft.name}
+            onChange={(v) => set("name", v)}
+            placeholder="e.g. Foyer room display"
+            maxLength={80}
+            disabled={disabled}
+            ariaLabel="Name"
+          />
+        )}
       </Field>
 
       <Field
         label="What it is for"
-        hint="Optional, and the thing that stops an unfamiliar key being left alone out of caution."
+        optional
+        hint="The thing that stops an unfamiliar key being left alone out of caution."
       >
-        <textarea
-          value={draft.description}
-          onChange={(e) => set("description", e.target.value)}
-          placeholder="Which app this is, who runs it, and where to find them."
-          maxLength={500}
-          rows={2}
-          disabled={disabled}
-          aria-label="What it is for"
-          className={`${INPUT_CLASS} resize-y`}
-          style={{ boxShadow: "var(--ring)", opacity: disabled ? 0.6 : 1 }}
-        />
+        {(id) => (
+          // Three rows, not two: on a phone the field is 16px type, and two
+          // rows cut the last line of an ordinary sentence off under its edge.
+          <Textarea
+            id={id}
+            value={draft.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder="Which app this is, who runs it, and where to find them."
+            maxLength={500}
+            rows={3}
+            disabled={disabled}
+            aria-label="What it is for"
+          />
+        )}
       </Field>
 
       {/* The expiry popover is ~280px wide, which is more than half a phone;
           side by side these two would open a list hanging off the dialog. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Expires">
-          <Select
-            value={draft.expiry}
-            options={expiryOptions(currentExpiry, allowKeep)}
-            onChange={(v) => set("expiry", v)}
-            ariaLabel="Expires"
-          />
+          {(id) => (
+            <Select
+              id={id}
+              value={draft.expiry}
+              options={expiryOptions(currentExpiry, allowKeep)}
+              onChange={(v) => set("expiry", v)}
+            />
+          )}
         </Field>
-        <Field label="Rate limit" hint="Requests a minute, 1–10,000.">
-          <input
-            type="number"
-            min={1}
-            max={10_000}
-            value={draft.rateLimit}
-            onChange={(e) => set("rateLimit", e.target.value)}
-            disabled={disabled}
-            aria-label="Rate limit, requests a minute"
-            className={INPUT_CLASS}
-            style={{ boxShadow: "var(--ring)", opacity: disabled ? 0.6 : 1 }}
-          />
+        <Field label="Rate limit" hint="Requests a minute, 1-10,000.">
+          {(id) => (
+            <Input
+              id={id}
+              type="number"
+              min={1}
+              max={10_000}
+              value={draft.rateLimit}
+              onChange={(e) => set("rateLimit", e.target.value)}
+              disabled={disabled}
+              aria-label="Rate limit, requests a minute"
+              className="font-mono tabular-nums"
+            />
+          )}
         </Field>
       </div>
 

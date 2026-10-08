@@ -7,8 +7,10 @@ import {
   type Structure,
 } from "~/components/app/setup/structure-flowchart";
 import { SemestersPanel } from "~/components/app/setup/semesters-panel";
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { DEFAULT_TIMEZONE } from "~/lib/dates";
 import { canOpen } from "~/lib/role-nav";
@@ -36,20 +38,27 @@ export default async function SetupPage() {
         title="Setup"
         subtitle="How the institution is arranged, from the degree down to the lecture"
       />
-      <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
+      <PageBody className="flex flex-col gap-6 lg:gap-7">
         {!structure || !semester ? (
           <>
             <Card>
-              <p className="text-muted m-0 text-[14px]">
-                Nothing is set up yet. Everything here hangs off a semester —
-                courses, groups and lectures all belong to one — so that is
-                where to start.
-              </p>
+              <EmptyState icon="calendar" title="Nothing is set up yet">
+                Everything here hangs off a semester (courses, groups and
+                lectures all belong to one), so that is where to start.
+              </EmptyState>
             </Card>
             <SemestersPanel initial={semesters} />
           </>
         ) : (
           <>
+            {/* What needs fixing comes first. It used to be the last thing on
+                the page, under the diagram, the programme listing and the
+                semester history, which put the only actionable lines on it
+                1,200px down on a laptop and 2,300px down on a phone. It draws
+                nothing at all when nothing is wrong, so a healthy page is
+                unchanged. */}
+            <Gaps gaps={structure.gaps} />
+
             <StructureFlowchart
               semesterName={semester.name}
               programmes={structure.programmes}
@@ -63,7 +72,7 @@ export default async function SetupPage() {
                 // semester's name there is not 245px of card left on a phone,
                 // and a line that breaks between the range and the progress
                 // still reads, where one that breaks mid-date does not.
-                <span className="text-faint flex flex-wrap justify-end gap-x-1.5 font-mono text-[12px]">
+                <span className="text-faint flex flex-wrap justify-end gap-x-1.5 font-mono text-xs tabular-nums">
                   {termDates(semester.startDate, semester.endDate).map(
                     (part, i) => (
                       <span key={part} className="whitespace-nowrap">
@@ -76,7 +85,7 @@ export default async function SetupPage() {
               }
             >
               {structure.programmes.length === 0 ? (
-                <p className="text-muted m-0 text-[14px]">
+                <p className="text-muted text-sm">
                   No programmes yet. A programme is a degree the college runs,
                   e.g. “BCA”; intakes and groups are filed under one.
                 </p>
@@ -94,11 +103,9 @@ export default async function SetupPage() {
             </Card>
 
             <SemestersPanel initial={semesters} />
-
-            <Gaps gaps={structure.gaps} />
           </>
         )}
-      </div>
+      </PageBody>
     </>
   );
 }
@@ -115,25 +122,24 @@ function ProgrammeRow({
 
   return (
     <div
-      className="flex flex-col gap-2.5 py-4 first:pt-0 last:pb-0"
-      style={
-        first ? undefined : { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
-      }
+      className={`flex flex-col gap-2.5 py-4 first:pt-0 last:pb-0 ${
+        first ? "" : "shadow-[inset_0_1px_0_var(--hair-soft)]"
+      }`}
     >
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="font-display text-title text-[16px] font-bold">
+        <h3 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
           {programme.code}
-        </span>
-        <span className="text-muted text-[13px]">{programme.name}</span>
-        <span className="text-faint ml-auto font-mono text-[11.5px]">
+        </h3>
+        <span className="text-muted text-sm">{programme.name}</span>
+        <span className="text-faint ml-auto font-mono text-xs tabular-nums">
           {plural(programme.batches.length, "intake")} ·{" "}
           {plural(groups, "group")}
         </span>
       </div>
 
       {programme.batches.length === 0 ? (
-        <span className="text-faint text-[12.5px]">
-          No intakes yet — a batch is one year&rsquo;s admissions to this
+        <span className="text-muted text-sm">
+          No intakes yet. A batch is one year&rsquo;s admissions to this
           programme.
         </span>
       ) : (
@@ -141,19 +147,26 @@ function ProgrammeRow({
           {programme.batches.map((batch) => (
             <span
               key={batch.id}
-              className="inline-flex items-center gap-2 rounded-[10px] px-2.5 py-1.5"
-              style={{ background: "var(--card-soft)" }}
+              className="bg-tint inline-flex items-center gap-2 rounded-[8px] px-2.5 py-1.5"
             >
-              <span className="text-title text-[12.5px] font-semibold">
+              <span className="text-title text-sm font-semibold">
                 {batch.name}
               </span>
-              <span className="text-muted font-mono text-[11.5px]">
-                {/* Every intake the programme has ever admitted is listed, so a
-                    dash is either one that has finished or one nobody has
-                    placed in this semester yet. Printed rather than hidden,
-                    because the second of those is a thing to go and fix. */}
-                {batch.number ? `Sem ${batch.number}` : "Sem —"} ·{" "}
-                {plural(batch.groups, "group")}
+              <span className="text-muted font-mono text-xs">
+                {/* Every intake the programme has ever admitted is listed, so
+                    one with no number is either one that has finished or one
+                    nobody has placed in this semester yet. Printed rather than
+                    hidden, so the second of those can still be spotted, but
+                    in words true of both and in the same muted ink as a
+                    number: the page cannot tell a graduated intake from a
+                    forgotten one, and painting every finished year in the
+                    warn ink would flag the past as something to fix. */}
+                {batch.number ? (
+                  `Sem ${batch.number}`
+                ) : (
+                  <span className="font-body">No semester</span>
+                )}{" "}
+                · {plural(batch.groups, "group")}
               </span>
             </span>
           ))}
@@ -174,8 +187,11 @@ function Gaps({ gaps }: { gaps: Structure["gaps"] }) {
   if (unstaffed === 0 && unlinked === 0) return null;
 
   return (
-    <section className="flex flex-col gap-2.5">
-      <h2 className="font-display text-title text-[15px] font-bold">
+    <section aria-labelledby="loose-ends" className="flex flex-col gap-2.5">
+      <h2
+        id="loose-ends"
+        className="font-display text-title text-md font-semibold tracking-[-0.01em]"
+      >
         Loose ends
       </h2>
       {unstaffed > 0 && (
@@ -207,19 +223,18 @@ function Gap({
   children: React.ReactNode;
 }) {
   return (
+    // The warn callout's look, as a link: it needs a decision, and the whole
+    // line is the way to the screen that makes it. The pointer deepens its
+    // edge and lifts it off the page, the same answer a hovered card gives.
     <Link
       href={href}
-      className="plr-clip flex items-center gap-2.5 rounded-[var(--radius-card)] px-4 py-3"
-      style={{
-        background: "color-mix(in srgb, var(--orange) 13%, var(--surface))",
-        boxShadow:
-          "inset 0 0 0 1px color-mix(in srgb, var(--orange) 45%, transparent)",
-      }}
+      className="plr-clip bg-warn-wash flex min-h-11 items-center gap-2.5 rounded-[12px] px-3.5 py-3 shadow-[inset_0_0_0_1px_var(--warn-line)] hover:shadow-[inset_0_0_0_1.5px_var(--warn-line),var(--shadow-card)]"
     >
-      <Icon name="alert" size={16} color="#a2660f" stroke={2} />
-      <span className="text-ink text-[13.5px] font-medium">{children}</span>
-      <span className="text-muted ml-auto shrink-0 text-[12.5px] font-semibold">
-        {where} →
+      <Icon name="alert" size={16} stroke={2} className="text-warn" />
+      <span className="text-ink min-w-0 text-base font-medium">{children}</span>
+      <span className="text-warn ml-auto flex shrink-0 items-center gap-1 text-sm font-semibold">
+        {where}
+        <Icon name="chevronRight" size={14} stroke={2} />
       </span>
     </Link>
   );
@@ -244,13 +259,13 @@ const YEAR = new Intl.DateTimeFormat("en-GB", {
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * "1 Jul – 30 Nov 2026" and "week 7 of 22" — how long the term is and how far
+ * "1 Jul - 30 Nov 2026" and "week 7 of 22" — how long the term is and how far
  * in. Handed back in halves rather than as one line so the card can break
  * between them when it is narrow, instead of in the middle of a date.
  */
 function termDates(start: Date, end: Date): [range: string, progress: string] {
   const sameYear = YEAR.format(start) === YEAR.format(end);
-  const range = `${sameYear ? DAY.format(start) : DAY_YEAR.format(start)} – ${DAY_YEAR.format(end)}`;
+  const range = `${sameYear ? DAY.format(start) : DAY_YEAR.format(start)} - ${DAY_YEAR.format(end)}`;
 
   const weeks = Math.max(1, Math.round((+end - +start) / WEEK));
   const now = Date.now();

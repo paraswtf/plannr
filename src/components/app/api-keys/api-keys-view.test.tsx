@@ -152,7 +152,7 @@ describe("ApiKeysView", () => {
     expect(Number(drawn[1]!.style.opacity)).toBeLessThan(1);
     expect(Number(drawn[0]!.style.opacity)).toBe(1);
     // Dimmed, not hidden: the row still reads.
-    expect(within(drawn[1]!).getByText(/revoked /)).toBeInTheDocument();
+    expect(within(drawn[1]!).getByText(/· revoked/)).toBeInTheDocument();
   });
 
   it("shows four scope chips and counts the rest", () => {

@@ -14,7 +14,7 @@ import { api } from "~/trpc/server";
 export const metadata: Metadata = {
   title: "Rooms",
   description:
-    "Every room on campus — what it seats, what it has and when it is free.",
+    "Every room on campus: what it seats, what it has and when it is free.",
 };
 
 export default async function RoomsPage() {

@@ -7,6 +7,7 @@ import {
   pickerPage,
   SearchSelect,
 } from "~/components/ui/entity-picker";
+import { Field } from "~/components/ui/field";
 import type { BookingDraft } from "./use-booking-draft";
 
 /**
@@ -25,61 +26,72 @@ export function AttendeeFields({
 
   return (
     <div className={className}>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-ink text-[13px] font-semibold">
-          Class / group
-        </span>
-        <SearchSelect
-          value={group ? groupCard(group) : null}
-          onChange={draft.setGroupId}
-          page={pickerPage(groupsPage.data, (rows) => rows.map(groupCard))}
-          loading={groupsPage.isLoading}
-          query={draft.groupQuery}
-          onQueryChange={draft.setGroupQuery}
-          onLoadMore={draft.loadMoreGroups}
-          placeholder="Search groups…"
-          listId="booking-group"
-          emptyOption="No group"
-        />
-        {draft.needsGroup && (
-          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#b02636]">
-            <Icon name="alert" size={12} color="var(--red)" stroke={2.4} />A
-            class needs a group attending it.
-          </span>
+      <Field label="Class / group">
+        {(id) => (
+          <>
+            <SearchSelect
+              id={id}
+              value={group ? groupCard(group) : null}
+              onChange={draft.setGroupId}
+              page={pickerPage(groupsPage.data, (rows) => rows.map(groupCard))}
+              loading={groupsPage.isLoading}
+              query={draft.groupQuery}
+              onQueryChange={draft.setGroupQuery}
+              onLoadMore={draft.loadMoreGroups}
+              placeholder="Search groups…"
+              listId="booking-group"
+              emptyOption="No group"
+            />
+            {/*
+             * The field's own error line, in the type `Field` gives one, and
+             * announced: it appears in answer to choosing "Class".
+             */}
+            {draft.needsGroup && (
+              <p
+                role="alert"
+                className="text-bad inline-flex items-center gap-1.5 text-xs font-medium"
+              >
+                <Icon name="alert" size={13} stroke={2} />A class needs a group
+                attending it.
+              </p>
+            )}
+          </>
         )}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-ink text-[13px] font-semibold">Faculty</span>
-        <SearchSelect
-          value={selectedFaculty ? facultyCard(selectedFaculty) : null}
-          onChange={draft.setFacultyId}
-          page={
-            // The class's own teachers, until somebody searches for a stand-in.
-            groupFaculty.length && !draft.facultyQuery.trim()
-              ? {
-                  rows: groupFaculty.map(
-                    (f: {
-                      id: string;
-                      name: string;
-                      department?: string | null;
-                    }) =>
-                      facultyCard({ ...f, department: f.department ?? null }),
-                  ),
-                  total: groupFaculty.length,
-                  hasMore: false,
-                }
-              : pickerPage(facultyPage.data, (rows) => rows.map(facultyCard))
-          }
-          loading={facultyPage.isLoading}
-          query={draft.facultyQuery}
-          onQueryChange={draft.setFacultyQuery}
-          onLoadMore={draft.loadMoreFaculty}
-          placeholder="Search faculty…"
-          listId="booking-faculty"
-          emptyOption="No faculty"
-        />
-      </div>
+      <Field label="Faculty">
+        {(id) => (
+          <SearchSelect
+            id={id}
+            value={selectedFaculty ? facultyCard(selectedFaculty) : null}
+            onChange={draft.setFacultyId}
+            page={
+              // The class's own teachers, until somebody searches for a stand-in.
+              groupFaculty.length && !draft.facultyQuery.trim()
+                ? {
+                    rows: groupFaculty.map(
+                      (f: {
+                        id: string;
+                        name: string;
+                        department?: string | null;
+                      }) =>
+                        facultyCard({ ...f, department: f.department ?? null }),
+                    ),
+                    total: groupFaculty.length,
+                    hasMore: false,
+                  }
+                : pickerPage(facultyPage.data, (rows) => rows.map(facultyCard))
+            }
+            loading={facultyPage.isLoading}
+            query={draft.facultyQuery}
+            onQueryChange={draft.setFacultyQuery}
+            onLoadMore={draft.loadMoreFaculty}
+            placeholder="Search faculty…"
+            listId="booking-faculty"
+            emptyOption="No faculty"
+          />
+        )}
+      </Field>
 
       {/*
        * A lecture given to two sections at once is one event with both groups
@@ -87,27 +99,27 @@ export function AttendeeFields({
        * once, and the register is taken per group.
        */}
       {draft.groupId && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-ink text-[13px] font-semibold">
-            Also attending
-          </span>
-          <EntityPicker
-            selected={draft.extraGroups.map(groupCard)}
-            onChange={draft.setExtraGroupIds}
-            page={pickerPage(draft.groupsPage.data, (rows) =>
-              rows
-                // The primary group is already in the room.
-                .filter((g) => g.id !== draft.groupId)
-                .map(groupCard),
-            )}
-            loading={draft.groupsPage.isLoading}
-            query={draft.groupQuery}
-            onQueryChange={draft.setGroupQuery}
-            onLoadMore={draft.loadMoreGroups}
-            placeholder="Add another group…"
-            emptyLabel="Just this group"
-          />
-        </div>
+        <Field label="Also attending">
+          {(id) => (
+            <EntityPicker
+              id={id}
+              selected={draft.extraGroups.map(groupCard)}
+              onChange={draft.setExtraGroupIds}
+              page={pickerPage(draft.groupsPage.data, (rows) =>
+                rows
+                  // The primary group is already in the room.
+                  .filter((g) => g.id !== draft.groupId)
+                  .map(groupCard),
+              )}
+              loading={draft.groupsPage.isLoading}
+              query={draft.groupQuery}
+              onQueryChange={draft.setGroupQuery}
+              onLoadMore={draft.loadMoreGroups}
+              placeholder="Add another group…"
+              emptyLabel="Just this group"
+            />
+          )}
+        </Field>
       )}
     </div>
   );

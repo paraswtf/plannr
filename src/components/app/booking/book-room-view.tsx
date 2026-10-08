@@ -3,18 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import {
   TimetableGrid,
   type GridEvent,
   type GridRange,
 } from "~/components/app/timetable/timetable-grid";
-import { DayNavigator } from "~/components/app/timetable/day-navigator";
+import {
+  DayControls,
+  DayStrip,
+} from "~/components/app/timetable/day-navigator";
+import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { Select } from "~/components/ui/select";
 import {
   decimalHour,
-  formatFullDate,
   isSameLocalDay,
   localTimeOnDay,
   minutesOfDay,
@@ -184,7 +189,7 @@ export function BookRoomView({
       const code = rooms.find((r) => r.id === span?.roomId)?.code ?? "Room";
       setFlash(
         result.event.status === "PENDING"
-          ? `${code} requested — waiting for approval`
+          ? `${code} requested, waiting for approval`
           : `${code} booked`,
       );
       await utils.timetable.invalidate();
@@ -247,13 +252,31 @@ export function BookRoomView({
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Book a room"
-          // No "on the right": the panel is only beside the calendar from lg,
-          // and below that it is underneath it.
-          subtitle={`${formatFullDate(day, timeZone)} · pick a slot on the calendar, or set the times in the booking panel`}
+          wideActions
+          /*
+           * The day controls sit beside the title, as on the Timetable, where
+           * "which day am I looking at" is asked. The subtitle used to carry
+           * that date and a sentence of instructions; the date is the picker's
+           * now, and the instructions are the hint under the calendar.
+           */
+          subtitle={`${rooms.length} rooms · ${events.length} scheduled`}
+          actions={
+            <DayControls date={day} timeZone={timeZone} onChange={setDay} />
+          }
         />
-        <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
+        <PageBody>
+          {/*
+           * The dated tabs stay with the grid they index, and the building
+           * filter shares their row: it narrows the same grid. On a phone the
+           * strip scrolls inside itself and the filter takes the next row.
+           */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <DayNavigator date={day} timeZone={timeZone} onChange={setDay} />
+            <DayStrip
+              date={day}
+              timeZone={timeZone}
+              onChange={setDay}
+              className="w-full min-w-0 sm:w-auto sm:flex-1"
+            />
             <Select
               ariaLabel="Building"
               className="w-full sm:w-auto"
@@ -295,12 +318,11 @@ export function BookRoomView({
               unavailableRoomIds={unavailableRooms}
             />
           ) : (
-            <div
-              className="bg-surface text-muted rounded-[var(--radius-card)] p-6 text-center text-[14px] sm:p-10"
-              style={{ boxShadow: "var(--ring)" }}
-            >
-              No rooms yet. An admin can add them from the Rooms tab.
-            </div>
+            <Card pad={0}>
+              <EmptyState icon="door" title="No rooms yet">
+                An admin can add them from the Rooms page.
+              </EmptyState>
+            </Card>
           )}
 
           {/*
@@ -310,7 +332,7 @@ export function BookRoomView({
            * hint that names the mouse than by one that quietly withholds half
            * the screen's behaviour.
            */}
-          <p className="text-faint mt-3 text-[12.5px]">
+          <p className="text-faint mt-3 max-w-[72ch] text-xs">
             Tap a room&apos;s column to put a slot on it, then set the exact
             times in the booking panel. With a mouse, drag down the column to
             sweep the whole slot out in one go, and drag the block&apos;s edges
@@ -318,7 +340,7 @@ export function BookRoomView({
           </p>
 
           <MyRequests />
-        </div>
+        </PageBody>
       </div>
 
       {span && (
@@ -349,22 +371,39 @@ export function BookRoomView({
         />
       )}
 
-      {flash && (
-        <div
-          // Clear of the panel's action bar, which rides the bottom of the
-          // screen until the panel goes back to being a column of its own.
-          className="plr-toast fixed bottom-24 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2.5 rounded-xl px-4 py-3 lg:bottom-8"
-          style={{
-            background: "var(--surface)",
-            boxShadow: "var(--ring), var(--shadow-float)",
-          }}
-        >
-          <Icon name="checkCircle" size={18} color="#4e7d3a" stroke={2} />
-          <span className="text-title text-[13.5px] font-semibold">
-            {flash}
-          </span>
-        </div>
-      )}
+      {/*
+       * The live region is always there and the toast arrives inside it, so a
+       * screen reader is told the booking went through: a region that appears
+       * already holding its message is often not read at all.
+       *
+       * Clear of the panel's action bar, which rides the bottom of the screen
+       * until the panel goes back to being a column of its own. It rises into
+       * place on the house curve rather than the old overshooting spring, and
+       * only fades under reduced motion.
+       *
+       * The bar is one row (about 84px) until the slot clashes, when the
+       * verdict takes a row of its own above the button (about 144px). A
+       * booking moves the panel on to the next slot, which on a busy day is
+       * often the class after it, so the toast rises with the bar rather than
+       * sitting on the red verdict; it travels there on the same curve.
+       */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 transition-[bottom] duration-200 ease-[var(--ease-out)] motion-reduce:transition-none lg:bottom-8 ${draft.clashed ? "bottom-40" : "bottom-24"}`}
+      >
+        {flash && (
+          <div className="bg-surface plr-toast flex max-w-full items-center gap-2.5 rounded-[12px] px-4 py-3 shadow-[var(--ring),var(--shadow-md)]">
+            <Icon
+              name="checkCircle"
+              size={18}
+              stroke={2}
+              className="text-good"
+            />
+            <span className="text-title text-base font-semibold">{flash}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

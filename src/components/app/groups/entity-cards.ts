@@ -3,7 +3,7 @@
  * the group and batch forms, which offer the same choices.
  */
 
-/** How a course appears in a search result. */
+/** How a programme appears in a search result. */
 export const programmeCard = (c: {
   id: string;
   code: string;
@@ -48,7 +48,7 @@ export const semesterCard = (t: {
       label: t.name,
       avatar: { kind: "icon" as const, name: "calendar" as const },
       title: t.name,
-      subtitle: `${fmt(t.startDate)} – ${fmt(t.endDate)}`,
+      subtitle: `${fmt(t.startDate)} - ${fmt(t.endDate)}`,
       badges: t.isCurrent
         ? [{ text: "current", tone: "green" as const, dot: true }]
         : [],

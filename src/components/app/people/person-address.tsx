@@ -21,7 +21,7 @@ export function PersonAddress({
   const address = contactAddress(email);
   return (
     <span
-      className={`text-faint block truncate text-[12px] ${address ? "" : "italic"} ${className}`}
+      className={`text-faint block truncate text-xs ${address ? "" : "italic"} ${className}`}
     >
       {address ?? NO_ADDRESS}
     </span>

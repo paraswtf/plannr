@@ -197,6 +197,19 @@ export function useBookingDraft({
   );
   const hardConflicts = live.filter((c) => c.severity === "hard");
 
+  // Whether the last answer the check settled on was a clash, held through the
+  // next check. The query keeps no previous data, so while a nudge is being
+  // checked there are no conflicts at all; anything laid out by "is there a
+  // clash" (the verdict's own row in the action bar, the toast above it) would
+  // otherwise collapse on every nudge and come back when the answer did. Set
+  // during render rather than in an effect, so the layout never paints a frame
+  // with the stale shape. Skipping a date changes it at once, with no check.
+  const settledClash = isChecking ? null : hardConflicts.length > 0;
+  const [clashed, setClashed] = useState(false);
+  if (settledClash !== null && settledClash !== clashed) {
+    setClashed(settledClash);
+  }
+
   // A class is a group being taught; without one there is nothing to attach a
   // register or a group timetable to, and the server refuses it anyway.
   const needsGroup = !isSelfServe && kind === "CLASS" && !groupId;
@@ -332,6 +345,11 @@ export function useBookingDraft({
     allConflicts: conflicts ?? [],
     conflicts: live,
     hardConflicts,
+    /**
+     * Whether the slot clashed when the check last settled: steady while the
+     * next check runs, for layout that should only move when the answer does.
+     */
+    clashed: settledClash ?? clashed,
     isChecking,
     create,
     canBook,

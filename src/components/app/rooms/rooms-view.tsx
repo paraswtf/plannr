@@ -9,11 +9,17 @@ import {
   FEATURE_LABELS,
   type RoomFeatureName,
 } from "~/components/app/booking/room-fit";
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { useNow } from "~/components/app/timetable/use-now";
 import { Badge } from "~/components/ui/badge";
+import { Button, IconButton, buttonClass } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import { Chip } from "~/components/ui/chip";
+import { EmptyState } from "~/components/ui/empty-state";
+import { Input } from "~/components/ui/field";
 import { Icon } from "~/components/ui/icon";
+import { Skeleton } from "~/components/ui/skeleton";
 import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
@@ -23,6 +29,7 @@ import {
   floorLabel,
   floorSections,
   matchesFloor,
+  type FloorSection,
 } from "./room-floors";
 import { RoomDialog, type EditableRoom } from "./room-dialog";
 import { RoomPlaque } from "./room-plaque";
@@ -53,6 +60,21 @@ type GridRoom = GridData["rooms"][number];
  * gives width back rather than have the peek shrink towards nothing.
  */
 const LANE_CARD = "w-[min(268px,78vw)] shrink-0";
+
+/**
+ * The same card from `lg` up, where the lane stops sliding and wraps instead
+ * (see the lane below): the grid track sizes the card, so the width the phone
+ * measured is handed back. Kept apart from `LANE_CARD` so the phone's numbers
+ * stay exactly the ones the comment above was worked out for.
+ */
+const LANE_CARD_DESKTOP = "lg:w-auto";
+
+/**
+ * The track the flat grid and the desktop lanes share: one drawing of a room
+ * at one width, whichever layout it is standing in. The `min()` is what keeps
+ * a 268px card from outgrowing a 358px phone.
+ */
+const CARD_TRACK = "grid-cols-[repeat(auto-fill,minmax(min(268px,100%),1fr))]";
 
 export function RoomsView({
   initial,
@@ -202,15 +224,159 @@ export function RoomsView({
    * the building only while more than one is in play. At a college with one,
    * "SICSR ·" in front of every address is a fact nobody was missing, thirty
    * times over.
+   *
+   * Floor first, building second: the line truncates on a narrow card, and
+   * what an ellipsis should eat is the long building name, not the two
+   * characters that say which floor to climb to.
    */
   const whereOf = (room: GridRoom) =>
     showBuilding
-      ? `${room.building.name} · ${floorAddress(room.floor)}`
+      ? `${floorAddress(room.floor)} · ${room.building.name}`
       : floorAddress(room.floor);
+
+  /**
+   * The bands, gathered under their building while there is more than one.
+   * `floorSections` already hands them back sorted by building and then floor,
+   * so this only cuts the run where the building changes; at one-building
+   * SICSR it is a single group with no heading, and the page draws exactly
+   * what it always did.
+   */
+  const buildingGroups: Array<{
+    id: string;
+    name: string;
+    sections: Array<FloorSection<GridRoom>>;
+  }> = [];
+  for (const section of sections) {
+    const last = buildingGroups.at(-1);
+    if (last?.id === section.building.id) last.sections.push(section);
+    else
+      buildingGroups.push({
+        id: section.building.id,
+        name: section.building.name,
+        sections: [section],
+      });
+  }
+
+  const roomCount = (n: number) => (n === 1 ? "1 room" : `${n} rooms`);
 
   const refresh = async () => {
     await Promise.all([utils.timetable.invalidate(), utils.rooms.invalidate()]);
     router.refresh();
+  };
+
+  /**
+   * One floor: its heading and its lane. Written once and called from both
+   * the single-building page and the one grouped by building, so the two
+   * cannot drift into different drawings of the same band. `level` is the
+   * heading's rank, which drops by one when a building heading sits above.
+   */
+  const band = (section: FloorSection<GridRoom>, level: "h2" | "h3") => {
+    const count = roomCount(section.rooms.length);
+    // The heading, flattened into one string for the reader who
+    // arrives at the lane rather than looking at it — the visible
+    // version is three elements across a line, and a label read out
+    // has to be a sentence.
+    const spoken = [
+      floorLabel(section.floor),
+      showBuilding ? section.building.name : null,
+      count,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const Heading = level;
+
+    return (
+      <section key={section.key}>
+        {/*
+         * A heading, not a card: SICSR is many thin floors — a handful
+         * of rooms each — and a band whose title costs as much height
+         * as the one room under it is worse than no band at all. Not
+         * sticky either; the page header above is already sticky at a
+         * height that changes with the viewport, and a second sticky
+         * band would have to guess its offset.
+         *
+         * Flush left, with no padding of its own: the lane below
+         * cancels its own, so its first card starts at the section's
+         * left edge, and an inset here would leave the floor's name
+         * standing a few pixels to the right of the rooms on it.
+         *
+         * 16px at a 1.4 line comes to the same 22.4px line the old 15px
+         * heading had, so the lane's scroll margin below still holds.
+         */}
+        <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <Heading className="font-display text-title text-md font-semibold tracking-[-0.01em]">
+            {floorLabel(section.floor)}
+          </Heading>
+          <span className="text-faint ml-auto font-mono text-xs tabular-nums">
+            {count}
+          </span>
+        </div>
+
+        {/*
+         * A floor is a corridor, so on a phone it is one row you read
+         * across rather than a block you read down — the lane slides
+         * inside itself instead of wrapping, which is what keeps a
+         * seven-room floor one swipe rather than seven screens. The
+         * next card peeking past the edge is the cue that it slides.
+         *
+         * From `lg` up it wraps into the flat grid's track instead. A
+         * desktop lane is exactly four cards wide at 1440, so a fifth room
+         * sat wholly past the edge with no peek and no scrollbar: the
+         * heading said five rooms and the eye saw four. On a wide screen
+         * the whole floor fits in two rows, so nothing needs hiding.
+         *
+         * The padding and the negative margin that cancels it are the
+         * same pair the tab strip uses: a box that scrolls on one axis
+         * clips the other, and 8px is what the cards' shadow needs to
+         * survive the crop.
+         */}
+        <div
+          /*
+           * Most people on this screen hold neither BookRoom nor
+           * ManageRooms, so their cards contain nothing focusable and
+           * tabbing would never reach inside the lane — which is the
+           * one thing sliding a floor sideways could take away that
+           * wrapping it could not. Focusable, so the arrow keys move
+           * it; named, so what has been landed on announces itself as
+           * the floor rather than as a box. From `lg` up the lane wraps
+           * and there is nothing to scroll, but the stop stays: it is
+           * still how a keyboard hears which floor it has arrived on.
+           */
+          tabIndex={0}
+          role="group"
+          aria-label={spoken}
+          /*
+           * Focusing the lane provokes a scroll to it, and the
+           * browser counts nothing that is stuck to the top of the
+           * page. 96px is what the people list already stops short of
+           * the sticky header by; the other 30 are this floor's own
+           * heading, so tabbing back up a floor arrives at a lane
+           * that still has its name above it rather than at cards
+           * sitting under the header.
+           */
+          style={{ scrollMarginTop: "calc(var(--topbar-h) + 126px)" }}
+          // The `lg:` track is `CARD_TRACK` written out again rather than
+          // derived from it: Tailwind only builds classes it can read whole
+          // in the source.
+          className="plr-scroll -m-2 flex gap-4 overflow-x-auto overscroll-x-contain p-2 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(min(268px,100%),1fr))] lg:overflow-visible"
+        >
+          {section.rooms.map((room) => (
+            <RoomCard
+              key={room.id}
+              room={room}
+              status={statusOf(room)}
+              canManage={canManage}
+              canBook={canBook}
+              onEdit={() => editRoom(room)}
+              // No address on a card inside a band: the heading right above
+              // it already names the floor (and the building, when there is
+              // more than one), and "floor 4" under "Floor 4" only repeated it.
+              className={`${LANE_CARD} ${LANE_CARD_DESKTOP}`}
+            />
+          ))}
+        </div>
+      </section>
+    );
   };
 
   return (
@@ -224,18 +390,20 @@ export function RoomsView({
         }
         actions={
           canManage && (
-            <button
-              type="button"
+            // Slate, not the brand gradient: this is the one thing the page
+            // does for the people who run the estate, and white type on the
+            // gradient's orange end fell to about 2:1.
+            <Button
+              variant="primary"
+              icon="plus"
               onClick={() => setEditing({})}
-              className="inline-flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-              style={{ background: "var(--grad-brand)" }}
             >
-              + Add room
-            </button>
+              Add room
+            </Button>
           )
         }
       />
-      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
+      <PageBody>
         <div className="mb-5 flex flex-wrap items-center gap-3">
           {canManage && (
             <Segmented
@@ -249,19 +417,22 @@ export function RoomsView({
               ariaLabel="Which rooms to show"
             />
           )}
-          <div className="relative w-full sm:w-60">
-            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-              <Icon name="search" size={15} color="var(--faint)" />
-            </span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search rooms…"
-              className="bg-surface w-full rounded-[10px] py-2.5 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:py-2"
-              style={{ boxShadow: "var(--ring)" }}
-            />
-          </div>
-          {tab === "active" && (
+          <Input
+            icon="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            // The placeholder says what to type; the name says what the box
+            // is, for a reader who never sees the placeholder.
+            aria-label="Search rooms"
+            placeholder="Search rooms…"
+            className="w-full sm:w-64"
+          />
+          {/*
+           * Only while there is a choice to make. At one-building SICSR the
+           * list held "All buildings" and nothing else, and on a phone it
+           * cost a full row of controls above the first room to say so.
+           */}
+          {tab === "active" && buildings.size > 1 && (
             <Select
               ariaLabel="Building"
               className="w-full sm:w-auto"
@@ -297,7 +468,7 @@ export function RoomsView({
                 ariaLabel="Room list layout"
               />
             )}
-            <span className="text-faint font-mono text-[12px]">
+            <span className="text-faint font-mono text-xs tabular-nums">
               {tab === "active"
                 ? `${rooms.length} rooms`
                 : `${archivedRooms.length} archived`}
@@ -324,106 +495,41 @@ export function RoomsView({
             onEdit={editRoom}
           />
         ) : sections.length > 1 ? (
-          <div className="flex flex-col gap-6">
-            {sections.map((section) => {
-              const count =
-                section.rooms.length === 1
-                  ? "1 room"
-                  : `${section.rooms.length} rooms`;
-              // The heading, flattened into one string for the reader who
-              // arrives at the lane rather than looking at it — the visible
-              // version is three elements across a line, and a label read out
-              // has to be a sentence.
-              const spoken = [
-                floorLabel(section.floor),
-                showBuilding ? section.building.name : null,
-                count,
-              ]
-                .filter(Boolean)
-                .join(", ");
-
-              return (
-                <section key={section.key}>
-                  {/*
-                   * A heading, not a card: SICSR is many thin floors — a handful
-                   * of rooms each — and a band whose title costs as much height
-                   * as the one room under it is worse than no band at all. Not
-                   * sticky either; the page header above is already sticky at a
-                   * height that changes with the viewport, and a second sticky
-                   * band would have to guess its offset.
-                   *
-                   * Flush left, with no padding of its own: the lane below
-                   * cancels its own, so its first card starts at the section's
-                   * left edge, and an inset here would leave the floor's name
-                   * standing a few pixels to the right of the rooms on it.
-                   */}
-                  <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                    <h2 className="font-display text-title text-[15px] font-bold">
-                      {floorLabel(section.floor)}
+          showBuilding ? (
+            /*
+             * More than one building: the building is the bigger container,
+             * so it is the bigger heading, said once, with its floors under
+             * it. Drawn as a suffix on every floor instead, "Floor 1" turned
+             * up twice at the same weight and the page read as one building
+             * with its floors listed twice.
+             */
+            <div className="flex flex-col gap-10">
+              {buildingGroups.map((group) => (
+                <section key={group.id} className="flex flex-col gap-4">
+                  <div className="flex items-baseline gap-2.5 pb-2 shadow-[0_1px_0_var(--hair-soft)]">
+                    <h2 className="font-display text-title text-lg font-semibold tracking-[-0.015em]">
+                      {group.name}
                     </h2>
-                    {showBuilding && (
-                      <span className="text-muted text-[12.5px]">
-                        {section.building.name}
-                      </span>
-                    )}
-                    <span className="text-faint ml-auto font-mono text-[12px]">
-                      {count}
+                    <span className="text-faint ml-auto font-mono text-xs tabular-nums">
+                      {roomCount(
+                        group.sections.reduce(
+                          (n, section) => n + section.rooms.length,
+                          0,
+                        ),
+                      )}
                     </span>
                   </div>
-
-                  {/*
-                   * A floor is a corridor, so it is one row you read across
-                   * rather than a block you read down — the lane slides inside
-                   * itself instead of wrapping, which is what keeps a seven-room
-                   * floor one swipe rather than seven screens on a phone.
-                   *
-                   * The padding and the negative margin that cancels it are the
-                   * same pair the tab strip uses: a box that scrolls on one axis
-                   * clips the other, and 8px is what the cards' shadow needs to
-                   * survive the crop.
-                   */}
-                  <div
-                    /*
-                     * Most people on this screen hold neither BookRoom nor
-                     * ManageRooms, so their cards contain nothing focusable and
-                     * tabbing would never reach inside the lane — which is the
-                     * one thing sliding a floor sideways could take away that
-                     * wrapping it could not. Focusable, so the arrow keys move
-                     * it; named, so what has been landed on announces itself as
-                     * the floor rather than as a box.
-                     */
-                    tabIndex={0}
-                    role="group"
-                    aria-label={spoken}
-                    /*
-                     * Focusing the lane provokes a scroll to it, and the
-                     * browser counts nothing that is stuck to the top of the
-                     * page. 96px is what the people list already stops short of
-                     * the sticky header by; the other 30 are this floor's own
-                     * heading, so tabbing back up a floor arrives at a lane
-                     * that still has its name above it rather than at cards
-                     * sitting under the header.
-                     */
-                    style={{ scrollMarginTop: "calc(var(--topbar-h) + 126px)" }}
-                    className="plr-scroll -m-2 flex gap-4 overflow-x-auto overscroll-x-contain p-2"
-                  >
-                    {section.rooms.map((room) => (
-                      <RoomCard
-                        key={room.id}
-                        room={room}
-                        status={statusOf(room)}
-                        canManage={canManage}
-                        canBook={canBook}
-                        onEdit={() => editRoom(room)}
-                        where={whereOf(room)}
-                        className={LANE_CARD}
-                      />
-                    ))}
+                  <div className="flex flex-col gap-6">
+                    {group.sections.map((section) => band(section, "h3"))}
                   </div>
                 </section>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {sections.map((section) => band(section, "h2"))}
+            </div>
+          )
         ) : (
           /*
            * One band is no band. It happens on a search that lands inside a
@@ -431,11 +537,8 @@ export function RoomsView({
            * codes the importer could not read a floor out of, which puts every
            * room on floor 0. A lane there would be one endless sideways scroll
            * under a heading claiming they are all on the ground.
-           *
-           * The `min()` is what keeps a 268px card from outgrowing a 358px
-           * phone: below that width the track collapses to the column itself.
            */
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(268px,100%),1fr))] gap-4">
+          <div className={`grid ${CARD_TRACK} gap-4`}>
             {rooms.map((room) => (
               <RoomCard
                 key={room.id}
@@ -451,15 +554,63 @@ export function RoomsView({
         )}
 
         {tab === "active" && rooms.length === 0 && (
-          <Card>
-            <p className="text-muted m-0 text-[14px]">
-              {(data?.rooms ?? []).length === 0
-                ? "No rooms yet."
-                : "No rooms match that search."}
-            </p>
+          <Card pad={0}>
+            {(data?.rooms ?? []).length === 0 ? (
+              <EmptyState
+                icon="door"
+                title="No rooms yet"
+                action={
+                  // Secondary: the header's Add room is already the page's
+                  // one primary, and this is the same action said again where
+                  // the eye has landed.
+                  canManage && (
+                    <Button icon="plus" onClick={() => setEditing({})}>
+                      Add room
+                    </Button>
+                  )
+                }
+              >
+                {canManage
+                  ? "Rooms added here can be booked and timetabled."
+                  : "Rooms turn up here once they have been added."}
+              </EmptyState>
+            ) : (
+              /*
+               * The likeliest dead end on a page driven by a search box, so it
+               * says what was searched for and offers the way back out, rather
+               * than one muted sentence in an empty card.
+               */
+              <EmptyState
+                icon="search"
+                title={
+                  needle
+                    ? `No rooms match “${query.trim()}”`
+                    : "No rooms in this building"
+                }
+                action={
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {needle && (
+                      <Button size="sm" onClick={() => setQuery("")}>
+                        Clear search
+                      </Button>
+                    )}
+                    {buildingId && (
+                      <Button
+                        size="sm"
+                        onClick={() => setBuildingId(undefined)}
+                      >
+                        Show all buildings
+                      </Button>
+                    )}
+                  </div>
+                }
+              >
+                Search by room number, type, building or floor, like “floor 3”.
+              </EmptyState>
+            )}
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {editing && (
         <RoomDialog
@@ -494,99 +645,123 @@ function RoomCard({
   /**
    * Where the room is, in words. Handed in rather than built here so it is
    * settled once for the whole screen — see `whereOf` — and so the line and the
-   * tooltip that recovers it when it truncates cannot come to disagree.
+   * tooltip that recovers it when it truncates cannot come to disagree. Left
+   * out inside a floor's band, whose heading already says it.
    */
-  where: string;
+  where?: string;
   /** What sizes the card where its container will not — the lane's width. */
   className?: string;
 }) {
+  const booked = Math.round(status.load * 100);
+
   return (
     <Card pad={18} className={`flex flex-col gap-3 ${className}`}>
       {/*
        * The identity block. The number is the entire reason anybody opened this
        * page — "where is 403?" — so it gets a plate of its own, and everything
-       * else arranges itself around it: the live status at the top of the
-       * column beside it, the address at the foot of that column, level with
-       * the plate.
+       * else arranges itself around it: a manager's edit button in the corner
+       * beside it, the address (where there is one) at the foot of that
+       * column, level with the plate.
        *
-       * The band wraps rather than compresses. On the narrowest track a card
-       * has 232px of content — 214px in a lane on a 320px phone, which is
-       * narrower still — and a plate wide enough for a named room plus a
-       * `booked soon` badge plus a manager's edit chip do not all fit on one
-       * line; the minimum on the column is what makes the row drop it onto a
-       * line of its own instead of squeezing either the number or the status
-       * label. A taller card is a fine outcome — a shrunken number is the one
-       * thing this whole layout exists to stop.
+       * The status used to stand in that column too, and a plate wide enough
+       * for a named room plus a `booked soon` badge plus the edit button did
+       * not fit on one line, so T-Studio's badge wrapped under its plate and
+       * the badges stopped lining up across the lane. Moved under the plate,
+       * the status sits at the same height on every card whatever the room is
+       * called, and the plate never has to give up width to it — a shrunken
+       * number is the one thing this whole layout exists to stop.
        */}
-      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+      <div className="flex items-start gap-3">
         <RoomPlaque code={room.code} />
-        <div className="flex min-w-[124px] flex-1 flex-col items-end justify-between gap-2 self-stretch">
-          <div className="flex items-center gap-1.5">
-            <Badge tone={status.tone} dot>
-              {status.label}
-            </Badge>
-            {canManage && (
-              <button
-                type="button"
-                aria-label={`Edit ${room.code}`}
-                onClick={onEdit}
-                className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
-                style={{ background: "rgba(68,88,121,0.07)" }}
-              >
-                <Icon
-                  name="settings"
-                  size={13}
-                  color="var(--slate)"
-                  stroke={2}
-                />
-              </button>
-            )}
-          </div>
-          <div
-            title={where}
-            className="text-muted w-full truncate text-right text-[12.5px]"
-          >
-            {where}
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col items-end justify-between gap-2 self-stretch">
+          {canManage ? (
+            <IconButton
+              icon="settings"
+              label={`Edit ${room.code}`}
+              size="sm"
+              onClick={onEdit}
+              // Pulled into the card's corner, so its hover wash lines up
+              // with the padding rather than floating inside it.
+              className="-mt-1.5 -mr-1.5"
+            />
+          ) : (
+            <span />
+          )}
+          {where && (
+            <div
+              title={where}
+              className="text-muted w-full truncate text-right text-xs"
+            >
+              {where}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Badge tone="slate">{TYPE_LABEL[room.type] ?? room.type}</Badge>
-        <span className="text-muted inline-flex items-center gap-1.5 text-[12.5px]">
-          <Icon name="users" size={13} color="var(--muted)" />
-          {room.capacity} seats
-        </span>
+      {/*
+       * The second answer the page is for, "can I go in, and until when", set
+       * as one block: the badge, then the sentence that explains it in body
+       * ink. It used to be the faintest line on the card while the load bar
+       * under it was the darkest thing after the plate.
+       */}
+      <div className="flex flex-col items-start gap-1.5">
+        <Badge tone={status.tone} dot>
+          {status.label}
+        </Badge>
+        <p className="text-ink text-sm">{status.line}</p>
       </div>
+
+      {/*
+       * The type as plain words, not a badge: drawn as a tinted chip it was
+       * indistinguishable from the features beside it, and "Lecture" read as
+       * one more piece of kit.
+       */}
+      <p className="text-muted flex items-center gap-1.5 text-sm">
+        <Icon name="users" size={14} className="shrink-0" />
+        <span className="min-w-0 truncate">
+          {TYPE_LABEL[room.type] ?? room.type} · {room.capacity} seats
+        </span>
+      </p>
 
       {room.features.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <ul className="flex flex-wrap gap-1.5" aria-label="Features">
           {room.features.map((f) => (
-            <span
-              key={f}
-              className="text-muted rounded-md px-2 py-1 text-[11px] font-semibold"
-              style={{ background: "rgba(68,88,121,0.07)" }}
-            >
-              {FEATURE_LABELS[f] ?? f}
-            </span>
+            <li key={f} className="max-w-full">
+              <Chip>{FEATURE_LABELS[f] ?? f}</Chip>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      <div className="mt-auto pt-1">
+      {/*
+       * How much of today's working day is booked. Real data, so it stays, but
+       * quieter than it was — a hairline-weight track — and with its number
+       * beside it, since a bar on its own told nobody what it measured.
+       */}
+      <div
+        className="mt-auto flex items-center gap-2.5 pt-1"
+        title={`Booked for ${booked}% of today's working hours`}
+      >
         <div
-          className="mb-2 h-1.5 overflow-hidden rounded-full"
-          style={{ background: "rgba(68,88,121,0.12)" }}
+          role="meter"
+          aria-label="Booked today"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={booked}
+          aria-valuetext={`${booked}% of today booked`}
+          className="bg-tint-strong h-1 flex-1 overflow-hidden rounded-full"
         >
           <div
-            className="h-full rounded-full"
-            style={{
-              width: `${Math.round(status.load * 100)}%`,
-              background: "var(--slate)",
-            }}
+            className="bg-slate h-full rounded-full"
+            style={{ width: `${booked}%` }}
           />
         </div>
-        <div className="text-faint text-[12px]">{status.line}</div>
+        <span
+          aria-hidden
+          className="text-faint text-2xs w-[4.5rem] text-right font-mono tabular-nums"
+        >
+          {booked}% booked
+        </span>
       </div>
 
       {/*
@@ -594,14 +769,18 @@ function RoomCard({
        * it is a link that bounces them home. The card is complete without it —
        * the occupancy block above carries `mt-auto` and stays pinned to the
        * bottom either way.
+       *
+       * A ghost button rather than a bare link, so it has a hover, a press and
+       * a thumb-sized target; pulled left by its own padding so its words still
+       * start on the card's edge with everything else.
        */}
       {canBook && (
         <Link
           href={`/book?room=${room.id}`}
-          className="text-slate inline-flex min-h-10 items-center gap-1.5 self-start text-[13px] font-bold lg:min-h-0"
+          className={buttonClass("ghost", "sm", "-mb-1 -ml-3 self-start")}
         >
           Book this room
-          <Icon name="arrowRight" size={15} color="var(--slate)" />
+          <Icon name="arrowRight" size={14} stroke={2} />
         </Link>
       )}
     </Card>
@@ -640,25 +819,60 @@ function CompactRooms({
     <Card pad={0}>
       {rooms.map((room, i) => {
         const status = statusOf(room);
+        // What the room is and where it is, as two cells rather than one
+        // line. Kept apart, the seat count (what somebody looking for a room
+        // scans this list for) never shares a truncating box with a long
+        // building name, and neither line carries more than its one dot.
+        const kind = `${TYPE_LABEL[room.type] ?? room.type}, ${room.capacity} seats`;
+        const where = whereOf(room);
 
         return (
           <div
             key={room.id}
-            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5"
+            /*
+             * A phone wraps the row onto as many lines as it needs. From `lg`
+             * up it is a table: fixed columns for the plate and the badge, so
+             * the plates form one column and the statuses another rather than
+             * the badge wandering with the width of whatever came before it,
+             * and the text columns share what is left. The kind of room gets
+             * a fixed 10rem too, so it is never the one cut short: the types
+             * are a closed set, and the longest line they make ("Lecture
+             * hall, 1200 seats") is about 140px. Fixed rather than
+             * `max-content`, because every row is a grid of its own, and a
+             * track sized by its content would start the next column
+             * somewhere different on every line. The address and the class
+             * in there split the rest, and only they truncate.
+             */
+            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 lg:grid lg:grid-cols-[8.5rem_7rem_10rem_minmax(0,0.75fr)_minmax(0,1.5fr)_auto] lg:gap-x-4"
             style={
               i > 0
                 ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
                 : undefined
             }
           >
-            {/* The archived list's plate, for the reason it gives there. */}
-            <RoomPlaque code={room.code} scale="row" />
-            <Badge tone={status.tone} dot>
-              {status.label}
-            </Badge>
-            <span className="text-muted text-[12.5px]">
-              {whereOf(room)} · {TYPE_LABEL[room.type] ?? room.type} ·{" "}
-              {room.capacity} seats
+            {/*
+             * The archived list's plate, for the reason it gives there. Each
+             * of these two sits in a box of its own so that, as grid cells,
+             * the plate and the badge keep their drawn width instead of
+             * stretching to the column's.
+             */}
+            <div className="flex min-w-0">
+              <RoomPlaque code={room.code} scale="row" />
+            </div>
+            <div className="flex min-w-0">
+              <Badge tone={status.tone} dot>
+                {status.label}
+              </Badge>
+            </div>
+            <span className="text-muted text-sm lg:whitespace-nowrap">
+              {kind}
+            </span>
+            {/*
+             * Floor first and building second, so on a narrow table it is
+             * the building name an ellipsis eats, as on the cards.
+             */}
+            <span title={where} className="text-muted text-sm lg:truncate">
+              {where}
             </span>
             {/*
              * What the badge cannot fit: which class is in there, and until
@@ -670,13 +884,12 @@ function CompactRooms({
              * badge, and "MCA-I Data Structures · until 15:30" arrives as one
              * ellipsis. Asking for 180px means it drops to a line of its own
              * instead, where it has the whole row to grow into; `min-w-0` is
-             * what still lets it give way on a screen narrower than that. It is
-             * the one thing here that truncates, so it is the one thing that
-             * carries a `title` to recover it.
+             * what still lets it give way on a screen narrower than that. It
+             * truncates, so it carries a `title` to recover it.
              */}
             <span
               title={status.line}
-              className="text-faint min-w-0 flex-1 basis-[180px] truncate text-[11.5px]"
+              className="text-ink min-w-0 flex-1 basis-[180px] truncate text-sm"
             >
               {status.line}
             </span>
@@ -687,32 +900,24 @@ function CompactRooms({
              * a line.
              */}
             {(canBook || canManage) && (
-              <span className="ml-auto flex shrink-0 items-center gap-1.5">
+              <span className="ml-auto flex shrink-0 items-center gap-1 lg:justify-self-end">
                 {canBook && (
                   <Link
                     href={`/book?room=${room.id}`}
                     aria-label={`Book ${room.code}`}
-                    className="text-slate inline-flex min-h-10 items-center gap-1 text-[12.5px] font-bold lg:min-h-0"
+                    className={buttonClass("ghost", "sm")}
                   >
                     Book
-                    <Icon name="arrowRight" size={14} color="var(--slate)" />
+                    <Icon name="arrowRight" size={14} stroke={2} />
                   </Link>
                 )}
                 {canManage && (
-                  <button
-                    type="button"
-                    aria-label={`Edit ${room.code}`}
+                  <IconButton
+                    icon="settings"
+                    label={`Edit ${room.code}`}
+                    size="sm"
                     onClick={() => onEdit(room)}
-                    className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
-                    style={{ background: "rgba(68,88,121,0.07)" }}
-                  >
-                    <Icon
-                      name="settings"
-                      size={13}
-                      color="var(--slate)"
-                      stroke={2}
-                    />
-                  </button>
+                  />
                 )}
               </span>
             )}
@@ -748,19 +953,37 @@ function ArchivedRooms({
   onRestore: (id: string) => void;
 }) {
   if (loading) {
+    // Three rows the shape of the ones on their way: plate, a line of facts,
+    // the button. Nothing moves when the real rows replace them.
     return (
-      <Card>
-        <p className="text-muted m-0 text-[14px]">Looking…</p>
+      <Card pad={0}>
+        <div role="status" aria-label="Loading archived rooms">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 px-4 py-3"
+              style={
+                i > 0
+                  ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
+                  : undefined
+              }
+            >
+              <Skeleton className="h-9 w-11 rounded-[9px] sm:w-[72px]" />
+              <Skeleton className="h-3.5 w-48 max-w-[40%]" />
+              <Skeleton className="ml-auto h-8 w-36 rounded-[var(--radius-btn)]" />
+            </div>
+          ))}
+        </div>
       </Card>
     );
   }
 
   if (rooms.length === 0) {
     return (
-      <Card>
-        <p className="text-muted m-0 text-[14px]">
-          Nothing archived. Rooms taken out of service turn up here.
-        </p>
+      <Card pad={0}>
+        <EmptyState icon="inbox" title="Nothing archived" compact>
+          Rooms taken out of service turn up here.
+        </EmptyState>
       </Card>
     );
   }
@@ -785,24 +1008,23 @@ function ArchivedRooms({
            * because the plate carries its own padding.
            */}
           <RoomPlaque code={room.code} scale="row" />
-          <span className="text-muted text-[12.5px]">
-            {room.building.name} · {TYPE_LABEL[room.type] ?? room.type} ·{" "}
+          <span className="text-muted text-sm">
+            {room.building.name} · {TYPE_LABEL[room.type] ?? room.type},{" "}
             {room.capacity} seats
           </span>
           {room.features.length > 0 && (
-            <span className="text-faint truncate text-[11.5px]">
+            <span className="text-faint truncate text-xs">
               {room.features.map((f) => FEATURE_LABELS[f] ?? f).join(", ")}
             </span>
           )}
-          <button
-            type="button"
+          <Button
+            size="sm"
             disabled={restoring === room.id}
             onClick={() => onRestore(room.id)}
-            className="text-slate ml-auto inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
-            style={{ boxShadow: "var(--ring)" }}
+            className="ml-auto"
           >
             {restoring === room.id ? "Restoring…" : "Put back in service"}
-          </button>
+          </Button>
         </div>
       ))}
     </Card>

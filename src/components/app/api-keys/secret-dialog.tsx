@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Callout } from "~/components/ui/callout";
 import { Dialog } from "~/components/ui/dialog";
-import { Icon } from "~/components/ui/icon";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Button, Notice } from "./controls";
 
 /**
@@ -84,95 +85,68 @@ export function SecretDialog({
         </Button>
       }
     >
-      <div className="flex flex-col gap-4">
-        <Notice tone="red">
-          <strong className="font-semibold">
-            This is the only time this key will ever be shown.
-          </strong>{" "}
-          Plannr keeps a one-way digest of it and nothing else, so nobody — not
-          you, not an engineer with a database prompt — can look it up again.
+      <div className="flex flex-col gap-5">
+        <Notice
+          tone="red"
+          title="This is the only time this key will ever be shown."
+        >
+          Plannr keeps a one-way digest of it and nothing else, so nobody (not
+          you, not an engineer with a database prompt) can look it up again.
           {rolled
             ? " The previous key for this integration stopped working the moment this one was made."
             : " If it is lost, roll the key and update the app with the replacement."}
         </Notice>
 
+        {/*
+         * The token is the thing this box is for, so it is the largest type in
+         * it, and the copy button under it is a full-width control rather than
+         * the small chip it used to be — the one action that matters here was
+         * the smallest target in the dialog, on a phone most of all.
+         */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted text-[12.5px] font-semibold">
-              {name}
-            </span>
-            <button
-              type="button"
-              onClick={() => void copy()}
-              className="text-slate inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold"
-              style={{ background: "rgba(68,88,121,0.08)" }}
-            >
-              <Icon
-                name={copied ? "check" : "copy"}
-                size={13}
-                stroke={2.2}
-                color="currentColor"
-              />
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
+          <span className="text-title text-xs font-semibold">{name}</span>
           {/*
            * `select-all` so one click takes the whole token: the fallback when
            * the clipboard API is unavailable is a person selecting this by
            * hand, and a token that breaks over three lines is exactly the thing
            * a drag-select gets subtly wrong.
            */}
-          <code
-            className="text-title block rounded-[10px] px-3.5 py-3 font-mono text-[12.5px] leading-relaxed break-all select-all"
-            style={{
-              background: "var(--card-soft)",
-              boxShadow: "var(--ring)",
-            }}
-          >
+          <code className="text-title bg-tint block rounded-[12px] px-3.5 py-3 font-mono text-base leading-relaxed break-all shadow-[inset_0_0_0_1px_var(--hair)] select-all">
             {token}
           </code>
-          <span className="text-faint text-[11.5px]">
+          <Button
+            icon={copied ? "check" : "copy"}
+            block
+            onClick={() => void copy()}
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          <span className="text-muted text-xs">
             Send it as{" "}
-            <span className="font-mono">Authorization: Bearer …</span> — a
-            secret manager or the app&rsquo;s environment, never a repository.
+            <span className="font-mono">Authorization: Bearer …</span>, and keep
+            it in a secret manager or the app&rsquo;s environment, never a
+            repository.
           </span>
         </div>
 
-        <label className="flex cursor-pointer items-start gap-3">
-          <span
-            className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px]"
-            style={{
-              background: acknowledged ? "var(--slate)" : "var(--surface)",
-              boxShadow: acknowledged ? "none" : "var(--ring)",
-            }}
-          >
-            {acknowledged && (
-              <Icon name="check" size={12} color="#fff" stroke={3} />
-            )}
-          </span>
-          <input
-            type="checkbox"
-            className="sr-only"
-            checked={acknowledged}
-            onChange={(e) => setAcknowledged(e.target.checked)}
-          />
-          <span className="text-title text-[13px] font-semibold">
-            I have stored this key somewhere safe.
-          </span>
-        </label>
+        <Checkbox
+          checked={acknowledged}
+          onChange={setAcknowledged}
+          label={
+            <span className="font-semibold">
+              I have stored this key somewhere safe.
+            </span>
+          }
+        />
 
         {nudged && !acknowledged && (
-          <p
-            // Announced rather than merely drawn: the refusal is the only
-            // feedback a dismissed Escape or a dead-looking X gives, and
-            // somebody reading the box by ear would otherwise be told nothing
-            // at all about why it will not close.
-            role="alert"
-            className="m-0 text-[12.5px] font-semibold"
-            style={{ color: "var(--red)" }}
-          >
+          // Announced rather than merely drawn: the refusal is the only
+          // feedback a dismissed Escape or a dead-looking X gives, and
+          // somebody reading the box by ear would otherwise be told nothing
+          // at all about why it will not close.
+          <Callout tone="bad" role="alert">
             Copy the key first. Closing this box is the last chance to see it.
-          </p>
+          </Callout>
         )}
       </div>
     </Dialog>

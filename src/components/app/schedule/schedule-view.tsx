@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import {
   DayControls,
@@ -13,11 +14,14 @@ import { EventDrawer } from "~/components/app/timetable/event-drawer";
 import { EventModal } from "~/components/app/timetable/event-modal";
 import type { GridEvent } from "~/components/app/timetable/timetable-grid";
 import { useNow } from "~/components/app/timetable/use-now";
-import { Card } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
+import { EmptyState } from "~/components/ui/empty-state";
 import { useCoarsePointer } from "~/components/ui/use-coarse-pointer";
 import { Segmented } from "~/components/ui/segmented";
 import {
   addDays,
+  formatDayLabel,
   formatFullDate,
   formatMonthLabel,
   isSameLocalDay,
@@ -514,35 +518,35 @@ export function ScheduleView({
 
     /*
       A failed request is not an empty week. Without this branch the screen
-      falls through to the card below and says "You have no classes of your
-      own", which is the same untruth the skeleton was added to stop — stated
-      with more confidence, because it reads as an answer rather than a wait.
+      falls through to the empty state below and says "You have no classes of
+      your own", which is the same untruth the skeleton was added to stop —
+      stated with more confidence, because it reads as an answer rather than a
+      wait.
 
       Not folded into the waiting branch: a skeleton that spins for ever is
       worse than either. An error has to say it is an error.
+
+      A boxed error, in the error's own colours, so it cannot be read as a
+      quiet day. The retry sits under the explanation rather than beside it:
+      in a phone-width box a trailing button squeezed the sentence into a
+      column three words wide.
     */
     if (it.failed && !it.from) {
       return (
-        <Card>
-          <p className="text-title m-0 text-[14px] font-semibold">
-            This {noun} could not be loaded.
-          </p>
-          <p className="text-muted mt-1 mb-3 text-[13px]">
-            Nothing is wrong with your timetable — the request did not get
+        <Callout tone="bad" title={`This ${noun} could not be loaded.`}>
+          <p>
+            Nothing is wrong with your timetable: the request did not get
             through. It will try again on its own in a minute.
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3"
             onClick={() => void it.retry()}
-            className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
-            style={{
-              background: "rgba(68,88,121,0.07)",
-              color: "var(--slate)",
-            }}
           >
             Try again now
-          </button>
-        </Card>
+          </Button>
+        </Callout>
       );
     }
 
@@ -579,7 +583,7 @@ export function ScheduleView({
     const empty = paneBlocks.length === 0;
     const nothing =
       (it.from?.views ?? []).length === 0
-        ? "You have no classes of your own — the full timetable is on the Timetable screen."
+        ? "You have no classes of your own. The full timetable is on the Timetable screen."
         : "Nothing scheduled for this day.";
 
     /*
@@ -593,11 +597,22 @@ export function ScheduleView({
      * mid-swipe and then grow back — which is the jump this whole design is
      * spent on not having. So the sentence is laid over the empty day instead.
      */
+    /*
+     * Standing alone, the shared empty state, on the same white surface the
+     * week and the month are drawn on. The day it is about is the title, so it
+     * does not just repeat "Nothing scheduled" from the header above it, and
+     * the sentence underneath only appears when it explains something.
+     */
     if (empty && !onRail) {
+      const own = (it.from?.views ?? []).length > 0;
       return (
-        <Card>
-          <p className="text-muted m-0 text-[14px]">{nothing}</p>
-        </Card>
+        <EmptyState
+          icon="calendar"
+          title={`Nothing on ${formatDayLabel(it.at, timeZone)}`}
+          className="bg-surface rounded-[var(--radius-card)] shadow-[var(--ring),var(--shadow-card)]"
+        >
+          {own ? null : nothing}
+        </EmptyState>
       );
     }
 
@@ -620,13 +635,37 @@ export function ScheduleView({
           onEventPress={onEventPress}
         />
         {empty && (
-          <p className="text-muted pointer-events-none absolute inset-x-0 top-1/2 m-0 -translate-y-1/2 px-6 text-center text-[14px]">
+          <p className="text-muted pointer-events-none absolute inset-x-0 top-1/2 m-0 -translate-y-1/2 px-6 text-center text-base">
             {nothing}
           </p>
         )}
       </div>
     );
   };
+
+  /** What the subtitle's second line owes the reader, if anything. */
+  const notices = [
+    // Why the screen is not on today. Drops away the moment the window
+    // is stepped by hand, because from then on it is not a surprise —
+    // and it asks whether *now* is in view rather than whether the day
+    // is today, since on a Monday morning a week view is showing now.
+    //
+    // Backwards is the half-hour grace after a class that ended near
+    // midnight still holding its own day: rare, but "the next class"
+    // would be a plain untruth about a day that has already happened.
+    !moved && !spanHolds(date, span, now, timeZone)
+      ? date > now
+        ? span === "day"
+          ? "Opened on the next class"
+          : `Opened on the ${noun} of your next class`
+        : span === "day"
+          ? "Opened on your last class"
+          : `Opened on the ${noun} of your last class`
+      : null,
+    // Said out loud rather than quietly showing a short month: the cap
+    // is a backstop, but a calendar missing sittings has to say so.
+    data?.truncated ? "Too many classes to draw them all" : null,
+  ].filter(Boolean);
 
   return (
     // The drawer is a column beside the calendar from `lg`, and below it falls
@@ -646,34 +685,36 @@ export function ScheduleView({
         <PageHeader
           title="Schedule"
           wideActions
-          subtitle={[
-            viewingAs ? `${viewingAs.name}'s ${noun}` : null,
-            // Why the screen is not on today. Drops away the moment the window
-            // is stepped by hand, because from then on it is not a surprise —
-            // and it asks whether *now* is in view rather than whether the day
-            // is today, since on a Monday morning a week view is showing now.
-            //
-            // Backwards is the half-hour grace after a class that ended near
-            // midnight still holding its own day: rare, but "the next class"
-            // would be a plain untruth about a day that has already happened.
-            !moved && !spanHolds(date, span, now, timeZone)
-              ? date > now
-                ? span === "day"
-                  ? "Opened on the next class"
-                  : `Opened on the ${noun} of your next class`
-                : span === "day"
-                  ? "Opened on your last class"
-                  : `Opened on the ${noun} of your last class`
-              : null,
-            // The count is the previous window's until the new one lands, and
-            // "4 classes" above an empty calendar is the same lie in words.
-            stale ? "Loading…" : countPhrase(classes.length, busyDays, span),
-            // Said out loud rather than quietly showing a short month: the cap
-            // is a backstop, but a calendar missing sittings has to say so.
-            data?.truncated ? "Too many classes to draw them all" : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
+          // Tighter padding where the sidebar is gone: the header carries the
+          // span and day controls as well as the title, and on a phone every
+          // row it gives back is schedule.
+          compact
+          /*
+           * Two tiers. Whose and how much is the subtitle proper, one middle
+           * dot at most; the notices, which explain rather than describe, go
+           * on a quieter line of their own beneath. Four facts strung together
+           * with dots read as one undifferentiated line.
+           */
+          subtitle={
+            <>
+              {[
+                viewingAs ? `${viewingAs.name}'s ${noun}` : null,
+                // The count is the previous window's until the new one lands,
+                // and "4 classes" above an empty calendar is the same lie in
+                // words.
+                stale
+                  ? "Loading…"
+                  : countPhrase(classes.length, busyDays, span),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {notices.length > 0 && (
+                <span className="text-faint mt-0.5 block text-xs">
+                  {notices.map((notice) => `${notice}.`).join(" ")}
+                </span>
+              )}
+            </>
+          }
           actions={
             <>
               {/*
@@ -709,9 +750,18 @@ export function ScheduleView({
             </>
           }
         />
-        <div className="px-4 pt-3 pb-10 sm:px-6 lg:px-9">
-          {/* The tabs stay with the calendar they index. */}
-          <div className="mb-4">
+        {/*
+         * The shared column, whose gutters (16, 24, 36px) are the ones the
+         * rail's negative margins in span-carousel.tsx hand back, so the two
+         * still agree.
+         */}
+        <PageBody>
+          {/*
+           * The tabs stay with the calendar they index. The controls sit
+           * close together and the calendar a clear step below them, so the
+           * toolbar reads as one group and the day as the thing it serves.
+           */}
+          <div className="mb-3">
             <DayStrip
               date={date}
               span={span}
@@ -727,7 +777,7 @@ export function ScheduleView({
            * stepping a day, and the favourites beside it need room to be
            * tapped rather than a gap at the end of a row.
            */}
-          <div className="mb-4">
+          <div className="mb-5">
             <ViewAs
               current={currentSubject}
               perspectives={perspectiveOptions}
@@ -758,7 +808,7 @@ export function ScheduleView({
             noun={noun}
             pane={drawPane}
           />
-        </div>
+        </PageBody>
       </div>
 
       {opened &&

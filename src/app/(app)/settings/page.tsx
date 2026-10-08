@@ -2,8 +2,10 @@ import { type Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon, type IconName } from "~/components/ui/icon";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { env } from "~/env";
@@ -32,9 +34,27 @@ interface Section {
   title: string;
   blurb: string;
   icon: IconName;
+  /** Whose setting it is: one person's own phone, or the institution's. */
+  group: Group;
   /** The bit the screen behind it actually needs, not the route's. */
   requires: bigint;
 }
+
+type Group = "personal" | "institution";
+
+/**
+ * The two audiences this one door serves, in the order they are drawn.
+ *
+ * The comments on `SECTIONS` always said the personal ones come first and are
+ * a different kind of thing from the administrator's; the three identical
+ * cards never showed it. Two headed lists do, and a student, who holds only
+ * the first, sees one list under one heading and nothing about running the
+ * place.
+ */
+const GROUPS: { id: Group; title: string }[] = [
+  { id: "personal", title: "Your phone" },
+  { id: "institution", title: "The institution" },
+];
 
 const SECTIONS: Section[] = [
   // Siri first, and it is the only section here that is not about running the
@@ -48,6 +68,7 @@ const SECTIONS: Section[] = [
     blurb:
       "Ask your phone when your next lecture is. Set up a key and a shortcut, once, and then just ask.",
     icon: "sparkles",
+    group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
   // Beside Siri, and for the same reason: one person's own phone, granting
@@ -60,14 +81,16 @@ const SECTIONS: Section[] = [
     blurb:
       "Copy your classes into a calendar of their own, so they show up on your phone beside everything else.",
     icon: "calendar",
+    group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
   {
     href: "/settings/api-keys",
     title: "API keys",
     blurb:
-      "Credentials for the apps that talk to Plannr on their own — what each one may do, and what it has been doing.",
+      "Credentials for the apps that talk to Plannr on their own: what each one may do, and what it has been doing.",
     icon: "key",
+    group: "institution",
     requires: PermissionFlags.ManageRoles,
   },
 ];
@@ -96,60 +119,91 @@ export default async function SettingsPage() {
         env.GOOGLE_CALENDAR_SYNC_ENABLED),
   );
 
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    sections: sections.filter((section) => section.group === group.id),
+  })).filter((group) => group.sections.length > 0);
+  const runsThePlace = groups.some((group) => group.id === "institution");
+
   return (
     <>
       <PageHeader
         title="Settings"
-        subtitle="Your own devices, and — for whoever runs the place — how the institution is run"
+        // Only the half of the sentence that is true for the person reading
+        // it: a student is shown no institutional setting, so telling them
+        // about "how the institution is run" described a page they cannot see.
+        subtitle={
+          runsThePlace
+            ? "Your own devices, and (for whoever runs the place) how the institution is run"
+            : "Your own devices"
+        }
       />
-      <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
-        {sections.length === 0 ? (
+      <PageBody width="narrow" className="flex flex-col gap-7">
+        {groups.length === 0 ? (
           <Card>
-            <p className="text-muted m-0 text-[14px]">
-              Nothing here needs your attention. The settings on this screen are
-              about who may act on the institution&rsquo;s behalf, and that sits
-              with whoever manages roles.
-            </p>
+            <EmptyState
+              compact
+              icon="settings"
+              title="Nothing here needs your attention."
+            >
+              The settings on this screen are about who may act on the
+              institution&rsquo;s behalf, and that sits with whoever manages
+              roles.
+            </EmptyState>
           </Card>
         ) : (
-          <div className="flex flex-col gap-3">
-            {sections.map((section) => (
-              <Link
-                key={section.href}
-                href={section.href}
-                className="plr-clip plr-hoverlift bg-surface flex items-center gap-3.5 rounded-[var(--radius-card)] p-5"
-                style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
+          groups.map((group) => (
+            <section key={group.id} aria-labelledby={`settings-${group.id}`}>
+              <h2
+                id={`settings-${group.id}`}
+                className="text-muted mb-2 px-1 text-xs font-semibold"
               >
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                  style={{ background: "var(--card-soft)" }}
-                >
-                  <Icon
-                    name={section.icon}
-                    size={19}
-                    color="var(--slate)"
-                    stroke={1.9}
-                  />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-display text-title block text-[15px] font-bold">
-                    {section.title}
-                  </span>
-                  <span className="text-muted mt-0.5 block text-[12.5px]">
-                    {section.blurb}
-                  </span>
-                </span>
-                <Icon
-                  name="chevronRight"
-                  size={16}
-                  color="var(--muted)"
-                  className="shrink-0"
-                />
-              </Link>
-            ))}
-          </div>
+                {group.title}
+              </h2>
+              {/*
+               * One surface per group with hairlines between its rows, rather
+               * than a floating card per link: they are entries in one list,
+               * and the list is what has the elevation. The rows wash under
+               * the pointer instead of lifting, which is calmer for a list and
+               * means nothing moves under reduced motion.
+               */}
+              <ul className="bg-surface overflow-hidden rounded-[var(--radius-card)] shadow-[var(--ring),var(--shadow-card)]">
+                {group.sections.map((section, i) => (
+                  <li
+                    key={section.href}
+                    className={
+                      i === 0 ? "" : "shadow-[inset_0_1px_0_var(--hair-soft)]"
+                    }
+                  >
+                    <Link
+                      href={section.href}
+                      className="group hover:bg-tint-hover flex items-center gap-3.5 px-4 py-3.5 transition-colors duration-150 focus-visible:outline-offset-[-2px] sm:px-5"
+                    >
+                      <span className="bg-tint text-slate flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]">
+                        <Icon name={section.icon} size={18} stroke={1.9} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="text-title block text-base font-semibold">
+                          {section.title}
+                        </span>
+                        <span className="text-muted mt-0.5 block text-sm">
+                          {section.blurb}
+                        </span>
+                      </span>
+                      <Icon
+                        name="chevronRight"
+                        size={16}
+                        stroke={2}
+                        className="text-faint group-hover:text-muted shrink-0 transition-colors"
+                      />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))
         )}
-      </div>
+      </PageBody>
     </>
   );
 }

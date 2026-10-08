@@ -1,22 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { KIND_LABEL, KIND_TONE } from "~/components/app/groups/group-vocab";
 import { CourseSwatch } from "~/components/ui/course-swatch";
 import { facultyCard, groupCard } from "~/components/app/people/entity-cards";
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
+import { Avatar } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import {
   EntityPicker,
-  initialsOf,
   pickerPage,
   useDebounced,
 } from "~/components/ui/entity-picker";
-import { Stat } from "~/components/ui/stat";
+import { Icon, type IconName } from "~/components/ui/icon";
 import { DEFAULT_TIMEZONE, formatDayLabel, formatHourLabel } from "~/lib/dates";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { countLabel, NO_FACULTY_NOTE } from "./course-vocab";
@@ -68,73 +70,63 @@ export function CourseDetail({
             </span>
           </span>
         }
-        actions={
-          <Link
-            href="/courses"
-            className="text-muted inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            All courses
-          </Link>
-        }
+        back={{ href: "/courses", label: "All courses" }}
       />
 
-      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
-        {/* auto-fit alone is not safe here: its minmax floor is a hard minimum,
-            so a track wider than a phone would push the document sideways. The
-            single column below sm is what stops that. */}
-        <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(210px,1fr))]">
-          <Stat
+      <PageBody>
+        {/* One strip of three figures rather than three tiles: the tiles were
+            the dashboard everyone has seen, and on a phone they stacked into
+            430px of boxes before the first list. Three columns at every width;
+            the notes under the figures are a desktop luxury, since each says
+            again something the lists below show. */}
+        <Card pad={0} className="mb-5 grid grid-cols-3">
+          <Figure
             label="Students"
+            icon="users"
             value={course.headcount}
             note={`across ${countLabel(course.groups.length, "group")}`}
-            icon="users"
-            tone="green"
           />
-          <Stat
+          <Figure
             label="Cleared to teach"
+            icon="users"
             value={course.faculty.length}
             note={
               course.faculty.length === 0
                 ? "cannot be timetabled yet"
                 : "any of them may take a lecture"
             }
-            icon="users"
-            tone={course.faculty.length === 0 ? "red" : "violet"}
+            bad={course.faculty.length === 0}
           />
-          <Stat
+          <Figure
             label="Lectures"
+            icon="calendar"
             value={course.events.length}
             note={`${countLabel(sittings, "sitting")} scheduled`}
-            icon="calendar"
           />
-        </div>
+        </Card>
 
-        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fit,minmax(340px,1fr))]">
+        {/* Top-aligned, so each card is the height of what it holds rather
+            than both stretched to the taller one. */}
+        <div className="mb-4 grid grid-cols-1 items-start gap-4 md:grid-cols-[repeat(auto-fit,minmax(340px,1fr))]">
           <Card title="Who may teach it">
+            {/* Nobody cleared to teach is the one fact on this page that
+                stops anything happening, so it is said first and in red,
+                in both views, rather than in faint type under the picker. */}
+            {course.faculty.length === 0 && (
+              <Callout tone="bad" className={canManage ? "mb-3" : ""}>
+                {NO_FACULTY_NOTE}
+              </Callout>
+            )}
             {canManage ? (
               <FacultyEditor course={course} />
-            ) : course.faculty.length === 0 ? (
-              <p className="m-0 text-[13px] font-medium text-[#b02636]">
-                {NO_FACULTY_NOTE}
-              </p>
-            ) : (
+            ) : course.faculty.length === 0 ? null : (
               <div className="flex flex-wrap gap-x-5 gap-y-2.5">
                 {course.faculty.map((teacher) => (
                   <span
                     key={teacher.id}
-                    className="text-muted inline-flex items-center gap-2 text-[13px]"
+                    className="text-ink inline-flex items-center gap-2 text-sm"
                   >
-                    <span
-                      // Held to its size the way the picker's avatars are:
-                      // without it a long name squeezes the circle into an
-                      // oval on a phone, since the initials inside are half
-                      // the width the ring is drawn at.
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                      style={{ background: "var(--slate)" }}
-                    >
-                      {initialsOf(teacher.name)}
-                    </span>
+                    <Avatar name={teacher.name} size={24} />
                     {teacher.name}
                   </span>
                 ))}
@@ -145,7 +137,7 @@ export function CourseDetail({
           <Card
             title="Which groups take it"
             action={
-              <span className="text-faint font-mono text-[12px]">
+              <span className="text-faint font-mono text-xs tabular-nums">
                 {countLabel(course.headcount, "student")}
               </span>
             }
@@ -153,7 +145,7 @@ export function CourseDetail({
             {canManage ? (
               <GroupsEditor course={course} />
             ) : course.groups.length === 0 ? (
-              <p className="text-muted m-0 text-[13px]">
+              <p className="text-muted text-sm">
                 No group takes this course yet, so nobody is enrolled in it.
               </p>
             ) : (
@@ -166,13 +158,13 @@ export function CourseDetail({
                     // on a phone, so it takes the line to itself there.
                     className="flex flex-wrap items-center gap-x-2.5 gap-y-1 py-2 sm:flex-nowrap sm:py-1.5"
                   >
-                    <span className="text-title w-full min-w-0 truncate text-[13px] font-semibold sm:w-auto sm:flex-1">
+                    <span className="text-title w-full min-w-0 truncate text-sm font-semibold sm:w-auto sm:flex-1">
                       {group.name}
                     </span>
                     <Badge tone={KIND_TONE[group.kind]}>
                       {KIND_LABEL[group.kind]}
                     </Badge>
-                    <span className="text-faint shrink-0 font-mono text-[12px] sm:w-[80px] sm:text-right">
+                    <span className="text-faint shrink-0 font-mono text-xs tabular-nums sm:w-[80px] sm:text-right">
                       {countLabel(group.students, "student")}
                     </span>
                   </div>
@@ -183,8 +175,53 @@ export function CourseDetail({
         </div>
 
         <Lectures events={course.events} />
-      </div>
+      </PageBody>
     </>
+  );
+}
+
+/**
+ * One of the three figures in the strip under the header: the label, then the
+ * number leading in the display face, then a note on wider screens. `bad` sets
+ * the number in the bad ink, for the one figure that can be a problem.
+ */
+function Figure({
+  label,
+  icon,
+  value,
+  note,
+  bad = false,
+}: {
+  label: string;
+  icon: IconName;
+  value: number;
+  note: string;
+  bad?: boolean;
+}) {
+  return (
+    <div className="min-w-0 px-3 py-3.5 shadow-[inset_1px_0_0_var(--hair-soft)] first:shadow-none sm:px-5 sm:py-4">
+      <div className="text-muted flex items-center gap-1.5 text-xs font-medium">
+        <Icon
+          name={icon}
+          size={14}
+          stroke={2}
+          className={`hidden shrink-0 sm:block ${bad ? "text-bad" : ""}`}
+        />
+        <span className="min-w-0">{label}</span>
+      </div>
+      <div
+        className={`font-display mt-1.5 text-xl leading-none font-semibold tracking-[-0.02em] tabular-nums ${
+          bad ? "text-bad" : "text-title"
+        }`}
+      >
+        {value}
+      </div>
+      <div
+        className={`mt-1.5 hidden text-xs sm:block ${bad ? "text-bad" : "text-faint"}`}
+      >
+        {note}
+      </div>
+    </div>
   );
 }
 
@@ -220,7 +257,11 @@ function FacultyEditor({ course }: { course: Course }) {
 
   return (
     <div className="flex flex-col gap-2.5">
-      {error && <ErrorNote message={error} />}
+      {error && (
+        <Callout tone="bad" role="alert">
+          {error}
+        </Callout>
+      )}
       <EntityPicker
         selected={course.faculty.map((f) =>
           facultyCard({ id: f.id, name: f.name }),
@@ -237,11 +278,13 @@ function FacultyEditor({ course }: { course: Course }) {
         emptyLabel="Nobody yet"
         listId="course-faculty"
       />
-      <span className="text-faint text-[11.5px]">
-        {course.faculty.length === 0
-          ? NO_FACULTY_NOTE
-          : "Only the teacher a lecture is timetabled to can take its register."}
-      </span>
+      {/* When nobody is cleared, the card already opens on that in red, so
+          the hint would only say it a second time. */}
+      {course.faculty.length > 0 && (
+        <span className="text-faint text-xs">
+          Only the teacher a lecture is timetabled to can take its register.
+        </span>
+      )}
     </div>
   );
 }
@@ -271,7 +314,11 @@ function GroupsEditor({ course }: { course: Course }) {
 
   return (
     <div className="flex flex-col gap-2.5">
-      {error && <ErrorNote message={error} />}
+      {error && (
+        <Callout tone="bad" role="alert">
+          {error}
+        </Callout>
+      )}
       <EntityPicker
         selected={course.groups.map((g) => ({
           id: g.id,
@@ -290,8 +337,8 @@ function GroupsEditor({ course }: { course: Course }) {
         emptyLabel="No group takes it yet"
         listId="course-groups"
       />
-      <span className="text-faint text-[11.5px]">
-        Adding a group enrols everyone in it — there is no separate enrolment
+      <span className="text-faint text-xs">
+        Adding a group enrols everyone in it; there is no separate enrolment
         list.
       </span>
     </div>
@@ -328,23 +375,22 @@ function Lectures({ events }: { events: Course["events"] }) {
   if (events.length === 0) {
     return (
       <Card title="Lectures">
-        <p className="text-muted m-0 text-[13.5px]">
-          Nothing is timetabled for this course yet.
-        </p>
+        <EmptyState
+          compact
+          icon="calendar"
+          title="Nothing is timetabled for this course yet"
+        />
       </Card>
     );
   }
 
   return (
     <Card pad={0}>
-      <div
-        className="flex flex-wrap items-center gap-3 px-4 py-3"
-        style={{ boxShadow: "inset 0 -1px 0 var(--hair-soft)" }}
-      >
-        <span className="font-display text-title text-[15px] font-bold">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3 shadow-[inset_0_-1px_0_var(--hair-soft)]">
+        <h2 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
           Lectures
-        </span>
-        <span className="text-muted text-[12.5px]">
+        </h2>
+        <span className="text-muted text-sm">
           {events.length} series on the timetable
         </span>
       </div>
@@ -358,22 +404,19 @@ function Lectures({ events }: { events: Course["events"] }) {
           // the columns in pairs of spans is what lets the same markup do both;
           // the inner gap matches the outer one, so at sm the grouping cannot
           // be seen.
-          className="flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5"
-          style={
-            i > 0 ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" } : undefined
-          }
+          className={`flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5 ${i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""}`}
         >
           <span className="flex shrink-0 items-center gap-3">
-            <span className="text-title font-mono text-[12px] font-bold sm:w-[104px]">
+            <span className="text-title font-mono text-xs font-semibold sm:w-[104px]">
               {whenLabel(event)}
             </span>
-            <span className="text-muted font-mono text-[12px] sm:w-[116px]">
-              {formatHourLabel(event.startTime, DEFAULT_TIMEZONE)}–
+            <span className="text-muted font-mono text-xs sm:w-[116px]">
+              {formatHourLabel(event.startTime, DEFAULT_TIMEZONE)}-
               {formatHourLabel(event.endTime, DEFAULT_TIMEZONE)}
             </span>
           </span>
 
-          <span className="text-title min-w-0 truncate text-[13px] font-semibold sm:flex-1">
+          <span className="text-title min-w-0 truncate text-sm font-semibold sm:flex-1">
             {event.group?.label ?? event.group?.name ?? event.title}
           </span>
 
@@ -384,17 +427,17 @@ function Lectures({ events }: { events: Course["events"] }) {
                 flagged as loudly. */}
             <span className="flex min-w-0 items-center sm:w-[168px]">
               {event.faculty ? (
-                <span className="text-muted truncate text-[12.5px]">
+                <span className="text-muted truncate text-sm">
                   {event.faculty.user.name ?? "Unnamed"}
                 </span>
               ) : (
-                <Badge tone="red" dot>
+                <Badge tone="red" icon="alert">
                   No teacher
                 </Badge>
               )}
             </span>
             <Badge tone="slate">{event.room.code}</Badge>
-            <span className="text-faint shrink-0 font-mono text-[11.5px] sm:w-[86px] sm:text-right">
+            <span className="text-faint shrink-0 font-mono text-xs tabular-nums sm:w-[86px] sm:text-right">
               {event.rrule
                 ? countLabel(event._count.occurrences, "sitting")
                 : "one-off"}
@@ -403,19 +446,5 @@ function Lectures({ events }: { events: Course["events"] }) {
         </div>
       ))}
     </Card>
-  );
-}
-
-function ErrorNote({ message }: { message: string }) {
-  return (
-    <div
-      className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
-      style={{
-        background: "rgba(220,56,72,0.07)",
-        boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-      }}
-    >
-      {message}
-    </div>
   );
 }

@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Dialog } from "~/components/ui/dialog";
+import { Field, Input } from "~/components/ui/field";
 import {
   EntityPicker,
   pickerPage,
@@ -11,7 +14,8 @@ import {
 } from "~/components/ui/entity-picker";
 import { groupCard, roleCard } from "./entity-cards";
 import { Icon } from "~/components/ui/icon";
-import { NO_ADDRESS, personName } from "~/lib/people";
+import { Skeleton } from "~/components/ui/skeleton";
+import { contactAddress, NO_ADDRESS, personName } from "~/lib/people";
 import { api } from "~/trpc/react";
 import { PermissionEditor } from "./permission-editor";
 
@@ -136,129 +140,200 @@ export function UserDetailDialog({
     <Dialog
       open
       title={data?.name ?? "Person"}
+      // Who this is, in the header, so it stays in view while the body
+      // scrolls through their groups and permissions.
+      subtitle={
+        data ? (
+          <>
+            {contactAddress(data.email) ?? (
+              <span className="text-faint italic">{NO_ADDRESS}</span>
+            )}
+            {data.prn && ` · ${data.prn}`}
+          </>
+        ) : undefined
+      }
       icon="users"
       onClose={onClose}
       width={620}
+      // The record's way out lives in the dialog's own footer, so Remove and
+      // Close stay put under the thumb instead of scrolling away with the
+      // last section of the form.
+      footer={
+        <>
+          {data &&
+            canManage &&
+            (confirmDelete ? (
+              <div className="flex flex-wrap items-center gap-2 max-sm:justify-center sm:mr-auto">
+                <span className="text-bad text-sm font-semibold max-sm:w-full max-sm:text-center">
+                  Remove {personName(data, data.prn ?? "this person")}?
+                </span>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => remove.mutate({ id: userId })}
+                >
+                  Yes, remove
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="danger-quiet"
+                icon="trash"
+                onClick={() => setConfirmDelete(true)}
+                className="sm:mr-auto"
+              >
+                Remove person
+              </Button>
+            ))}
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </>
+      }
     >
       {!data ? (
-        <p className="text-muted text-[13.5px]">Loading…</p>
+        <div
+          role="status"
+          aria-label="Loading person"
+          className="flex flex-col gap-4"
+        >
+          <Skeleton className="h-6 w-40" />
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="flex flex-col gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="flex flex-col gap-5">
           {error && (
-            <div
-              className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
-              style={{
-                background: "rgba(220,56,72,0.07)",
-                boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-              }}
-            >
+            <Callout tone="bad" role="alert">
               {error}
-            </div>
+            </Callout>
           )}
 
-          <div className="flex flex-col gap-3">
+          {/*
+           * The account's state first, before the fields: whether this person
+           * can get in at all is the thing to know on opening the record, and
+           * switching it is a real action, so it is a button rather than a
+           * faint link at the end of a row.
+           */}
+          <div className="flex flex-wrap items-center gap-2">
+            {data.hasSignedIn ? (
+              <span className="text-muted text-sm">Has signed in</span>
+            ) : (
+              <Badge tone="neutral">Imported, never signed in</Badge>
+            )}
+            {!data.isActive &&
+              (data.email ? (
+                <Badge tone="red">Disabled</Badge>
+              ) : (
+                // The Email field says why; this is the account's state, and
+                // it is waiting rather than switched off.
+                <Badge tone="neutral">Waiting on an address</Badge>
+              ))}
+            {canManage && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  update.mutate({ id: userId, isActive: !data.isActive })
+                }
+                className="ml-auto"
+              >
+                {data.isActive ? "Disable account" : "Re-enable account"}
+              </Button>
+            )}
+          </div>
+
+          {/*
+           * Phones get 16px type in every field from the global `pointer:
+           * coarse` rule: below that, Safari zooms the page in as the field
+           * takes focus, which on a dialog leaves it half off screen. A
+           * read-only viewer's fields are drawn disabled (on the paper, muted
+           * ink) so they no longer look typeable.
+           */}
+          <div className="flex flex-col gap-3.5">
             <Field label="Name">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={!canManage}
-                // 16px on a phone: below that, Safari zooms the page in as the
-                // field takes focus, which on a dialog leaves it half off
-                // screen.
-                className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                style={{ boxShadow: "var(--ring)" }}
-              />
+              {(id) => (
+                <Input
+                  id={id}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={!canManage}
+                />
+              )}
             </Field>
             {/*
              * An address and a PRN side by side leave about 130px each on a
              * phone, which truncates the very thing being checked; they stack
              * until there is room to read both.
              */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Email">
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={!canManage}
-                  placeholder={NO_ADDRESS}
-                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
-                {!data.email && (
-                  // Why the account is disabled, said where the address is
-                  // missing rather than left to be inferred from the badge.
-                  <span className="text-muted text-[11.5px]">
-                    The college has not sent one. They are on the roll and count
-                    everywhere they are listed, but cannot sign in until it
-                    arrives.
-                  </span>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field
+                label="Email"
+                // Why the account is disabled, said where the address is
+                // missing rather than left to be inferred from the badge.
+                hint={
+                  !data.email
+                    ? "The college has not sent one. They are on the roll and count everywhere they are listed, but cannot sign in until it arrives."
+                    : undefined
+                }
+              >
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={!canManage}
+                    placeholder={NO_ADDRESS}
+                  />
                 )}
               </Field>
               <Field label="PRN">
-                <input
-                  value={prn}
-                  onChange={(e) => setPrn(e.target.value)}
-                  disabled={!canManage}
-                  placeholder="11 digits"
-                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={prn}
+                    onChange={(e) => setPrn(e.target.value)}
+                    disabled={!canManage}
+                    placeholder="11 digits"
+                    className="font-mono"
+                  />
+                )}
               </Field>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <Field label="Department">
-                <input
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  disabled={!canManage}
-                  placeholder="Faculty only"
-                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    disabled={!canManage}
+                    placeholder="Faculty only"
+                  />
+                )}
               </Field>
               <Field label="Short name">
-                <input
-                  value={shortName}
-                  onChange={(e) => setShortName(e.target.value)}
-                  disabled={!canManage}
-                  placeholder="Shown on timetable cards"
-                  className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={shortName}
+                    onChange={(e) => setShortName(e.target.value)}
+                    disabled={!canManage}
+                    placeholder="Shown on timetable cards"
+                  />
+                )}
               </Field>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {data.hasSignedIn ? (
-                <Badge tone="green" dot>
-                  has signed in
-                </Badge>
-              ) : (
-                <Badge tone="neutral">imported, never signed in</Badge>
-              )}
-              {!data.isActive &&
-                (data.email ? (
-                  <Badge tone="red">disabled</Badge>
-                ) : (
-                  // The field above says why; this is the account's state, and
-                  // it is waiting rather than switched off.
-                  <Badge tone="neutral">waiting on an address</Badge>
-                ))}
-              {canManage && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    update.mutate({ id: userId, isActive: !data.isActive })
-                  }
-                  className="text-muted ml-auto inline-flex min-h-10 cursor-pointer items-center text-[12px] font-semibold lg:min-h-0"
-                >
-                  {data.isActive ? "Disable account" : "Re-enable account"}
-                </button>
-              )}
-            </div>
             {canManage && detailsChanged && (
-              <button
-                type="button"
+              <SaveRow
                 disabled={busy}
                 onClick={() =>
                   update.mutate({
@@ -274,26 +349,22 @@ export function UserDetailDialog({
                     shortName: shortName.trim() || null,
                   })
                 }
-                className="min-h-10 cursor-pointer self-start rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                style={{ background: "var(--slate)" }}
               >
                 Save details
-              </button>
+              </SaveRow>
             )}
           </div>
 
-          <div>
-            <SectionTitle>Groups</SectionTitle>
-            {membership.data && !membership.data.hasStudentProfile ? (
-              <p className="text-muted text-[12.5px]">
-                Give this person a PRN and save, then you can add them to groups
-                — membership is recorded against their student record.
-              </p>
-            ) : (
+          <Section
+            title="Groups"
+            description={
+              membership.data && !membership.data.hasStudentProfile
+                ? "Give this person a PRN and save, then you can add them to groups. Membership is recorded against their student record."
+                : "The cohorts whose classes appear on their timetable."
+            }
+          >
+            {!(membership.data && !membership.data.hasStudentProfile) && (
               <>
-                <p className="text-muted mb-2.5 text-[12.5px]">
-                  The cohorts whose classes appear on their timetable.
-                </p>
                 <EntityPicker
                   selected={groupIds.map((id) => ({
                     id,
@@ -315,26 +386,21 @@ export function UserDetailDialog({
                   emptyLabel="Not in any group"
                 />
                 {canManage && groupsChanged && (
-                  <button
-                    type="button"
+                  <SaveRow
                     disabled={busy}
                     onClick={() => setGroups.mutate({ id: userId, groupIds })}
-                    className="mt-3 min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                    style={{ background: "var(--slate)" }}
                   >
                     Save groups
-                  </button>
+                  </SaveRow>
                 )}
               </>
             )}
-          </div>
+          </Section>
 
-          <div>
-            <SectionTitle>Roles</SectionTitle>
-            <p className="text-muted mb-2.5 text-[12.5px]">
-              Someone can hold several at once — a lecturer who also coordinates
-              gets both sets of permissions.
-            </p>
+          <Section
+            title="Roles"
+            description="Someone can hold several at once: a lecturer who also coordinates gets both sets of permissions."
+          >
             <EntityPicker
               selected={(roles.data?.rows ?? [])
                 .filter((r) => roleIds.includes(r.id))
@@ -354,117 +420,108 @@ export function UserDetailDialog({
               listId="user-roles"
             />
             {canManage && rolesChanged && (
-              <button
-                type="button"
+              <SaveRow
                 disabled={busy}
                 onClick={() => setRoles.mutate({ id: userId, roleIds })}
-                className="mt-3 min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                style={{ background: "var(--slate)" }}
               >
                 Save roles
-              </button>
+              </SaveRow>
             )}
-          </div>
+          </Section>
 
           {canManageRoles && (
-            <details>
-              <summary className="text-title cursor-pointer py-2.5 text-[13.5px] font-semibold lg:py-0">
+            // Still a native disclosure: collapsed, its controls have no
+            // boxes, which is how the dialog's focus trap knows to skip them.
+            // The browser's black triangle is swapped for the app's chevron,
+            // which turns as it opens.
+            <details className="group pt-4 shadow-[inset_0_1px_0_var(--hair-soft)]">
+              <summary className="font-display text-title text-md flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-[8px] font-semibold tracking-[-0.01em] lg:min-h-8 [&::-webkit-details-marker]:hidden">
+                <Icon
+                  name="chevronRight"
+                  size={16}
+                  stroke={2}
+                  className="text-muted transition-transform duration-200 ease-out group-open:rotate-90 motion-reduce:transition-none"
+                />
                 Extra permissions for this person
               </summary>
-              <p className="text-muted mt-1.5 mb-3 text-[12.5px]">
+              <p className="text-muted mt-1 mb-3 text-sm">
                 Granted on top of their roles. Prefer changing a role when the
                 same change applies to a group of people.
               </p>
               <PermissionEditor value={extra} onChange={setExtra} />
               {extra !== data.extraPermissions && (
-                <button
-                  type="button"
+                <SaveRow
                   disabled={busy}
                   onClick={() =>
                     setPerms.mutate({ id: userId, permissions: extra })
                   }
-                  className="mt-3 min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                  style={{ background: "var(--slate)" }}
                 >
                   Save permissions
-                </button>
+                </SaveRow>
               )}
             </details>
           )}
-
-          <div
-            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-4"
-            style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
-          >
-            {canManage ? (
-              confirmDelete ? (
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-[12.5px] font-semibold text-[#b02636]">
-                    Remove {personName(data, data.prn ?? "this person")}?
-                  </span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => remove.mutate({ id: userId })}
-                    className="min-h-10 cursor-pointer rounded-[8px] px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                    style={{ background: "var(--red)" }}
-                  >
-                    Yes, remove
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="text-muted inline-flex min-h-10 cursor-pointer items-center text-[12.5px] lg:min-h-0"
-                  >
-                    Cancel
-                  </button>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
-                >
-                  <Icon name="trash" size={13} color="var(--red)" />
-                  Remove person
-                </button>
-              )
-            ) : (
-              <span />
-            )}
-
-            <span className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-muted min-h-10 cursor-pointer rounded-[8px] px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-                style={{ boxShadow: "var(--ring)" }}
-              >
-                Close
-              </button>
-            </span>
-          </div>
         </div>
       )}
     </Dialog>
   );
 }
 
-function Field({
-  label,
+/**
+ * One part of the record: a heading, a line saying what it is for, and its
+ * controls. Each starts on a hairline with the same space above it, so the
+ * form reads as four things rather than one long list of equal weight.
+ */
+function Section({
+  title,
+  description,
   children,
 }: {
-  label: string;
-  children: React.ReactNode;
+  title: string;
+  description?: ReactNode;
+  children?: ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
+    <section
+      aria-labelledby={id}
+      className="flex flex-col gap-3 pt-5 shadow-[inset_0_1px_0_var(--hair-soft)]"
+    >
+      <div>
+        <h3
+          id={id}
+          className="font-display text-title text-md font-semibold tracking-[-0.01em]"
+        >
+          {title}
+        </h3>
+        {description && (
+          <p className="text-muted mt-0.5 text-sm">{description}</p>
+        )}
+      </div>
       {children}
-    </label>
+    </section>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-title mb-1 text-[14px] font-bold">{children}</h3>;
+/**
+ * A section's save, which appears only once something in it has changed.
+ * Always in the same place, on the section's trailing edge, and it fades in
+ * rather than popping, so the eye catches it arriving.
+ */
+function SaveRow({
+  disabled,
+  onClick,
+  children,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="plr-fade flex justify-end pt-1">
+      <Button variant="primary" size="sm" disabled={disabled} onClick={onClick}>
+        {children}
+      </Button>
+    </div>
+  );
 }

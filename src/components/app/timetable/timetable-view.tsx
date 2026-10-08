@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
@@ -10,9 +11,16 @@ import {
 import { unfitRoomIds } from "~/components/app/booking/room-fit";
 import { useBookingDraft } from "~/components/app/booking/use-booking-draft";
 import { PageHeader } from "~/components/app/shell/page-header";
+import { Button, buttonClass, IconButton } from "~/components/ui/button";
 import { Dialog } from "~/components/ui/dialog";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
-import { courseKey, courseTone, NO_COURSE } from "~/lib/course-colour";
+import {
+  courseKey,
+  courseTone,
+  NO_COURSE,
+  type CourseTone,
+} from "~/lib/course-colour";
 import { Select } from "~/components/ui/select";
 import {
   decimalHour,
@@ -24,6 +32,8 @@ import {
 import { DayControls, DayStrip } from "./day-navigator";
 import { EventDrawer } from "./event-drawer";
 import { EventModal } from "./event-modal";
+import { softRing } from "./timetable-grid";
+import { useNow } from "./use-now";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import {
@@ -88,6 +98,8 @@ export function TimetableView({
     PermissionFlags.ManageOwnEvents,
   );
   const canMarkAttendance = bits.has(PermissionFlags.MarkAttendance);
+  // Only for the empty state: whoever can add rooms is offered the way there.
+  const canManageRooms = bits.has(PermissionFlags.ManageRooms);
   /**
    * The block that was opened, and which way in was used.
    *
@@ -132,14 +144,14 @@ export function TimetableView({
     room: rooms.find((r) => r.id === span?.roomId),
     onCreated: async (result) => {
       const when = span
-        ? `${formatHourLabel(span.start, timeZone)}–${formatHourLabel(span.end, timeZone)}`
+        ? `${formatHourLabel(span.start, timeZone)}-${formatHourLabel(span.end, timeZone)}`
         : "";
       const code = rooms.find((r) => r.id === span?.roomId)?.code ?? "Room";
       setSpan(null);
       setFlash({
         text:
           result.event.status === "PENDING"
-            ? `${code} requested for ${when} — waiting for approval`
+            ? `${code} requested for ${when}, waiting for approval`
             : `${code} booked for ${when}`,
       });
       await utils.timetable.invalidate();
@@ -214,6 +226,15 @@ export function TimetableView({
   // would otherwise be told about a colour that never appears.
   const hasMine = events.some((e) => e.isMine);
 
+  /*
+   * Whether anything drawn is running this minute, which is what decides
+   * whether the red is explained. The one clock on the screen: it is handed
+   * down to the grid, which draws its now line and its live blocks from it
+   * rather than from a tick of its own, so the key and the blocks cannot
+   * disagree about the minute.
+   */
+  const now = useNow(30_000);
+
   /**
    * The subjects actually on screen, in the order they first appear.
    *
@@ -257,6 +278,34 @@ export function TimetableView({
       subjects[at]!.count += 1;
     }
   }
+
+  const liveNow = events.some(
+    (e) => drawnRooms.has(e.roomId) && e.start <= now && now < e.end,
+  );
+
+  /*
+   * The named subjects, gathered by the colour they are drawn in.
+   *
+   * There are eight course tones and a campus day can teach twice that many
+   * subjects, so some of them share a colour — and a key listing sixteen
+   * swatches, three of them the same pink, invites the reader to tell apart
+   * three things that cannot be told apart. One swatch per colour, followed by
+   * everything drawn in it, says the sharing out loud instead. The palette
+   * itself is not this screen's to change; how honestly it is presented is.
+   */
+  const toneGroups: Array<{ tone: CourseTone; titles: string[] }> = [];
+  for (const subject of subjects.slice(0, KEY_LIMIT)) {
+    const tone = courseTone(subject.title);
+    const group = toneGroups.find((g) => g.tone === tone);
+    if (group) group.titles.push(subject.title);
+    else toneGroups.push({ tone, titles: [subject.title] });
+  }
+  // Phone only: the subjects fold away behind their count, since grouped by
+  // colour they still wrap to a dozen lines under a 390px grid.
+  const [subjectsOpen, setSubjectsOpen] = useState(false);
+  const subjectsId = useId();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpId = useId();
 
   /**
    * Every block opens, for everybody.
@@ -335,7 +384,7 @@ export function TimetableView({
       setFlash({
         text: result.applied
           ? "Moved"
-          : "Change requested — waiting for approval",
+          : "Change requested, waiting for approval",
       });
       await utils.timetable.invalidate();
       router.refresh();
@@ -384,10 +433,16 @@ export function TimetableView({
     // with the docking: below lg it would only add the topbar's height to the
     // page and leave a phone scrolling past the end of the day.
     <div className="flex flex-col lg:min-h-screen lg:flex-row lg:items-start">
+      {/*
+       * Solid paper rather than glass: the coloured grid scrolls up behind this
+       * header, and the blur showed every block smeared under the controls.
+       */}
       <div className="min-w-0 flex-1">
         <PageHeader
           title="Timetable"
           wideActions
+          compact
+          opaque
           /*
            * No date here any more. The picker beside the title carries it, and
            * a header that said it twice would be spending two lines of a screen
@@ -402,7 +457,12 @@ export function TimetableView({
                * together on one line so the pair reads as a unit when the
                * header wraps.
                */}
-              <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+              {/*
+               * 6px between the pair at `lg`, the same as between the day
+               * controls, and two pixels of the room the row needs to stay on
+               * the title's line at 1024px (see `CompactToggle`).
+               */}
+              <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto lg:gap-1.5">
                 <Select
                   ariaLabel="Building"
                   // The compact toggle sits beside it, so it takes what that
@@ -423,6 +483,11 @@ export function TimetableView({
             </>
           }
         />
+        {/*
+         * Its own wrapper rather than `PageBody`, on purpose: the gutters are
+         * the same 16/24/36px, but the vertical padding here is part of what
+         * `--tt-ceiling` subtracts, and the compact fit is measured against it.
+         */}
         <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
           {/* The tabs stay with the grid they index. */}
           <div className="mb-4">
@@ -437,6 +502,7 @@ export function TimetableView({
               startHour={startHour}
               endHour={endHour}
               showNowLine={isToday}
+              now={now}
               onRangeSelect={canBook ? takeRange : undefined}
               onEventMove={canMoveEvents ? takeMove : undefined}
               // Always live. Every block is a real button whatever may be done
@@ -448,13 +514,44 @@ export function TimetableView({
               selection={selection}
               unavailableRoomIds={unavailableRooms}
               compact={compact}
+              // The block the open panel describes, so the two can be matched
+              // up across the screen.
+              highlightedOccurrenceId={opened?.event.occurrenceId}
             />
           ) : (
-            <div
-              className="bg-surface text-muted rounded-[var(--radius-card)] p-6 text-center text-[14px] sm:p-10"
-              style={{ boxShadow: "var(--ring)" }}
-            >
-              No rooms yet. An admin can add them from the Rooms tab.
+            /*
+             * Two different emptinesses. A building with nothing in it is a
+             * filter to change; a campus with no rooms at all is set-up work,
+             * offered to whoever may do it and simply stated to everyone else
+             * — a student told to go and add rooms is being told to do
+             * something they cannot.
+             */
+            <div className="bg-surface rounded-[var(--radius-card)] shadow-[var(--ring),var(--shadow-card)]">
+              {buildingId ? (
+                <EmptyState icon="building" title="No rooms in this building">
+                  Choose another building, or all of them, from the filter
+                  above.
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  icon="grid"
+                  title="No rooms yet"
+                  action={
+                    canManageRooms ? (
+                      <Link
+                        href="/rooms"
+                        className={buttonClass("primary", "md")}
+                      >
+                        Add rooms
+                      </Link>
+                    ) : undefined
+                  }
+                >
+                  {canManageRooms
+                    ? "Each room becomes a column here once it has been added."
+                    : "No rooms have been set up yet."}
+                </EmptyState>
+              )}
             </div>
           )}
 
@@ -468,87 +565,160 @@ export function TimetableView({
            * it is actually drawn: an admin whose day holds none of their own
            * classes is not told about gold, and a day of unattached bookings is
            * not given a list of subjects it does not contain.
+           *
+           * The two signals lead, on a line of their own with the neutral:
+           * "yours" and "on now" are what somebody scanning a campus grid is
+           * looking for, and the only colours whose meaning is written nowhere
+           * else. The subjects follow, one swatch per colour.
            */}
-          {(hasMine || subjects.length > 0 || uncoursed > 0) && (
-            <div className="text-faint mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12.5px]">
+          {(hasMine || liveNow || subjects.length > 0 || uncoursed > 0) && (
+            <section
+              aria-label="Key"
+              // One run of entries that wraps, rather than a grid of columns:
+              // the colour groups are as long as the subjects in them, and a
+              // grid gave the one-subject colours a column's worth of empty
+              // space each and the page two extra lines.
+              className="text-muted mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs"
+            >
               {hasMine && (
                 <Swatch fill="var(--mine-fill)" ring="var(--mine-ring)">
                   Yours
                 </Swatch>
               )}
-              {subjects.slice(0, KEY_LIMIT).map((subject) => {
-                const tone = courseTone(subject.title);
-                return (
-                  <Swatch
-                    key={subject.title}
-                    fill={tone.fill}
-                    ring={tone.ring}
-                    title={subject.title}
-                  >
-                    {subject.title}
-                  </Swatch>
-                );
-              })}
-              {/*
-               * Never a silent cut: a campus day can hold more subjects than a
-               * key has room for, and a list that quietly stopped would read as
-               * the rest having no colour at all.
-               */}
-              {subjects.length > KEY_LIMIT && (
-                <span>
-                  and {subjects.length - KEY_LIMIT} more{" "}
-                  {subjects.length - KEY_LIMIT === 1 ? "subject" : "subjects"}
-                </span>
+              {liveNow && (
+                <Swatch fill="var(--live-fill)" ring="var(--red)" live>
+                  On now
+                </Swatch>
               )}
               {/*
-               * The honest half. Most classes on this deployment have no course
-               * attached — the sync does not set one — so without this line the
-               * grey is read as a colour that failed rather than a fact about
-               * the data.
+               * The honest half. Most classes on this deployment have no
+               * course attached — the sync does not set one — so without this
+               * line the grey is read as a colour that failed rather than a
+               * fact about the data.
                */}
               {uncoursed > 0 && (
-                <Swatch fill={NO_COURSE.fill} ring={NO_COURSE.ring}>
+                <Swatch fill={NO_COURSE.fill} ring={softRing(NO_COURSE.ring)}>
                   {uncoursed} with no subject
                 </Swatch>
               )}
-            </div>
+              {subjects.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  // Pulled left by its own padding so its words line up with
+                  // the swatches' edge when it wraps onto a line of its own.
+                  className="-ml-3 sm:hidden"
+                  aria-expanded={subjectsOpen}
+                  aria-controls={subjectsId}
+                  onClick={() => setSubjectsOpen((open) => !open)}
+                >
+                  Subjects ({subjects.length})
+                  <Chevron open={subjectsOpen} />
+                </Button>
+              )}
+              {toneGroups.length > 0 && (
+                /*
+                 * `contents`, so the entries join the run above as if the list
+                 * were not there; the explicit role keeps it announced as a
+                 * list, which some browsers stop doing for a box that is not
+                 * drawn.
+                 */
+                <ul
+                  id={subjectsId}
+                  role="list"
+                  className={`${subjectsOpen ? "contents" : "hidden"} sm:contents`}
+                >
+                  {toneGroups.map((group) => (
+                    <li key={group.titles[0]} className="max-w-full">
+                      <Swatch
+                        fill={group.tone.fill}
+                        ring={softRing(group.tone.ring)}
+                        wrap
+                      >
+                        {group.titles.join(", ")}
+                      </Swatch>
+                    </li>
+                  ))}
+                  {/*
+                   * Never a silent cut: a campus day can hold more subjects
+                   * than a key has room for, and a list that quietly stopped
+                   * would read as the rest having no colour at all.
+                   */}
+                  {subjects.length > KEY_LIMIT && (
+                    <li>
+                      and {subjects.length - KEY_LIMIT} more{" "}
+                      {subjects.length - KEY_LIMIT === 1
+                        ? "subject"
+                        : "subjects"}
+                    </li>
+                  )}
+                </ul>
+              )}
+            </section>
           )}
 
           {/*
-           * Every clause is true wherever this is read, rather than one set of
-           * words being swapped in on a coarse pointer: a tablet with a trackpad
-           * can do both, and someone on a phone is better served by a hint that
-           * names the mouse than by one that quietly withholds half the screen's
-           * behaviour. What it may not do is describe a drag as the only way in,
-           * which is what it did while touch could only tap.
+           * One plain line for what the grid is, and the rest folded away.
+           *
+           * The full account used to be a seventy-word paragraph under the
+           * grid that everybody skipped. It is still all here, behind "How the
+           * grid works", and split by the hand doing it rather than swapped on
+           * a coarse pointer: a tablet with a trackpad can do both, and
+           * someone on a phone is better served by seeing what the mouse does
+           * than by a hint that quietly withholds half the screen's behaviour.
+           * What it may not do is describe a drag as the only way in, which is
+           * what it did while touch could only tap.
            */}
-          <p className="text-faint mt-3 text-[12.5px]">
-            {canBook ? (
-              <>
-                Tap a room&apos;s column to start a 15-minute slot, then set the
-                exact times in the panel. With a mouse, drag down a column to
-                sweep a longer slot out in one go, and drag the chosen
-                block&apos;s edges or middle to adjust it
-                {canMoveEvents &&
-                  ", or drag a booked block to another time or room"}
-                . Press and hold a block, or right-click it, for its details
-                without leaving the grid.
-              </>
-            ) : canMoveEvents ? (
-              <>
-                Each block is a scheduled class or booking. With a mouse, one
-                can be dragged to another time or room; press and hold, or
-                right-click, for its details without leaving the grid.
-              </>
-            ) : (
-              <>
-                Each block is a scheduled class or booking — open one to see who
-                teaches it, which groups sit in it and how long it runs. Press
-                and hold, or right-click, to see the same without leaving the
-                grid.
-              </>
-            )}
-          </p>
+          <div className="text-muted mt-3 text-xs">
+            <div className="flex flex-wrap items-center gap-x-1">
+              <p>
+                {canBook
+                  ? "Tap a room's column to start a booking, or open a block for its details."
+                  : canMoveEvents
+                    ? "Each block is a scheduled class or booking. Open one for its details."
+                    : "Each block is a scheduled class or booking. Open one to see who teaches it, which groups sit in it and how long it runs."}
+              </p>
+              <Button
+                variant="link"
+                size="sm"
+                aria-expanded={helpOpen}
+                aria-controls={helpId}
+                onClick={() => setHelpOpen((open) => !open)}
+              >
+                How the grid works
+                <Chevron open={helpOpen} />
+              </Button>
+            </div>
+            <dl
+              id={helpId}
+              hidden={!helpOpen}
+              className="mt-1 grid max-w-[78ch] gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]"
+            >
+              <dt className="text-title font-semibold">On a touch screen</dt>
+              <dd>
+                {canBook
+                  ? "Tap a room's column to start a 15-minute slot, then set the exact times in the panel. Press and hold a block for its details without leaving the grid."
+                  : "Press and hold a block for its details without leaving the grid."}
+              </dd>
+              <dt className="text-title font-semibold">With a mouse</dt>
+              <dd>
+                {canBook ? (
+                  <>
+                    Drag down a column to sweep a longer slot out in one go, and
+                    drag the chosen block&apos;s edges or middle to adjust it
+                    {canMoveEvents &&
+                      ", or drag a booked block to another time or room"}
+                    . Right-click a block for its details without leaving the
+                    grid.
+                  </>
+                ) : canMoveEvents ? (
+                  "Drag a block to another time or room. Right-click it for its details without leaving the grid."
+                ) : (
+                  "Right-click a block for its details without leaving the grid."
+                )}
+              </dd>
+            </dl>
+          </div>
         </div>
       </div>
 
@@ -604,9 +774,15 @@ export function TimetableView({
           width={430}
           onClose={() => setPendingMove(null)}
         >
-          <p className="text-muted mb-4 text-[13.5px]">
+          <p className="text-muted mb-4 text-sm">
             {pendingMove.event.title} repeats. Which of it should move?
           </p>
+          {/*
+           * Three answers, and one of them is the safe one: moving only the
+           * occurrence that was dragged is what a drag means on every other
+           * block, so it is the dialog's one primary and the wider reaches are
+           * the alternatives beside it.
+           */}
           <div className="flex flex-col gap-2">
             {(
               [
@@ -615,51 +791,122 @@ export function TimetableView({
                 ["series", "Every one of them"],
               ] as const
             ).map(([scope, label]) => (
-              <button
+              <Button
                 key={scope}
-                type="button"
+                variant={scope === "occurrence" ? "primary" : "secondary"}
+                block
+                className="justify-start"
                 onClick={() => {
                   applyMove(pendingMove.event, pendingMove.target, scope);
                   setPendingMove(null);
                 }}
-                className="bg-surface text-title cursor-pointer rounded-[10px] px-3.5 py-3.5 text-left text-[13.5px] font-semibold lg:py-2.5"
-                style={{ boxShadow: "var(--ring)" }}
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
         </Dialog>
       )}
 
+      {/*
+       * Spoken: a move or a booking settles off to one side of where the
+       * reader is looking, so a screen reader is told — politely for a
+       * success, at once for a failure. The two live regions are always
+       * mounted and only their words change, because a region that arrives
+       * already holding its message is one VoiceOver tends not to read at all;
+       * the toast below is what is seen, and these are what is heard.
+       */}
+      <p role="status" className="sr-only">
+        {flash && !flash.bad ? flash.text : ""}
+      </p>
+      <p role="alert" className="sr-only">
+        {flash?.bad ? flash.text : ""}
+      </p>
       {flash && (
-        <div
-          className="plr-toast fixed inset-x-4 bottom-4 z-40 flex items-center gap-2.5 rounded-xl px-4 py-3 sm:inset-x-auto sm:right-8 sm:bottom-8"
-          style={{
-            background: "var(--surface)",
-            boxShadow: "var(--ring), var(--shadow-float)",
-          }}
-        >
+        /*
+         * Raised, like every other thing that hangs over the page. Not itself
+         * a live region (the pair above is), so it is not announced twice.
+         */
+        <div className="plr-toast bg-surface fixed inset-x-4 bottom-4 z-40 flex items-center gap-2.5 rounded-[12px] py-2 pr-2 pl-4 shadow-[var(--ring),var(--shadow-md)] sm:inset-x-auto sm:right-8 sm:bottom-8">
           <Icon
             name={flash.bad ? "alert" : "checkCircle"}
             size={18}
-            color={flash.bad ? "var(--red)" : "#4e7d3a"}
             stroke={2}
+            className={flash.bad ? "text-bad" : "text-good"}
           />
-          <span className="text-title min-w-0 flex-1 text-[13.5px] font-semibold sm:max-w-[320px] sm:flex-none">
+          <span className="text-title min-w-0 flex-1 text-sm font-semibold sm:max-w-[320px] sm:flex-none">
             {flash.text}
           </span>
-          <button
-            type="button"
+          <IconButton
+            icon="x"
+            label="Dismiss"
+            size="sm"
+            iconSize={14}
             onClick={() => setFlash(null)}
-            aria-label="Dismiss"
-            className="-mr-1.5 ml-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:mr-0 sm:h-6 sm:w-6"
-          >
-            <Icon name="x" size={13} color="var(--muted)" />
-          </button>
+          />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * How many subjects the key names before it starts counting them instead.
+ *
+ * A whole campus day unfiltered can carry more courses than there are tones,
+ * and a key longer than the grid it explains has stopped being a key.
+ */
+const KEY_LIMIT = 14;
+
+/**
+ * One entry in the key: the colour, then what it means.
+ *
+ * The swatch is drawn the way a block is — the same fill, the same ring — so
+ * that matching one to the other is a matter of looking, not decoding. `live`
+ * adds the red leading edge the running blocks carry. `wrap` lets a colour
+ * shared by several subjects list them all over two lines rather than cutting
+ * the list off at whatever fits.
+ */
+function Swatch({
+  fill,
+  ring,
+  live = false,
+  wrap = false,
+  children,
+}: {
+  fill: string;
+  ring: string;
+  live?: boolean;
+  wrap?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`flex min-w-0 gap-2 ${wrap ? "items-start" : "items-center"}`}
+    >
+      <span
+        className={`h-3 w-5 shrink-0 rounded-[4px] ${wrap ? "mt-[3px]" : ""}`}
+        style={{
+          background: fill,
+          boxShadow: live
+            ? `inset 2px 0 0 ${ring}, inset 0 0 0 1px ${ring}`
+            : `inset 0 0 0 1px ${ring}`,
+        }}
+      />
+      <span className={`min-w-0 ${wrap ? "" : "truncate"}`}>{children}</span>
+    </span>
+  );
+}
+
+/** The disclosure arrow, turned up while what it discloses is open. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <Icon
+      name="chevronDown"
+      size={13}
+      stroke={2}
+      className={`transition-transform duration-150 ease-out motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+    />
   );
 }
 
@@ -669,41 +916,19 @@ export function TimetableView({
  * Not a `Segmented`, though the shape is tempting: there is already a segmented
  * strip of dated tabs on this row, and a second pill group beside it reads as
  * one control with two halves that disagree. This is a single binary, so it
- * takes the shape the row's other binary already has — the Today button's, with
- * the sidebar fold's `aria-pressed` — and borrows the chosen pill's treatment
- * when it is on, so on and off cannot be confused.
- */
-/**
- * How many subjects the key names before it starts counting them instead.
+ * takes the shape the row's other buttons already have — a white button like
+ * Today and the building field — as a pressed toggle. On,
+ * it sinks into the slate wash with a slate edge, the way a pressed key does,
+ * rather than filling slate with a glow: slate fill is what the one primary
+ * button on a screen wears, and this is a view setting, not the screen's
+ * action.
  *
- * A whole campus day unfiltered can carry more courses than there are tones,
- * and a key longer than the grid it explains has stopped being a key.
+ * Tighter than a stock button at `lg` (the field's 12px inset, a 6px gap, 12px
+ * type), for the same reason as Today along the row: the whole action row has
+ * to fit on the title's line with the sidebar open at 1024px, because
+ * `--tt-ceiling` assumes a one-line header there, and a toggle whose job is to
+ * fit the day on screen cannot be what pushes it below the fold.
  */
-const KEY_LIMIT = 14;
-
-/** One entry in the key: the colour, then what it means. */
-function Swatch({
-  fill,
-  ring,
-  title,
-  children,
-}: {
-  fill: string;
-  ring: string;
-  title?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5" title={title}>
-      <span
-        className="h-[13px] w-[21px] shrink-0 rounded-[5px]"
-        style={{ background: fill, boxShadow: `inset 0 0 0 1px ${ring}` }}
-      />
-      <span className="min-w-0 truncate">{children}</span>
-    </span>
-  );
-}
-
 function CompactToggle({
   on,
   onChange,
@@ -712,29 +937,15 @@ function CompactToggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
+    <Button
+      variant="secondary"
+      icon="grid"
+      pressed={on}
       title="Fit the whole timetable on screen"
       onClick={() => onChange(!on)}
-      className="flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
-      style={
-        on
-          ? {
-              background: "var(--slate)",
-              color: "#fff",
-              boxShadow: "0 2px 8px rgba(68,88,121,0.28)",
-            }
-          : { background: "rgba(68,88,121,0.07)", color: "var(--slate)" }
-      }
+      className="lg:gap-1.5 lg:px-3 lg:text-xs"
     >
-      <Icon
-        name="grid"
-        size={14}
-        color={on ? "#fff" : "var(--slate)"}
-        stroke={2.2}
-      />
       Compact
-    </button>
+    </Button>
   );
 }

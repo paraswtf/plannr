@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
+import { Button, IconButton } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
+import { ToggleChip } from "~/components/ui/chip";
 import { DatePicker } from "~/components/ui/date-picker";
+import { Field, Input } from "~/components/ui/field";
 import { Icon, type IconName } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import {
   formatDayLabel,
   formatDuration,
+  formatHourLabel,
   localTimeOnDay,
   minutesOfDay,
   SNAP_MINUTES,
 } from "~/lib/dates";
 import { api } from "~/trpc/react";
 import { AttendeeFields } from "./attendee-fields";
-import { ConflictBanner } from "./conflict-banner";
+import { ConflictBanner, ConflictVerdict } from "./conflict-banner";
 import {
   FEATURE_LABELS,
   ROOM_FEATURES,
@@ -23,7 +28,12 @@ import {
 } from "./room-fit";
 import { RecurringConflicts } from "./recurring-conflicts";
 import { RoomPicker } from "./room-picker";
-import { TimeField } from "./time-field";
+import {
+  FIELD_LABEL,
+  STEPPER_FIELD,
+  StepButton,
+  TimeField,
+} from "./time-field";
 import type { BookingDraft } from "./use-booking-draft";
 
 /**
@@ -139,265 +149,345 @@ export function BookingDrawer({
     });
   };
 
+  const verdictId = useId();
+
+  // Why a slot that is free still cannot be booked, said beside the button in
+  // the verdict's words rather than by the button's label.
+  const blockedBy =
+    draft.shortfalls.length > 0
+      ? "Pick a room that fits"
+      : draft.needsGroup
+        ? "A class needs a group attending it."
+        : null;
+
+  // A series' clashing dates are listed one by one, with what to do about
+  // each, by RecurringConflicts; the red detail keeps only what that list does
+  // not already say, so the same three dates are not written out twice.
+  const unlisted =
+    draft.repeat === "none"
+      ? draft.conflicts
+      : draft.conflicts.filter((c) => !(c.candidate && c.clashesWith));
+
+  const useNextFree =
+    draft.hardConflicts.length > 0
+      ? async () => {
+          const result = await nextFree.refetch();
+          if (result.data) {
+            onChange({
+              roomId,
+              start: result.data.start,
+              end: new Date(
+                result.data.start.getTime() + durationMinutes * 60_000,
+              ),
+            });
+          }
+        }
+      : undefined;
+
   return (
     <BookingPanel
       ref={ref}
-      icon="calendar"
+      // The glyph plate belongs to the panel that opens over the Timetable,
+      // where it matches every other drawer. Docked for good on the Book
+      // screen, beside a page already titled "Book a room", it was a second
+      // heading competing with the first.
+      icon={onClose ? "calendar" : undefined}
       title={isSelfServe ? "Book a slot" : "New session"}
-      subtitle={`${formatDayLabel(start, timeZone)} · ${formatDuration(durationMinutes)}`}
+      // What has been picked rather than the date again: the date is in the
+      // field below and beside the page title, and on a phone this line is
+      // what a tap on the calendar scrolls into view.
+      subtitle={
+        room
+          ? `${room.code} · ${formatHourLabel(start, timeZone)}-${formatHourLabel(end, timeZone)}`
+          : `${formatDayLabel(start, timeZone)} · ${formatDuration(durationMinutes)}`
+      }
       onClose={onClose}
       footer={
         <>
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted cursor-pointer rounded-[var(--radius-btn)] px-4 py-2.5 text-[13.5px] font-semibold"
-            >
-              Cancel
-            </button>
+          {draft.create.error && (
+            <Callout tone="bad" role="alert" className="basis-full">
+              {draft.create.error.message}
+            </Callout>
           )}
-          <button
-            type="button"
-            disabled={!draft.canBook}
-            onClick={draft.book}
-            className="rounded-[var(--radius-btn)] px-5 py-2.5 text-[14px] font-semibold text-white"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: draft.canBook ? 1 : 0.5,
-              cursor: draft.canBook ? "pointer" : "not-allowed",
-            }}
-          >
-            {draft.create.isPending
-              ? "Booking…"
-              : draft.shortfalls.length > 0
-                ? "Pick a room that fits"
-                : draft.hardConflicts.length > 0
-                  ? "Resolve the clash"
-                  : `Book ${room?.code ?? ""}`.trim()}
-          </button>
+          {/*
+           * The verdict and the button it decides are one unit. It takes the
+           * row with the button where there is width for both, and a row of
+           * its own when it carries a way out of the clash, or beside the
+           * Timetable's Cancel.
+           *
+           * Which of the two is decided by the last settled answer, not the
+           * current one: a nudge out of a clash sets the check running and
+           * empties the conflicts, and deciding by those dropped the bar from
+           * two rows to one and back on every nudge. The "Checking" line now
+           * holds the clash's row until the answer says otherwise.
+           */}
+          <ConflictVerdict
+            id={verdictId}
+            conflicts={draft.conflicts}
+            checking={draft.isChecking}
+            blockedBy={blockedBy}
+            onUseNextFree={useNextFree}
+            className={draft.clashed ? "basis-full" : "min-w-0 grow basis-56"}
+          />
+          <div className="flex items-center justify-end gap-2.5">
+            {onClose && (
+              <Button variant="ghost" size="lg" onClick={onClose}>
+                Cancel
+              </Button>
+            )}
+            {/*
+             * Always says what it does. It used to turn into the instruction
+             * ("Resolve the clash") at half opacity on the gradient, a reason
+             * nobody could read carried by a control nobody could press; the
+             * reason is the verdict's now, and the button is described by it.
+             */}
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={!draft.canBook}
+              onClick={draft.book}
+              aria-describedby={verdictId}
+            >
+              {draft.create.isPending
+                ? "Booking…"
+                : `Book ${room?.code ?? ""}`.trim()}
+            </Button>
+          </div>
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        <RoomPicker
-          rooms={rooms}
-          value={roomId}
-          needs={draft.needs}
-          onChange={(id) => onChange({ ...span, roomId: id })}
-        />
+      {/*
+       * Grouped by what the fields are about, with air and a hairline between
+       * the groups and less inside them: the room and time first, which is
+       * what a pick on the calendar sets, then who it is for, what it needs,
+       * and what it is called. The groups are presentation only; every field
+       * reads and writes the same draft it always did.
+       */}
+      <div className="flex flex-col gap-5">
+        <Section>
+          <RoomPicker
+            rooms={rooms}
+            value={roomId}
+            needs={draft.needs}
+            onChange={(id) => onChange({ ...span, roomId: id })}
+          />
 
-        {draft.shortfalls.length > 0 && (
-          <div
-            className="flex items-start gap-2.5 rounded-xl p-3"
-            style={{
-              background: "rgba(220,56,72,0.07)",
-              boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-            }}
-          >
-            <Icon name="alert" size={17} color="var(--red)" stroke={2} />
-            <span className="text-ink text-[12.5px]">
+          {draft.shortfalls.length > 0 && (
+            <Callout tone="bad">
               {room?.code} does not fit this session:{" "}
               {draft.shortfalls.join(", ")}.
-            </span>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-ink text-[13px] font-semibold">Date</span>
-          <DatePicker value={start} timeZone={timeZone} onChange={setDay} />
-        </div>
-
-        {/*
-         * Side by side the two times are 170px each on a phone, which is not
-         * enough for a field carrying two nudges, a chevron and a clock time.
-         */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TimeField
-            label="Starts"
-            value={start}
-            timeZone={timeZone}
-            minMinutes={dayStartMinutes}
-            maxMinutes={dayEndMinutes}
-            onChange={setStartMinutes}
-            onStep={(delta) => setStartMinutes(startMinutes + delta)}
-            canStepBack={startMinutes - SNAP_MINUTES >= dayStartMinutes}
-            canStepForward={endMinutes + SNAP_MINUTES <= dayEndMinutes}
-          />
-          <TimeField
-            label="Ends"
-            value={end}
-            timeZone={timeZone}
-            minMinutes={dayStartMinutes + SNAP_MINUTES}
-            maxMinutes={dayEndMinutes + SNAP_MINUTES}
-            onChange={setEndMinutes}
-            onStep={(delta) => setEndMinutes(endMinutes + delta)}
-            canStepBack={endMinutes - SNAP_MINUTES > startMinutes}
-            canStepForward={endMinutes + SNAP_MINUTES <= dayEndMinutes}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-ink text-[13px] font-semibold">Repeats</span>
-            <Segmented
-              items={REPEATS}
-              value={draft.repeat}
-              onChange={draft.setRepeat}
-              size="sm"
-            />
-          </div>
-
-          {draft.repeat !== "none" && (
-            <div
-              className="flex flex-col gap-2 rounded-xl p-2.5"
-              style={{ boxShadow: "inset 0 0 0 1px var(--hair)" }}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted text-[12.5px]">Ends</span>
-                <Segmented
-                  items={ENDS}
-                  value={draft.endMode}
-                  onChange={draft.setEndMode}
-                  size="sm"
-                />
-              </div>
-
-              {/*
-               * Each mode shows what the other would have said, so switching
-               * between them is never a guess.
-               */}
-              {draft.endMode === "until" ? (
-                <div className="flex items-center gap-2">
-                  {draft.until && (
-                    <DatePicker
-                      value={draft.until}
-                      timeZone={timeZone}
-                      size="sm"
-                      ariaLabel="Repeat until"
-                      onChange={draft.setUntil}
-                      className="min-w-0 flex-1"
-                    />
-                  )}
-                  <span className="text-faint shrink-0 font-mono text-[11.5px]">
-                    {draft.dates.length} dates
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <CountField
-                    value={draft.count}
-                    max={draft.maxCount}
-                    onChange={draft.setCount}
-                  />
-                  <span className="text-faint shrink-0 font-mono text-[11.5px]">
-                    {draft.lastDate
-                      ? `to ${formatDayLabel(draft.lastDate, timeZone)}`
-                      : "—"}
-                  </span>
-                </div>
-              )}
-            </div>
+            </Callout>
           )}
-        </div>
 
-        {!isSelfServe && (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-ink text-[13px] font-semibold">Type</span>
-            <Segmented
-              items={KINDS}
-              value={draft.kind}
-              onChange={draft.setKind}
-              size="sm"
+          <Field label="Date">
+            {(id) => (
+              <DatePicker
+                id={id}
+                value={start}
+                timeZone={timeZone}
+                onChange={setDay}
+              />
+            )}
+          </Field>
+
+          {/*
+           * Side by side the two times are 170px each on a phone, which is not
+           * enough for a field carrying two nudges, a chevron and a clock time.
+           */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TimeField
+              label="Starts"
+              value={start}
+              timeZone={timeZone}
+              minMinutes={dayStartMinutes}
+              maxMinutes={dayEndMinutes}
+              onChange={setStartMinutes}
+              onStep={(delta) => setStartMinutes(startMinutes + delta)}
+              canStepBack={startMinutes - SNAP_MINUTES >= dayStartMinutes}
+              canStepForward={endMinutes + SNAP_MINUTES <= dayEndMinutes}
+            />
+            <TimeField
+              label="Ends"
+              value={end}
+              timeZone={timeZone}
+              minMinutes={dayStartMinutes + SNAP_MINUTES}
+              maxMinutes={dayEndMinutes + SNAP_MINUTES}
+              onChange={setEndMinutes}
+              onStep={(delta) => setEndMinutes(endMinutes + delta)}
+              canStepBack={endMinutes - SNAP_MINUTES > startMinutes}
+              canStepForward={endMinutes + SNAP_MINUTES <= dayEndMinutes}
             />
           </div>
-        )}
 
-        {/*
-         * Two to a line only while the panel is the width of the page; back in
-         * its dock there is no room for a second column.
-         */}
-        {!isSelfServe && (
-          <AttendeeFields
-            draft={draft}
-            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
-          />
-        )}
-
-        <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-ink text-[13px] font-semibold">
-              Requirements
-            </span>
-            <span className="text-faint font-mono text-[11.5px]">
-              {draft.needs.seats > 0
-                ? `${draft.needs.seats} seats needed`
-                : "any size"}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {ROOM_FEATURES.map((feature) => (
-              <FeatureChip
-                key={feature}
-                feature={feature}
-                on={draft.features.includes(feature)}
-                onToggle={() => draft.toggleFeature(feature)}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className={FIELD_LABEL}>Repeats</span>
+              <Segmented
+                items={REPEATS}
+                value={draft.repeat}
+                onChange={draft.setRepeat}
+                size="sm"
+                ariaLabel="Repeats"
               />
-            ))}
-          </div>
-          <p className="text-faint mt-2 text-[11.5px]">
-            Rooms without these — or too small for the class — are greyed out on
-            the calendar.
-          </p>
-        </div>
+            </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-ink text-[13px] font-semibold">
-            {isSelfServe ? "Purpose" : "Session title"}
-          </span>
-          <input
-            value={draft.title}
-            onChange={(e) => draft.setTitle(e.target.value)}
-            className="bg-surface rounded-[10px] px-3 py-2.5 text-[16px] outline-none sm:text-[13.5px] lg:py-2"
-            style={{ boxShadow: "var(--ring)" }}
+            {/*
+             * How the series ends belongs to "Repeats", so it hangs under it,
+             * indented on a rule, rather than in a ringed box of its own.
+             */}
+            {draft.repeat !== "none" && (
+              <div className="flex flex-col gap-2 pl-3 shadow-[inset_2px_0_0_var(--hair)]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted text-sm">Ends</span>
+                  <Segmented
+                    items={ENDS}
+                    value={draft.endMode}
+                    onChange={draft.setEndMode}
+                    size="sm"
+                    ariaLabel="Ends"
+                  />
+                </div>
+
+                {/*
+                 * Each mode shows what the other would have said, so switching
+                 * between them is never a guess.
+                 */}
+                {draft.endMode === "until" ? (
+                  <div className="flex items-center gap-2">
+                    {draft.until && (
+                      <DatePicker
+                        value={draft.until}
+                        timeZone={timeZone}
+                        size="sm"
+                        ariaLabel="Repeat until"
+                        onChange={draft.setUntil}
+                        className="min-w-0 flex-1"
+                      />
+                    )}
+                    <span className="text-faint shrink-0 text-xs">
+                      <span className="font-mono tabular-nums">
+                        {draft.dates.length}
+                      </span>{" "}
+                      dates
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <CountField
+                      value={draft.count}
+                      max={draft.maxCount}
+                      onChange={draft.setCount}
+                    />
+                    {/* Nothing at all rather than a dash when there are no dates. */}
+                    {draft.lastDate && (
+                      <span className="text-faint shrink-0 text-xs">
+                        to {formatDayLabel(draft.lastDate, timeZone)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <RecurringConflicts
+            draft={draft}
+            timeZone={timeZone}
+            canCancelOthers={canCancelOthers}
+            onCancelled={onOtherCancelled}
           />
-        </label>
 
-        <RecurringConflicts
-          draft={draft}
-          timeZone={timeZone}
-          canCancelOthers={canCancelOthers}
-          onCancelled={onOtherCancelled}
-        />
+          {/*
+           * The detail behind the verdict, beside the times that caused it.
+           * Its way out ("Use next free slot") is the verdict's, by the button.
+           */}
+          <ConflictBanner conflicts={unlisted} checking={draft.isChecking} />
+        </Section>
 
-        <ConflictBanner
-          conflicts={draft.conflicts}
-          checking={draft.isChecking}
-          onUseNextFree={
-            draft.hardConflicts.length > 0
-              ? async () => {
-                  const result = await nextFree.refetch();
-                  if (result.data) {
-                    onChange({
-                      roomId,
-                      start: result.data.start,
-                      end: new Date(
-                        result.data.start.getTime() + durationMinutes * 60_000,
-                      ),
-                    });
-                  }
-                }
-              : undefined
-          }
-        />
+        {!isSelfServe && (
+          <Section>
+            <div className="flex items-center justify-between gap-3">
+              <span className={FIELD_LABEL}>Type</span>
+              <Segmented
+                items={KINDS}
+                value={draft.kind}
+                onChange={draft.setKind}
+                size="sm"
+                ariaLabel="Type"
+              />
+            </div>
 
-        {draft.create.error && (
-          <div className="text-[12.5px] font-medium text-[#b02636]">
-            {draft.create.error.message}
-          </div>
+            {/*
+             * Two to a line only while the panel is the width of the page; back
+             * in its dock there is no room for a second column.
+             */}
+            <AttendeeFields
+              draft={draft}
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
+            />
+          </Section>
         )}
+
+        <Section>
+          <div>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <span className={FIELD_LABEL}>Requirements</span>
+              {/* Mono for the count only; the words are words. */}
+              <span className="text-faint text-xs">
+                {draft.needs.seats > 0 ? (
+                  <>
+                    <span className="font-mono tabular-nums">
+                      {draft.needs.seats}
+                    </span>{" "}
+                    seats needed
+                  </>
+                ) : (
+                  "Any size"
+                )}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ROOM_FEATURES.map((feature) => (
+                <FeatureChip
+                  key={feature}
+                  feature={feature}
+                  on={draft.features.includes(feature)}
+                  onToggle={() => draft.toggleFeature(feature)}
+                />
+              ))}
+            </div>
+            <p className="text-faint mt-2 text-xs">
+              Rooms without these, or too small for the class, are greyed out on
+              the calendar.
+            </p>
+          </div>
+        </Section>
+
+        <Section>
+          <Field label={isSelfServe ? "Purpose" : "Session title"}>
+            {(id) => (
+              <Input
+                id={id}
+                value={draft.title}
+                onChange={(e) => draft.setTitle(e.target.value)}
+              />
+            )}
+          </Field>
+        </Section>
       </div>
     </BookingPanel>
+  );
+}
+
+/**
+ * One group of the form. The hairline above every group but the first is what
+ * separates them; a box around each would be a card inside the panel.
+ */
+function Section({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 not-first:pt-5 not-first:shadow-[inset_0_1px_0_var(--hair-soft)]">
+      {children}
+    </section>
   );
 }
 
@@ -476,9 +566,16 @@ function BookingPanel({
       // `lg:w-105` is the spacing scale's spelling of the Drawer's 420px dock.
       // The slide-in belongs to that docked panel only: on a full-width one it
       // would be 26px of the page hanging off the right edge mid-animation.
+      // And only to a panel that arrives: docked for good on the Book screen
+      // nothing has arrived, and it slid in on every page load regardless.
       // `scroll-mt` keeps the panel's own heading clear of the topbar when a
       // screen scrolls to it; above lg the offset is zero, as is the need.
-      className="bg-surface flex w-full scroll-mt-(--topbar-h) flex-col shadow-[inset_0_1px_0_var(--hair)] lg:sticky lg:h-screen lg:w-105 lg:max-w-[92vw] lg:shrink-0 lg:animate-[plrSlideIn_0.24s_cubic-bezier(0.4,0,0.2,1)] lg:shadow-[inset_1px_0_0_var(--hair),-12px_0_34px_rgba(13,17,23,0.07)]"
+      // The edge's shadow is the Drawer's, slate-tinted.
+      className={`bg-surface flex w-full scroll-mt-(--topbar-h) flex-col shadow-[inset_0_1px_0_var(--hair)] lg:sticky lg:h-screen lg:w-105 lg:max-w-[92vw] lg:shrink-0 lg:shadow-[inset_1px_0_0_var(--hair),var(--shadow-edge)] ${
+        dismissible
+          ? "lg:animate-[plrSlideIn_0.24s_var(--ease-out)] motion-reduce:lg:animate-[plrFade_0.18s_ease]"
+          : ""
+      }`}
       style={{ top: "var(--topbar-h)" }}
     >
       <div
@@ -486,32 +583,25 @@ function BookingPanel({
         style={{ boxShadow: "0 1px 0 var(--hair-soft)" }}
       >
         {icon && (
-          <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-            style={{
-              background: "color-mix(in srgb, var(--slate) 14%, #fff)",
-            }}
-          >
-            <Icon name={icon} size={19} color="var(--slate)" stroke={1.9} />
+          <span className="bg-tint-strong text-slate flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px]">
+            <Icon name={icon} size={19} stroke={1.9} />
           </span>
         )}
+        {/* The Drawer's heading, so the two panels still read as one. */}
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-title text-[19px] font-bold tracking-[-0.02em]">
+          <h2 className="font-display text-title text-lg font-semibold tracking-[-0.015em]">
             {title}
           </h2>
-          {subtitle && (
-            <p className="text-muted mt-0.5 text-[12.5px]">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-muted mt-0.5 text-sm">{subtitle}</p>}
         </div>
         {onClose && (
-          <button
-            type="button"
+          <IconButton
+            icon="x"
+            label="Close"
+            size="sm"
             onClick={onClose}
-            aria-label="Close"
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-8 lg:w-8"
-          >
-            <Icon name="x" size={16} color="var(--muted)" />
-          </button>
+            className="-mt-0.5 -mr-1.5"
+          />
         )}
       </div>
 
@@ -523,9 +613,13 @@ function BookingPanel({
         {children}
       </div>
 
+      {/*
+       * Wraps, so the verdict can share the button's row when both fit and
+       * take a row above it when they do not.
+       */}
       {footer && (
         <div
-          className="bg-surface sticky bottom-0 flex items-center justify-end gap-2.5 px-4 pt-4 pb-5 sm:px-6 lg:static lg:pb-6"
+          className="bg-surface sticky bottom-0 flex flex-wrap items-center justify-end gap-3 px-4 pt-4 pb-5 sm:px-6 lg:static lg:pb-6"
           style={{ boxShadow: "0 -1px 0 var(--hair-soft)" }}
         >
           {footer}
@@ -546,11 +640,9 @@ function CountField({
   onChange: (value: number) => void;
 }) {
   return (
-    <div
-      className="bg-surface flex min-w-0 flex-1 items-center gap-1 rounded-[10px] px-1.5 py-1"
-      style={{ boxShadow: "var(--ring)" }}
-    >
-      <Nudge
+    // The same stepped field as the times, so the two read as one control.
+    <div className={`${STEPPER_FIELD} min-w-0 flex-1`}>
+      <StepButton
         icon="chevronLeft"
         label="One fewer date"
         onClick={value > 1 ? () => onChange(value - 1) : undefined}
@@ -563,46 +655,18 @@ function CountField({
           const next = Number(e.target.value.replace(/\D/g, ""));
           if (Number.isFinite(next) && next > 0) onChange(next);
         }}
-        className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-bold outline-none sm:text-[13px]"
+        // The frame draws the focus ring; 16px on a phone for iOS's sake.
+        className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-semibold tabular-nums outline-none sm:text-sm"
       />
-      <span className="text-faint shrink-0 pr-0.5 text-[11.5px]">
+      <span className="text-faint shrink-0 pr-0.5 text-xs">
         {value === 1 ? "date" : "dates"}
       </span>
-      <Nudge
+      <StepButton
         icon="chevronRight"
         label="One more date"
         onClick={value < max ? () => onChange(value + 1) : undefined}
       />
     </div>
-  );
-}
-
-function Nudge({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: "chevronLeft" | "chevronRight";
-  label: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      aria-label={label}
-      // Wide enough for a thumb until there is a sidebar to prove there is a
-      // mouse, the same trade the calendar's day stepper makes.
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md lg:h-6 lg:w-6"
-      style={{
-        background: "rgba(68,88,121,0.07)",
-        opacity: onClick ? 1 : 0.35,
-        cursor: onClick ? "pointer" : "not-allowed",
-      }}
-    >
-      <Icon name={icon} size={13} color="var(--slate)" stroke={2.2} />
-    </button>
   );
 }
 
@@ -617,23 +681,9 @@ function FeatureChip({
   onToggle: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onToggle}
-      className="plr-clip inline-flex min-h-10 cursor-pointer items-center rounded-full px-3 text-[12px] font-semibold lg:min-h-0 lg:px-2.5 lg:py-1"
-      style={
-        on
-          ? {
-              background: "var(--slate)",
-              color: "#fff",
-              boxShadow: "0 2px 8px rgba(68,88,121,0.28)",
-            }
-          : { color: "var(--muted)", boxShadow: "var(--ring)" }
-      }
-    >
+    <ToggleChip pressed={on} onClick={onToggle}>
       {FEATURE_LABELS[feature]}
-    </button>
+    </ToggleChip>
   );
 }
 

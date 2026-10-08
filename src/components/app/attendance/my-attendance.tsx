@@ -3,7 +3,9 @@
 import { useNow } from "~/components/app/timetable/use-now";
 import { CourseSwatch } from "~/components/ui/course-swatch";
 import { Badge } from "~/components/ui/badge";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { DEFAULT_TIMEZONE, formatFullDate, formatHourLabel } from "~/lib/dates";
 import { type RouterOutputs } from "~/trpc/react";
@@ -36,51 +38,40 @@ export function MyAttendance({ mine }: { mine: Mine }) {
 
   if (courses.length === 0) {
     return (
-      <Card>
-        <p className="text-muted m-0 text-[14px]">
-          You are not in any group yet, so there is nothing to keep attendance
-          for. Your courses are the courses of the groups you belong to — the
-          office adds you to a group and they appear here.
-        </p>
-      </Card>
+      <EmptyState icon="users" title="Not in a group yet">
+        You are not in any group yet, so there is nothing to keep attendance
+        for. Your courses are the courses of the groups you belong to. The
+        office adds you to a group and they appear here.
+      </EmptyState>
     );
   }
 
   return (
     <>
-      <Card
-        pad={18}
-        className="mb-5"
-        style={{
-          boxShadow: `var(--ring), var(--shadow-card), inset 4px 0 0 ${short.length > 0 ? "var(--red)" : "var(--green)"}`,
-        }}
+      {/*
+        The verdict as a callout in its own state: the sentence is what the
+        screen is for, so it leads in the tone's ink and the display face, and
+        the explanation under it drops to ordinary ink. It used to be a card
+        with a 4px stripe down its left, which bent round the card's corner.
+      */}
+      <Callout
+        tone={short.length > 0 ? "bad" : "good"}
+        emphasis
+        title={headline(courses.length, short.length, threshold)}
       >
-        <div className="flex items-start gap-3">
-          <Icon
-            name={short.length > 0 ? "alert" : "checkCircle"}
-            size={20}
-            color={short.length > 0 ? "var(--red)" : "var(--green)"}
-            stroke={2}
-          />
-          <div className="min-w-0">
-            <p className="font-display text-title m-0 text-[17px] font-bold">
-              {headline(courses.length, short.length, threshold)}
-            </p>
-            {short.length > 0 && (
-              <p className="text-muted mt-1 mb-0 text-[13px]">
-                {short.map((course) => course.title).join(", ")}
-              </p>
-            )}
-            <p className="text-faint mt-2 mb-0 text-[12.5px]">
-              A percentage counts only the registers that were actually taken.
-              Open a course to see every lecture, including the ones nobody
-              marked — those count neither for you nor against you.
-            </p>
-          </div>
-        </div>
-      </Card>
+        {short.length > 0 && (
+          <p className="text-title font-medium">
+            {short.map((course) => course.title).join(", ")}
+          </p>
+        )}
+        <p className="text-muted mt-1 max-w-[72ch] text-xs">
+          A percentage counts only the registers that were actually taken. Open
+          a course to see every lecture, including the ones nobody marked. Those
+          count neither for you nor against you.
+        </p>
+      </Callout>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         {ordered.map((course) => (
           <CourseCard
             key={course.id}
@@ -116,7 +107,6 @@ function CourseCard({
   now: Date;
 }) {
   const ok = course.percentage !== null && course.percentage >= threshold;
-  const colour = ok ? "var(--green)" : "var(--red)";
   const verdict = standing(course, threshold);
   const missed = course.register.filter((s) => s.status === "ABSENT").length;
 
@@ -131,56 +121,63 @@ function CourseCard({
         */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-2">
           <div className="min-w-0">
-            <h3 className="font-display text-title m-0 flex items-center gap-2 text-[17px] font-bold">
+            <h3 className="font-display text-title text-md flex items-center gap-2 font-semibold tracking-[-0.01em]">
               <CourseSwatch title={course.title} size={14} />
               <span className="min-w-0 truncate">{course.title}</span>
             </h3>
-            <p className="text-faint mt-0.5 mb-0 font-mono text-[12px]">
-              {course.code ?? "no paper code"}
+            {course.code ? (
+              <p className="text-faint mt-0.5 font-mono text-xs">
+                {course.code}
+              </p>
+            ) : (
+              <p className="text-faint mt-0.5 text-xs">No paper code</p>
+            )}
+          </div>
+          {course.percentage === null ? (
+            // No register yet is a fact about the college's records, not a
+            // score: said in words where the number would be, rather than as
+            // a large grey dash over "0 attended of 0 taken".
+            <p className="text-muted text-sm font-semibold sm:pt-1">
+              No registers yet
             </p>
-          </div>
-          <div className="sm:text-right">
-            <div
-              className="font-display text-[30px] leading-none font-bold tracking-[-0.02em]"
-              style={{
-                color: course.percentage === null ? "var(--faint)" : colour,
-              }}
-            >
-              {course.percentage === null ? "—" : `${course.percentage}%`}
+          ) : (
+            <div className="sm:text-right">
+              <div
+                className={`font-display text-2xl leading-none font-semibold tracking-[-0.02em] tabular-nums ${
+                  ok ? "text-good" : "text-bad"
+                }`}
+              >
+                {course.percentage}%
+              </div>
+              <div className="text-muted mt-1.5 text-xs tabular-nums">
+                {course.attended} attended of {course.conducted} taken
+              </div>
             </div>
-            <div className="text-muted mt-1.5 text-[12.5px]">
-              {course.attended} attended of {course.conducted} taken
-            </div>
-          </div>
+          )}
         </div>
 
         <Meter percentage={course.percentage} threshold={threshold} />
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          {course.percentage !== null && (
-            <Badge tone={ok ? "green" : "red"} dot>
-              {ok ? `At or above ${threshold}%` : `Below ${threshold}%`}
-            </Badge>
-          )}
-          <span className="text-muted text-[12.5px]">
-            {course.conducted === 0
-              ? "No register taken yet"
-              : `${course.conducted} ${course.conducted === 1 ? "register" : "registers"} taken`}{" "}
-            · {course.scheduled} scheduled this semester
-          </span>
-        </div>
+        {/*
+          No "Below 75%" badge here any more: the figure, the bar and the pass
+          mark drawn on it already say so, and a short course was saying it in
+          red five times over. The sentence below is the one red line that
+          says what to do.
+        */}
+        <p className="text-muted mt-3 text-xs">
+          {course.conducted === 0
+            ? "No register taken yet"
+            : `${course.conducted} ${course.conducted === 1 ? "register" : "registers"} taken`}{" "}
+          · {course.scheduled} scheduled this semester
+        </p>
 
         {verdict && (
-          <p
-            className="mt-3 mb-0 rounded-[10px] px-3.5 py-2.5 text-[13px] font-semibold"
-            style={
-              verdict.tone === "red"
-                ? { background: "rgba(220,56,72,0.10)", color: "#b02636" }
-                : { background: "rgba(68,88,121,0.08)", color: "#324464" }
-            }
+          <Callout
+            tone={verdict.tone === "red" ? "bad" : "info"}
+            className="mt-3"
           >
             {verdict.text}
-          </p>
+          </Callout>
         )}
       </div>
 
@@ -192,16 +189,18 @@ function CourseCard({
           screen-reader-operable without any ARIA of ours, and it survives a
           page that has not hydrated yet.
         */}
-          <summary
-            className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-4 py-2.5 sm:px-5 lg:min-h-0 [&::-webkit-details-marker]:hidden"
-            style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
-          >
+          {/*
+            The closed summary is the card's last edge, so its hover wash takes
+            the card's bottom corners; open, the records follow and it squares.
+          */}
+          <summary className="hover:bg-tint-hover flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-b-[var(--radius-card)] px-4 py-2.5 shadow-[inset_0_1px_0_var(--hair-soft)] transition-colors duration-150 group-open:rounded-none sm:px-5 [&::-webkit-details-marker]:hidden">
             <Icon
               name="chevronDown"
               size={14}
-              className="text-faint shrink-0 transition-transform duration-150 group-open:rotate-180"
+              stroke={2}
+              className="text-muted shrink-0 transition-transform duration-150 ease-out group-open:rotate-180 motion-reduce:transition-none"
             />
-            <span className="text-muted text-[12.5px] font-semibold">
+            <span className="text-muted text-sm font-semibold">
               {course.register.length}{" "}
               {course.register.length === 1 ? "lecture" : "lectures"}
             </span>
@@ -210,15 +209,12 @@ function CourseCard({
             and an absence is the only thing anybody opens this for.
           */}
             {missed > 0 && (
-              <span
-                className="text-[12.5px] font-semibold"
-                style={{ color: "var(--red)" }}
-              >
+              <span className="text-bad text-sm font-semibold">
                 · {missed} missed
               </span>
             )}
-            <span className="text-faint ml-auto font-mono text-[11.5px]">
-              most recent first
+            <span className="text-faint ml-auto text-xs">
+              Most recent first
             </span>
           </summary>
 
@@ -239,30 +235,29 @@ function CourseCard({
               */
               <div
                 key={sitting.occurrenceId}
-                className="flex items-center gap-x-4 gap-y-1 px-4 py-2.5 sm:flex-wrap sm:px-5"
-                style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
+                className="flex items-center gap-x-4 gap-y-1 px-4 py-2.5 shadow-[inset_0_1px_0_var(--hair-soft)] sm:flex-wrap sm:px-5"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:contents">
                   <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 sm:contents">
-                    <span className="text-title text-[13px] font-semibold sm:w-[130px] sm:shrink-0">
+                    <span className="text-title text-sm font-semibold sm:w-[130px] sm:shrink-0">
                       {formatFullDate(sitting.start, DEFAULT_TIMEZONE)}
                     </span>
-                    <span className="text-muted font-mono text-[12px] sm:w-[112px] sm:shrink-0">
-                      {formatHourLabel(sitting.start, DEFAULT_TIMEZONE)}–
+                    <span className="text-muted font-mono text-xs sm:w-[112px] sm:shrink-0">
+                      {formatHourLabel(sitting.start, DEFAULT_TIMEZONE)}-
                       {formatHourLabel(sitting.end, DEFAULT_TIMEZONE)}
                     </span>
                   </div>
-                  <span className="text-muted truncate text-[12.5px] sm:min-w-0 sm:flex-1">
+                  <span className="text-muted truncate text-sm sm:min-w-0 sm:flex-1">
                     {[sitting.room, sitting.faculty]
                       .filter(Boolean)
-                      .join(" · ") || "room and teacher not recorded"}
+                      .join(" · ") || "Room and teacher not recorded"}
                   </span>
                 </div>
                 <div className="shrink-0 sm:contents">
                   {meta ? (
                     <Badge tone={meta.badge}>{meta.label}</Badge>
                   ) : (
-                    <span className="text-faint text-[12px] font-semibold">
+                    <span className="text-faint text-xs font-semibold">
                       {sitting.start > now
                         ? "Yet to happen"
                         : "No register taken"}
@@ -295,19 +290,15 @@ function Meter({
           ? `No registers taken yet; the pass mark is ${threshold}%`
           : `${percentage}% attended against a ${threshold}% pass mark`
       }
-      className="relative mt-4 h-2 w-full rounded-full"
-      style={{ background: "rgba(68,88,121,0.12)" }}
+      className="bg-tint-strong relative mt-4 h-2 w-full rounded-full"
     >
       <div
-        className="h-2 rounded-full"
-        style={{
-          width: `${Math.min(100, percentage ?? 0)}%`,
-          background: ok ? "var(--green)" : "var(--red)",
-        }}
+        className={`h-2 rounded-full ${ok ? "bg-green" : "bg-red"}`}
+        style={{ width: `${Math.min(100, percentage ?? 0)}%` }}
       />
       <span
-        className="absolute -top-1 h-4 w-[2px] rounded-full"
-        style={{ left: `${threshold}%`, background: "var(--slate)" }}
+        className="bg-slate absolute -top-1 h-4 w-[2px] rounded-full"
+        style={{ left: `${threshold}%` }}
       />
     </div>
   );

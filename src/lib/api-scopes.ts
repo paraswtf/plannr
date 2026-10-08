@@ -136,7 +136,7 @@ export function denyScopeGrant(
 export function scopeDenialMessage(denial: ScopeDenial): string {
   switch (denial.reason) {
     case "EMPTY":
-      return "A key needs at least one scope — one that can do nothing is not a credential, it is a liability.";
+      return "A key needs at least one scope: one that can do nothing is not a credential, it is a liability.";
     case "ADMINISTRATOR":
       return "Administrator cannot be granted to a key. It would widen the app's access with every future release. Tick the specific scopes it needs instead.";
     case "UNKNOWN_SCOPE":

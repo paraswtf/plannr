@@ -9,7 +9,7 @@ import { api } from "~/trpc/server";
 export const metadata: Metadata = {
   title: "Schedule",
   description:
-    "Your day, in the order it happens — the classes you attend, the ones you take, or both.",
+    "Your day, in the order it happens: the classes you attend, the ones you take, or both.",
 };
 
 export default async function SchedulePage() {

@@ -3,15 +3,20 @@
 import { useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
+import { Button, IconButton } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
 import { Dialog } from "~/components/ui/dialog";
+import { EmptyState } from "~/components/ui/empty-state";
 import {
   pickerPage,
   SearchSelect,
   useDebounced,
 } from "~/components/ui/entity-picker";
-import { Icon } from "~/components/ui/icon";
+import { Field, Input } from "~/components/ui/field";
+import { Skeleton } from "~/components/ui/skeleton";
 import { api } from "~/trpc/react";
+import { DeleteZone } from "./delete-zone";
 import { programmeCard } from "./entity-cards";
 import { GROUP_KINDS, KIND_LABEL, KIND_TONE } from "./group-vocab";
 
@@ -27,12 +32,23 @@ export function BatchesPanel({
   query,
   canManage,
   onOpenGroup,
+  creating: creatingProp,
+  onCreatingChange,
 }: {
   query: string;
   canManage: boolean;
   onOpenGroup: (groupId: string) => void;
+  /**
+   * Whether the new-batch dialog is open, for a parent that draws the create
+   * button in its own toolbar (the Groups screen does). Left out, the panel
+   * draws its own button and keeps the state itself.
+   */
+  creating?: boolean;
+  onCreatingChange?: (creating: boolean) => void;
 }) {
-  const [creating, setCreating] = useState(false);
+  const [ownCreating, setOwnCreating] = useState(false);
+  const creating = creatingProp ?? ownCreating;
+  const setCreating = onCreatingChange ?? setOwnCreating;
   const [editing, setEditing] = useState<string | null>(null);
   const utils = api.useUtils();
 
@@ -44,61 +60,101 @@ export function BatchesPanel({
 
   return (
     <>
-      {canManage && (
+      {canManage && !onCreatingChange && (
         <div className="mb-4 flex justify-end">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            icon="plus"
             onClick={() => setCreating(true)}
-            className="min-h-10 cursor-pointer rounded-[var(--radius-btn)] px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-            style={{ background: "var(--grad-brand)" }}
           >
-            + New batch
-          </button>
+            New batch
+          </Button>
         </div>
       )}
 
       {rows.length === 0 ? (
-        <Card>
-          <p className="text-muted m-0 text-[14px]">
-            {batches.isLoading
-              ? "Loading…"
-              : query
-                ? "No batches match that search."
-                : "No batches yet. A batch is one year's intake for a course, e.g. “23-27 BBA-IT”."}
-          </p>
-        </Card>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {rows.map((batch) => (
-            <Card key={batch.id} pad={18} className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="font-display text-title text-[17px] font-bold">
-                  {batch.name}
-                </span>
-                <Badge tone="orange">{batch.courseCode}</Badge>
-                <span className="text-faint font-mono text-[12px]">
-                  {batch.startYear}–{batch.endYear}
-                </span>
-                <Badge tone="green" dot>
-                  {batch.studentCount} students
-                </Badge>
-                {canManage && (
-                  <button
-                    type="button"
-                    aria-label={`Edit ${batch.name}`}
-                    onClick={() => setEditing(batch.id)}
-                    // A 28px chip is fine under a mouse and too small for a
-                    // thumb, so the chip itself grows where there is no mouse.
-                    className="ml-auto flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
-                    style={{ background: "rgba(68,88,121,0.07)" }}
+        batches.isLoading ? (
+          <Card pad={0} className="overflow-hidden">
+            <div role="status" aria-label="Loading batches">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div
+                  key={i}
+                  className={`flex flex-col gap-3 px-4 py-4 sm:px-5 ${
+                    i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""
+                  }`}
+                >
+                  <Skeleton className="h-4 w-32" />
+                  <span className="flex gap-2">
+                    <Skeleton className="h-8 w-36" />
+                    <Skeleton className="h-8 w-36" />
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <EmptyState
+              icon="users"
+              title={query ? "No batches match that search" : "No batches yet"}
+              action={
+                canManage && !query ? (
+                  <Button
+                    variant="primary"
+                    icon="plus"
+                    onClick={() => setCreating(true)}
                   >
-                    <Icon
-                      name="settings"
-                      size={13}
-                      color="var(--slate)"
-                      stroke={2}
-                    />
-                  </button>
+                    New batch
+                  </Button>
+                ) : undefined
+              }
+            >
+              {query
+                ? undefined
+                : "A batch is one year’s intake for a programme, e.g. “23-27 BBA-IT”."}
+            </EmptyState>
+          </Card>
+        )
+      ) : (
+        // One card with a hairline between intakes, not a card per intake:
+        // fourteen stacked elevated boxes said "fourteen separate things",
+        // where this is one list whose entries happen to have children.
+        <Card pad={0} className="overflow-hidden">
+          {rows.map((batch, i) => (
+            <section
+              key={batch.id}
+              aria-label={batch.name}
+              className={`flex flex-col gap-3 px-4 py-4 sm:px-5 ${
+                i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""
+              }`}
+            >
+              {/* Two columns, so the gear has a corner of its own: on one
+                  wrapping line it landed beside the badge on some intakes and
+                  alone on a second line on others, depending on the name. */}
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
+                    {batch.name}
+                  </h3>
+                  {/* The name already says the programme and the years in
+                      short; this line says them in full, once, beside the
+                      headcount, instead of three badges restating the name. */}
+                  <p className="text-muted mt-0.5 text-xs">
+                    {batch.courseCode}, {batch.startYear}-{batch.endYear},{" "}
+                    <span className="font-mono tabular-nums">
+                      {batch.studentCount}
+                    </span>{" "}
+                    {batch.studentCount === 1 ? "student" : "students"}
+                  </p>
+                </div>
+                {canManage && (
+                  <IconButton
+                    icon="settings"
+                    label={`Edit ${batch.name}`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(batch.id)}
+                  />
                 )}
               </div>
 
@@ -109,29 +165,28 @@ export function BatchesPanel({
                       key={group.id}
                       type="button"
                       onClick={() => onOpenGroup(group.id)}
-                      className="plr-clip bg-surface flex min-h-10 max-w-full cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left lg:min-h-0"
-                      style={{ boxShadow: "var(--ring)" }}
+                      className="plr-clip bg-surface hover:bg-surface-hover flex min-h-10 max-w-full cursor-pointer items-center gap-2 rounded-[10px] py-1.5 pr-3 pl-1.5 text-left shadow-[inset_0_0_0_1px_var(--card-ring)] hover:shadow-[inset_0_0_0_1px_var(--field-line-hover)] active:scale-[0.97] lg:min-h-9"
                     >
                       <Badge tone={KIND_TONE[group.kind]}>
                         {KIND_LABEL[group.kind]}
                       </Badge>
-                      <span className="text-title min-w-0 truncate text-[12.5px] font-semibold">
+                      <span className="text-title min-w-0 truncate text-sm font-semibold">
                         {group.label}
                       </span>
-                      <span className="text-faint shrink-0 font-mono text-[11.5px]">
+                      <span className="text-faint shrink-0 font-mono text-xs tabular-nums">
                         {group.studentCount}
                       </span>
                     </button>
                   ))}
                 </div>
               ) : (
-                <p className="text-faint m-0 text-[12.5px]">
-                  Nothing under this batch yet — add a group and file it here.
+                <p className="text-muted text-sm">
+                  Nothing under this batch yet. Add a group and file it here.
                 </p>
               )}
-            </Card>
+            </section>
           ))}
-        </div>
+        </Card>
       )}
 
       {creating && (
@@ -179,7 +234,6 @@ function BatchDialog({
   const [programmeQuery, setProgrammeQuery] = useState("");
   const [coursePageSize, setCoursePageSize] = useState(20);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const courses = api.groups.programmeList.useQuery({
     query: useDebounced(programmeQuery) || undefined,
@@ -229,16 +283,11 @@ function BatchDialog({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!ready || saving}
             onClick={() => {
               setError(null);
@@ -251,133 +300,95 @@ function BatchDialog({
               if (batch) update.mutate({ id: batch.id, ...input });
               else create.mutate(input);
             }}
-            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: ready && !saving ? 1 : 0.5,
-              cursor: ready && !saving ? "pointer" : "not-allowed",
-            }}
           >
             {saving ? "Saving…" : batch ? "Save changes" : "Create batch"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-4">
         {error && (
-          <div
-            className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
-            style={{
-              background: "rgba(220,56,72,0.07)",
-              boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-            }}
-          >
+          <Callout tone="bad" role="alert">
             {error}
-          </div>
+          </Callout>
         )}
 
-        <Field label="Course">
-          <SearchSelect
-            value={selectedProgramme ? programmeCard(selectedProgramme) : null}
-            onChange={(id) => setCourseId(id ?? "")}
-            page={pickerPage(courses.data, (rows) => rows.map(programmeCard))}
-            loading={courses.isLoading}
-            query={programmeQuery}
-            onQueryChange={setProgrammeQuery}
-            onLoadMore={() => setCoursePageSize((n) => n + 20)}
-            placeholder="Search courses…"
-            listId="batch-course"
-          />
+        <Field label="Programme">
+          {(id) => (
+            <SearchSelect
+              id={id}
+              value={
+                selectedProgramme ? programmeCard(selectedProgramme) : null
+              }
+              onChange={(id) => setCourseId(id ?? "")}
+              page={pickerPage(courses.data, (rows) => rows.map(programmeCard))}
+              loading={courses.isLoading}
+              query={programmeQuery}
+              onQueryChange={setProgrammeQuery}
+              onLoadMore={() => setCoursePageSize((n) => n + 20)}
+              placeholder="Search programmes…"
+              listId="batch-course"
+            />
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Starts">
-            <input
-              value={startYear}
-              inputMode="numeric"
-              onChange={(e) => setStartYear(e.target.value)}
-              // 16px on a phone: below that, Safari zooms the page in as the
-              // field takes focus, which on a dialog leaves it half off screen.
-              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-              style={{ boxShadow: "var(--ring)" }}
-            />
+            {(id) => (
+              <Input
+                id={id}
+                value={startYear}
+                inputMode="numeric"
+                onChange={(e) => setStartYear(e.target.value)}
+                className="font-mono tabular-nums"
+              />
+            )}
           </Field>
           <Field label="Finishes">
-            <input
-              value={endYear}
-              inputMode="numeric"
-              onChange={(e) => setEndYear(e.target.value)}
-              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-              style={{ boxShadow: "var(--ring)" }}
-            />
+            {(id) => (
+              <Input
+                id={id}
+                value={endYear}
+                inputMode="numeric"
+                onChange={(e) => setEndYear(e.target.value)}
+                className="font-mono tabular-nums"
+              />
+            )}
           </Field>
         </div>
 
         <Field label="Name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. 23-27 BBA-IT"
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-          {suggested && suggested !== name && (
-            <button
-              type="button"
-              onClick={() => setName(suggested)}
-              className="text-slate inline-flex min-h-10 items-center self-start text-[12px] font-semibold lg:min-h-0"
-            >
-              Use “{suggested}”
-            </button>
+          {(id) => (
+            <>
+              <Input
+                id={id}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. 23-27 BBA-IT"
+              />
+              {suggested && suggested !== name && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => setName(suggested)}
+                >
+                  Use “{suggested}”
+                </Button>
+              )}
+            </>
           )}
         </Field>
 
         {batch && (
-          <div
-            className="mt-1 rounded-xl p-3"
-            style={{ boxShadow: "inset 0 0 0 1px var(--hair)" }}
+          <DeleteZone
+            subject={batch.name}
+            pending={remove.isPending}
+            onDelete={() => remove.mutate({ id: batch.id })}
           >
-            {!confirmDelete ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-muted text-[12.5px]">
-                  Deleting the batch leaves its groups in place; they simply
-                  stop belonging to an intake.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="min-h-10 shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-[#b02636] lg:min-h-0"
-                  style={{ boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)" }}
-                >
-                  Delete
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-ink text-[12.5px]">
-                  Delete {batch.name}?
-                </span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="text-muted min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold lg:min-h-0"
-                  >
-                    Keep
-                  </button>
-                  <button
-                    type="button"
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate({ id: batch.id })}
-                    className="min-h-10 cursor-pointer rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white lg:min-h-0"
-                    style={{ background: "var(--red)" }}
-                  >
-                    {remove.isPending ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+            Deleting the batch leaves its groups in place; they simply stop
+            belonging to an intake.
+          </DeleteZone>
         )}
       </div>
     </Dialog>
@@ -389,18 +400,3 @@ export const KIND_OPTIONS = GROUP_KINDS.map((kind) => ({
   value: kind,
   label: KIND_LABEL[kind],
 }));
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
-      {children}
-    </div>
-  );
-}

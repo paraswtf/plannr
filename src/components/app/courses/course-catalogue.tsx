@@ -3,10 +3,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { CourseSwatch } from "~/components/ui/course-swatch";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
+import { Input } from "~/components/ui/field";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
@@ -109,13 +112,13 @@ export function CourseCatalogue({
         }
       />
 
-      <div className="px-4 pt-2 pb-8 sm:px-6 lg:px-9 lg:pb-10">
+      <PageBody>
         {!catalogue.semester ? (
           <Card>
-            <p className="text-muted m-0 text-[14px]">
+            <EmptyState icon="book" title="No semester yet">
               No semester has been set up yet, so there is nothing being taught.
               Create one before adding courses.
-            </p>
+            </EmptyState>
           </Card>
         ) : (
           <>
@@ -123,21 +126,16 @@ export function CourseCatalogue({
               {/* The search takes the whole width on a phone and the filters
                   share the line under it: a 288px box beside a 224px one needs
                   more room than the screen has. */}
-              <div className="relative w-full sm:w-72">
-                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-                  <Icon name="search" size={15} color="var(--faint)" />
-                </span>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by title, code or programme…"
-                  // 16px on a phone: below that, Safari zooms the page in as
-                  // the field takes focus, and a zoomed page is one that
-                  // scrolls sideways.
-                  className="bg-surface min-h-10 w-full rounded-[10px] py-2 pr-3 pl-9 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-                  style={{ boxShadow: "var(--ring)" }}
-                />
-              </div>
+              <Input
+                icon="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by title, code or programme…"
+                // The placeholder goes the moment something is typed, so the
+                // field's name is said separately.
+                aria-label="Search courses"
+                className="w-full sm:w-72"
+              />
 
               {/* The floor is what "All programmes" needs before its own
                   truncation starts eating it, so sharing the line with the
@@ -185,13 +183,14 @@ export function CourseCatalogue({
                   value={staffing}
                   onChange={setStaffing}
                   size="sm"
+                  ariaLabel="Staffing"
                 />
               )}
 
               {/* The tally would otherwise squeeze onto the filters' line and
                   crush both of them, so on a phone it takes a line of its own
                   and keeps the right edge it has beside them. */}
-              <span className="text-faint w-full text-right font-mono text-[12px] sm:ml-auto sm:w-auto">
+              <span className="text-faint w-full text-right font-mono text-xs tabular-nums sm:ml-auto sm:w-auto">
                 {shown === catalogue.rows.length
                   ? countLabel(shown, "course")
                   : `${shown} of ${catalogue.rows.length}`}
@@ -200,29 +199,50 @@ export function CourseCatalogue({
 
             {sections.length === 0 ? (
               <Card>
-                <p className="text-muted m-0 text-[14px]">
-                  {needle
-                    ? "No courses match that search."
-                    : "No courses match those filters."}
-                </p>
+                <EmptyState
+                  compact
+                  icon="search"
+                  title={
+                    needle
+                      ? "No courses match that search"
+                      : "No courses match those filters"
+                  }
+                />
               </Card>
             ) : (
               sections.map(([key, section]) => (
                 <section key={key} className="mb-6 last:mb-0">
                   <div className="mb-2 flex flex-wrap items-baseline gap-2.5 px-1">
-                    <h2 className="font-display text-title text-[15px] font-bold">
+                    <h2 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
                       {section.programme?.code ?? "No programme"}
                     </h2>
-                    <span className="text-muted text-[12.5px]">
+                    <span className="text-muted text-sm">
                       {section.programme?.name ??
                         "Taught this semester but not filed under one"}
                     </span>
-                    <span className="text-faint ml-auto font-mono text-[12px]">
+                    <span className="text-faint ml-auto font-mono text-xs tabular-nums">
                       {countLabel(section.courses.length, "course")}
                     </span>
                   </div>
 
-                  <Card pad={0}>
+                  <Card pad={0} className="overflow-hidden">
+                    {/* Column heads over the fixed columns, so the cells can
+                        carry bare numbers: "3 groups / 1 teacher / 2 lectures"
+                        on every row was a grey band of repeated nouns that
+                        hid the one cell that matters, "No teacher". The
+                        widths and gaps are the row's own, so a head sits
+                        exactly over its column; a phone has no columns, and
+                        keeps the nouns. */}
+                    <div
+                      aria-hidden
+                      className="text-muted text-2xs hidden items-center gap-x-3 px-4 py-2 font-semibold shadow-[inset_0_-1px_0_var(--hair-soft)] sm:flex"
+                    >
+                      <span className="flex-1">Course</span>
+                      <span className="w-[76px] text-right">Groups</span>
+                      <span className="w-[104px] text-right">Teachers</span>
+                      <span className="w-[88px] text-right">Lectures</span>
+                      <span className="w-[14px]" />
+                    </div>
                     {section.courses.map((course, i) => (
                       <Link
                         key={course.id}
@@ -234,19 +254,19 @@ export function CourseCatalogue({
                         // two groups flatten back into the one row of columns,
                         // their inner gap matching the outer one so the
                         // grouping is invisible.
-                        className="plr-clip plr-slotcol flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5"
-                        style={
-                          i > 0
-                            ? { boxShadow: "inset 0 1px 0 var(--hair-soft)" }
-                            : undefined
-                        }
+                        //
+                        // The focus outline is drawn inside the row, since the
+                        // card clips at its rounded corners.
+                        className={`plr-clip plr-slotcol flex flex-col gap-1.5 px-4 py-3 focus-visible:-outline-offset-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:py-2.5 ${i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""}`}
                       >
                         <span className="flex min-w-0 items-center gap-3 sm:flex-1">
                           <CourseSwatch title={course.title} />
-                          <span className="text-faint w-[72px] shrink-0 truncate font-mono text-[12px]">
-                            {course.code ?? "—"}
+                          {/* A course with no paper code leaves the cell
+                              empty rather than printing a dash for it. */}
+                          <span className="text-faint w-[72px] shrink-0 truncate font-mono text-xs">
+                            {course.code ?? ""}
                           </span>
-                          <span className="text-title min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+                          <span className="text-title min-w-0 flex-1 truncate text-base font-semibold">
                             {course.title}
                           </span>
                           {/* The affordance belongs at the end of the line the
@@ -263,23 +283,27 @@ export function CourseCatalogue({
                         </span>
 
                         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:shrink-0 sm:flex-nowrap">
-                          <span className="text-muted shrink-0 font-mono text-[12px] sm:w-[76px] sm:text-right">
-                            {countLabel(course._count.groups, "group")}
-                          </span>
-                          <span className="shrink-0 sm:w-[104px] sm:text-right">
+                          <Count
+                            n={course._count.groups}
+                            noun="group"
+                            className="sm:w-[76px]"
+                          />
+                          <span className="flex shrink-0 items-center sm:w-[104px] sm:justify-end">
+                            {/* The glyph carries the warning as well as the
+                                red, so it does not rest on colour alone. */}
                             {course._count.faculty === 0 ? (
-                              <Badge tone="red" dot>
+                              <Badge tone="red" icon="alert">
                                 No teacher
                               </Badge>
                             ) : (
-                              <span className="text-muted font-mono text-[12px]">
-                                {countLabel(course._count.faculty, "teacher")}
-                              </span>
+                              <Count n={course._count.faculty} noun="teacher" />
                             )}
                           </span>
-                          <span className="text-muted shrink-0 font-mono text-[12px] sm:w-[88px] sm:text-right">
-                            {countLabel(course._count.events, "lecture")}
-                          </span>
+                          <Count
+                            n={course._count.events}
+                            noun="lecture"
+                            className="sm:w-[88px]"
+                          />
                         </span>
 
                         <Icon
@@ -296,7 +320,35 @@ export function CourseCatalogue({
             )}
           </>
         )}
-      </div>
+      </PageBody>
     </>
+  );
+}
+
+/**
+ * A count in one of the row's columns: "3 groups" on a phone, where it is a
+ * phrase in a line of them, and a bare "3" under its column head from sm.
+ */
+function Count({
+  n,
+  noun,
+  className = "",
+}: {
+  n: number;
+  noun: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`text-muted shrink-0 font-mono text-xs tabular-nums sm:text-right ${className}`}
+    >
+      <span className="sm:hidden">{countLabel(n, noun)}</span>
+      {/* The head above names the column visually; the noun stays for a
+          screen reader, which reads the row as one link and never sees it. */}
+      <span className="hidden sm:inline">
+        {n}
+        <span className="sr-only"> {n === 1 ? noun : `${noun}s`}</span>
+      </span>
+    </span>
   );
 }

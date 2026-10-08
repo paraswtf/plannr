@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Icon } from "~/components/ui/icon";
+import { IconButton } from "~/components/ui/button";
 import {
   formatMinutesOfDay,
   minutesOfDay,
@@ -29,6 +29,28 @@ const PERIODS: Period[] = ["am", "pm"];
 
 const to24 = (hour12: number, period: Period) =>
   (hour12 % 12) + (period === "pm" ? 12 : 0);
+
+/**
+ * The frame a stepped value sits in: the time here, the number of dates in the
+ * booking panel's repeat options.
+ *
+ * It is the field's own look (`fieldClass`), drawn on a box rather than on the
+ * input, because the input is only the middle of it: the nudges and the picker
+ * toggle live inside the same ring. So the focus ring answers to the input
+ * inside being focused (`has-[input:focus]`) rather than to the box, which can
+ * never be focused itself, and it stays lit while the picker hangs open, the
+ * way a picker trigger's does. A nudge focused from the keyboard keeps the
+ * global outline of its own and does not light the whole field.
+ *
+ * 4px of padding around 28px controls makes it 36px tall from `lg`, the height
+ * of every other field in the panel; below that the controls are thumb-sized
+ * and the field grows to fit them.
+ */
+export const STEPPER_FIELD =
+  "bg-field flex items-center gap-1 rounded-[var(--radius-btn)] p-1 shadow-[inset_0_0_0_1px_var(--field-line)] transition-[box-shadow] duration-150 ease-out hover:shadow-[inset_0_0_0_1px_var(--field-line-hover)] has-[input:focus]:shadow-[inset_0_0_0_1.5px_var(--focus),0_0_0_3px_var(--focus-halo)] has-[[aria-expanded=true]]:shadow-[inset_0_0_0_1.5px_var(--focus),0_0_0_3px_var(--focus-halo)]";
+
+/** The label above a stepped field, in the shared field label's type. */
+export const FIELD_LABEL = "text-title text-xs font-semibold";
 
 export function TimeField({
   label,
@@ -143,12 +165,9 @@ export function TimeField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
+      <span className={FIELD_LABEL}>{label}</span>
       <div className="relative" ref={boxRef}>
-        <div
-          className="bg-surface flex items-center gap-1 rounded-[10px] px-1.5 py-1.5"
-          style={{ boxShadow: "var(--ring)", opacity: disabled ? 0.5 : 1 }}
-        >
+        <div className={`${STEPPER_FIELD} ${disabled ? "opacity-50" : ""}`}>
           {onStep && (
             <StepButton
               icon="chevronLeft"
@@ -194,20 +213,24 @@ export function TimeField({
                 }
               }
             }}
-            className="text-title min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-bold outline-none sm:text-[13px]"
+            // The field's frame draws the focus ring, so the input itself opts
+            // out of the global outline. 16px on a phone, where iOS zooms into
+            // anything smaller; semibold rather than bold, because the time
+            // was the heaviest type on the form and louder than the room.
+            className="text-title placeholder:text-placeholder min-w-0 flex-1 bg-transparent text-center font-mono text-[16px] font-semibold tabular-nums outline-none sm:text-sm"
           />
 
-          <button
-            type="button"
+          <IconButton
+            variant="ghost"
+            size="xs"
+            icon="chevronDown"
+            iconSize={13}
             disabled={disabled}
-            aria-label={`Choose ${label.toLowerCase()}`}
+            label={`Choose ${label.toLowerCase()}`}
             aria-haspopup="listbox"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md lg:h-6 lg:w-5"
-          >
-            <Icon name="chevronDown" size={12} color="var(--muted)" />
-          </button>
+          />
 
           {onStep && (
             <StepButton
@@ -232,8 +255,9 @@ export function TimeField({
             ref={listRef}
             // Never wider than the narrowest field it hangs off — 180px in the
             // docked booking panel — or the panel gains a sideways scrollbar.
-            className="bg-surface absolute z-30 mt-1 flex w-full min-w-[168px] gap-1 rounded-[10px] p-1.5"
-            style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+            // A raised panel, like every other picker's: the 12px corner less
+            // its 6px of padding is the 6px each option is rounded to.
+            className="bg-surface absolute z-30 mt-1 flex w-full min-w-[168px] gap-1 rounded-[12px] p-1.5 shadow-[var(--ring),var(--shadow-md)]"
             onClick={(e) => e.preventDefault()}
           >
             <Column label="Hour">
@@ -266,7 +290,7 @@ export function TimeField({
               ))}
             </Column>
 
-            <Column label="AM/PM">
+            <Column label="AM/PM" heading="am/pm">
               {PERIODS.map((p) => (
                 <Cell
                   key={p}
@@ -292,15 +316,23 @@ export const clampMinutes = (value: number, low: number, high: number) =>
 /** One scrolling column of the picker. */
 function Column({
   label,
+  heading = label,
   children,
 }: {
+  /** The listbox's accessible name. */
   label: string;
+  /**
+   * What the column says above itself, when that should differ from the
+   * name: the cells read "am" and "pm", so the head does too.
+   */
+  heading?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="min-w-0 flex-1">
-      <div className="text-faint pb-1 text-center font-mono text-[10px] font-bold tracking-wider uppercase">
-        {label}
+      {/* Sentence case in the body face: a small head, not a mono stamp. */}
+      <div className="text-2xs text-muted pb-1 text-center font-semibold">
+        {heading}
       </div>
       <div
         role="listbox"
@@ -334,20 +366,24 @@ function Cell({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onPick}
-      className="flex min-h-10 shrink-0 items-center justify-center rounded-lg font-mono text-[12.5px] font-semibold lg:min-h-0 lg:py-1"
-      style={{
-        background: current ? "var(--slate)" : "transparent",
-        color: current ? "#fff" : "var(--app-title)",
-        opacity: disabled ? 0.3 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
+      // The chosen value is the selected row of every other list in the app:
+      // a slate wash with slate ink, not a solid slate block.
+      className={`flex min-h-10 shrink-0 items-center justify-center rounded-[6px] font-mono text-sm font-semibold tabular-nums transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 lg:py-1 ${
+        current
+          ? "bg-tint-selected text-slate-ink"
+          : "text-title enabled:hover:bg-tint-hover cursor-pointer"
+      }`}
     >
       {children}
     </button>
   );
 }
 
-function StepButton({
+/**
+ * A quarter hour earlier or later, or one date fewer or more: the nudge either
+ * side of a stepped field. Disabled by leaving out `onClick`.
+ */
+export function StepButton({
   icon,
   label,
   onClick,
@@ -357,21 +393,14 @@ function StepButton({
   onClick?: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      variant="quiet"
+      size="xs"
+      icon={icon}
+      label={label}
       onClick={onClick}
       disabled={!onClick}
-      aria-label={label}
-      // A 24px chip is fine under a mouse and hopeless under a thumb, so it
-      // only shrinks to that where a sidebar proves we are on a desktop.
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md lg:h-6 lg:w-6"
-      style={{
-        background: "rgba(68,88,121,0.07)",
-        opacity: onClick ? 1 : 0.35,
-        cursor: onClick ? "pointer" : "not-allowed",
-      }}
-    >
-      <Icon name={icon} size={13} color="var(--slate)" stroke={2.2} />
-    </button>
+      className="disabled:active:scale-100"
+    />
   );
 }

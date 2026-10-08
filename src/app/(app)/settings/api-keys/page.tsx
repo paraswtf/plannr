@@ -10,7 +10,7 @@ import { api } from "~/trpc/server";
 export const metadata: Metadata = {
   title: "API keys",
   description:
-    "Credentials for the apps that talk to Plannr on their own — what each one is allowed to do, and what it has been doing.",
+    "Credentials for the apps that talk to Plannr on their own: what each one is allowed to do, and what it has been doing.",
 };
 
 export default async function ApiKeysPage() {

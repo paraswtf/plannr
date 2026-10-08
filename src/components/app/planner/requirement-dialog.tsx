@@ -7,6 +7,8 @@ import {
   ROOM_FEATURES,
   type RoomFeatureName,
 } from "~/components/app/booking/room-fit";
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Dialog } from "~/components/ui/dialog";
 import {
   EntityPicker,
@@ -15,7 +17,8 @@ import {
   useDebounced,
   initialsOf,
 } from "~/components/ui/entity-picker";
-import { Icon } from "~/components/ui/icon";
+import { Field, Input } from "~/components/ui/field";
+import { ToggleChip } from "~/components/ui/chip";
 import { Select } from "~/components/ui/select";
 import { formatDuration } from "~/lib/dates";
 import {
@@ -166,292 +169,281 @@ export function RequirementDialog({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted flex min-h-10 cursor-pointer items-center rounded-lg px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
-            style={{ boxShadow: "var(--ring)" }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
             disabled={!ready || pending}
             onClick={submit}
-            className="flex min-h-10 items-center rounded-lg px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: ready && !pending ? 1 : 0.5,
-              cursor: ready && !pending ? "pointer" : "not-allowed",
-            }}
           >
             {pending ? "Saving…" : requirement ? "Save changes" : "Add subject"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      {/* Nine answers in four groups, each a run of related fields with a
+          hairline between runs: who and what, how much and by whom, the
+          room, and a note. One uniform column of nine read as a single list
+          in which nothing went with anything. */}
+      <div className="flex flex-col gap-5">
         {error && (
-          <div
-            className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
-            style={{
-              background: "rgba(220,56,72,0.07)",
-              boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-            }}
-          >
+          <Callout tone="bad" role="alert">
             {error}
-          </div>
+          </Callout>
         )}
 
-        <Field label="Group">
-          <SearchSelect
-            value={
-              selectedGroup
-                ? {
-                    id: selectedGroup.id,
-                    label: selectedGroup.label,
+        <div className="flex flex-col gap-4">
+          <Field label="Group">
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={
+                  selectedGroup
+                    ? {
+                        id: selectedGroup.id,
+                        label: selectedGroup.label,
+                        card: {
+                          label: selectedGroup.label,
+                          avatar: {
+                            kind: "initials",
+                            text: initialsOf(selectedGroup.name),
+                          },
+                          title: selectedGroup.label,
+                          subtitle: selectedGroup.courseName,
+                          meta: [`${selectedGroup.studentCount} students`],
+                        },
+                      }
+                    : null
+                }
+                onChange={(id) => setGroupId(id ?? "")}
+                page={pickerPage(groups.data, (rows) =>
+                  rows.map((g) => ({
+                    id: g.id,
+                    label: g.label,
                     card: {
-                      label: selectedGroup.label,
+                      label: g.label,
                       avatar: {
-                        kind: "initials",
-                        text: initialsOf(selectedGroup.name),
+                        kind: "initials" as const,
+                        text: initialsOf(g.name),
                       },
-                      title: selectedGroup.label,
-                      subtitle: selectedGroup.courseName,
-                      meta: [`${selectedGroup.studentCount} students`],
+                      title: g.label,
+                      subtitle: `${g.courseCode} · ${g.courseName}`,
+                      meta: [`${g.studentCount} students`],
                     },
-                  }
-                : null
-            }
-            onChange={(id) => setGroupId(id ?? "")}
-            page={pickerPage(groups.data, (rows) =>
-              rows.map((g) => ({
-                id: g.id,
-                label: g.label,
-                card: {
-                  label: g.label,
-                  avatar: {
-                    kind: "initials" as const,
-                    text: initialsOf(g.name),
-                  },
-                  title: g.label,
-                  subtitle: `${g.courseCode} · ${g.courseName}`,
-                  meta: [`${g.studentCount} students`],
-                },
-              })),
+                  })),
+                )}
+                loading={groups.isLoading}
+                query={groupQuery}
+                onQueryChange={setGroupQuery}
+                onLoadMore={() => setGroupPageSize((n) => n + 20)}
+                placeholder="Search groups…"
+                listId="requirement-group"
+              />
             )}
-            loading={groups.isLoading}
-            query={groupQuery}
-            onQueryChange={setGroupQuery}
-            onLoadMore={() => setGroupPageSize((n) => n + 20)}
-            placeholder="Search groups…"
-            listId="requirement-group"
-          />
-        </Field>
-
-        <Field label="Subject">
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="e.g. Data Structures"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Field>
-
-        {/* Two short answers, kept side by side even on a phone — a count and a
-            length are read together. */}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Lectures a week">
-            <input
-              value={sessions}
-              onChange={(e) =>
-                setSessions(e.target.value.replace(/[^\d]/g, "").slice(0, 2))
-              }
-              inputMode="numeric"
-              className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
-              style={{ boxShadow: "var(--ring)" }}
-            />
           </Field>
-          <Field label="How long each">
-            <Select
-              ariaLabel="Session length"
-              value={duration}
-              options={durationOptions}
-              onChange={setDuration}
-            />
+
+          <Field label="Subject">
+            {(id) => (
+              <Input
+                id={id}
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Data Structures"
+              />
+            )}
           </Field>
         </div>
 
-        <Field
-          label="Taught by"
-          hint="Everyone named has to be free at the time chosen."
-        >
-          <EntityPicker
-            selected={(faculty.data?.rows ?? [])
-              .filter((f) => facultyIds.includes(f.id))
-              .map((f) => ({ id: f.id, label: f.name }))}
-            onChange={setFacultyIds}
-            page={pickerPage(faculty.data, (rows) =>
-              rows.map((f) => ({
-                id: f.id,
-                label: f.name,
-                card: {
-                  label: f.name,
-                  avatar: {
-                    kind: "initials" as const,
-                    text: initialsOf(f.name),
-                  },
-                  title: f.name,
-                  subtitle: f.department ?? f.email,
-                  badges: f.isActive
-                    ? []
-                    : [{ text: "inactive", tone: "red" as const }],
-                },
-              })),
-            )}
-            loading={faculty.isLoading}
-            query={facultyQuery}
-            onQueryChange={setFacultyQuery}
-            onLoadMore={() => setFacultyPageSize((n) => n + 20)}
-            placeholder="Search staff…"
-            emptyLabel="Anyone can teach it"
-            listId="requirement-faculty"
-          />
-        </Field>
-
-        <Field
-          label="The room must have"
-          hint="Rooms without these are never offered for this subject."
-        >
-          <div className="flex flex-wrap gap-1.5">
-            {ROOM_FEATURES.map((feature) => {
-              const on = features.includes(feature);
-              return (
-                <button
-                  key={feature}
-                  type="button"
-                  onClick={() =>
-                    setFeatures((current) =>
-                      on
-                        ? current.filter((f) => f !== feature)
-                        : [...current, feature],
+        <div className="flex flex-col gap-4 pt-5 shadow-[inset_0_1px_0_var(--hair-soft)]">
+          {/* Two short answers, kept side by side even on a phone — a count and a
+              length are read together. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Lectures a week">
+              {(id) => (
+                <Input
+                  id={id}
+                  value={sessions}
+                  onChange={(e) =>
+                    setSessions(
+                      e.target.value.replace(/[^\d]/g, "").slice(0, 2),
                     )
                   }
-                  className="plr-clip flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold lg:min-h-0 lg:py-1.5"
-                  style={
-                    on
-                      ? { background: "var(--slate)", color: "#fff" }
-                      : { boxShadow: "var(--ring)", color: "var(--muted)" }
-                  }
-                >
-                  {on && (
-                    <Icon name="check" size={11} color="#fff" stroke={3} />
-                  )}
-                  {FEATURE_LABELS[feature]}
-                </button>
-              );
-            })}
+                  inputMode="numeric"
+                  className="font-mono tabular-nums"
+                />
+              )}
+            </Field>
+            <Field label="How long each">
+              {(id) => (
+                <Select
+                  id={id}
+                  value={duration}
+                  options={durationOptions}
+                  onChange={setDuration}
+                />
+              )}
+            </Field>
           </div>
-        </Field>
 
-        {/* Unlike the pair above, "Lecture theatre" in half a phone's width is
-            an ellipsis, so this pair stacks. */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Kind of room">
-            <Select
-              ariaLabel="Room type"
-              value={roomType}
-              options={[
-                { value: "", label: "Any kind" },
-                ...ROOM_TYPES.map((type) => ({
-                  value: type,
-                  label: ROOM_TYPE_LABEL[type],
-                })),
-              ]}
-              onChange={setRoomType}
-            />
-          </Field>
           <Field
-            label="Seats needed"
-            hint="Left blank, the group's own size is used."
+            label="Taught by"
+            hint="Everyone named has to be free at the time chosen."
           >
-            <input
-              value={minCapacity}
-              onChange={(e) =>
-                setMinCapacity(e.target.value.replace(/[^\d]/g, "").slice(0, 4))
-              }
-              inputMode="numeric"
-              placeholder="—"
-              className="bg-surface w-full rounded-[10px] px-3 py-2 font-mono text-[13.5px] outline-none"
-              style={{ boxShadow: "var(--ring)" }}
-            />
+            {(id) => (
+              <EntityPicker
+                id={id}
+                selected={(faculty.data?.rows ?? [])
+                  .filter((f) => facultyIds.includes(f.id))
+                  .map((f) => ({ id: f.id, label: f.name }))}
+                onChange={setFacultyIds}
+                page={pickerPage(faculty.data, (rows) =>
+                  rows.map((f) => ({
+                    id: f.id,
+                    label: f.name,
+                    card: {
+                      label: f.name,
+                      avatar: {
+                        kind: "initials" as const,
+                        text: initialsOf(f.name),
+                      },
+                      title: f.name,
+                      subtitle: f.department ?? f.email,
+                      badges: f.isActive
+                        ? []
+                        : [{ text: "inactive", tone: "red" as const }],
+                    },
+                  })),
+                )}
+                loading={faculty.isLoading}
+                query={facultyQuery}
+                onQueryChange={setFacultyQuery}
+                onLoadMore={() => setFacultyPageSize((n) => n + 20)}
+                placeholder="Search staff…"
+                emptyLabel="Anyone can teach it"
+                listId="requirement-faculty"
+              />
+            )}
           </Field>
         </div>
 
-        <Field
-          label="Preferred room"
-          hint="Tried first; the builder falls back to anything that fits."
-        >
-          <SearchSelect
-            value={
-              selectedRoom
-                ? { id: selectedRoom.id, label: selectedRoom.code }
-                : null
-            }
-            onChange={(id) => setPreferredRoomId(id ?? "")}
-            page={{
-              rows: rooms.slice(0, 30).map((room) => ({
-                id: room.id,
-                label: room.code,
-                card: {
-                  label: room.code,
-                  avatar: { kind: "icon" as const, name: "door" as const },
-                  title: room.code,
-                  subtitle: room.building.name,
-                  meta: [`${room.capacity} seats`],
-                },
-              })),
-              total: rooms.length,
-              hasMore: rooms.length > 30,
-            }}
-            loading={workspace.isLoading}
-            query={roomQuery}
-            onQueryChange={setRoomQuery}
-            placeholder="Search rooms…"
-            emptyOption="No preference"
-            listId="requirement-room"
-          />
-        </Field>
+        <div className="flex flex-col gap-4 pt-5 shadow-[inset_0_1px_0_var(--hair-soft)]">
+          <Field
+            label="The room must have"
+            hint="Rooms without these are never offered for this subject."
+          >
+            <div className="flex flex-wrap gap-1.5">
+              {ROOM_FEATURES.map((feature) => {
+                const on = features.includes(feature);
+                return (
+                  <ToggleChip
+                    key={feature}
+                    pressed={on}
+                    onClick={() =>
+                      setFeatures((current) =>
+                        on
+                          ? current.filter((f) => f !== feature)
+                          : [...current, feature],
+                      )
+                    }
+                  >
+                    {FEATURE_LABELS[feature]}
+                  </ToggleChip>
+                );
+              })}
+            </div>
+          </Field>
 
-        <Field label="Notes">
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything the reviewers should know"
-            className="bg-surface w-full rounded-[10px] px-3 py-2 text-[13.5px] outline-none"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Field>
+          {/* Unlike the pair above, "Lecture theatre" in half a phone's width is
+              an ellipsis, so this pair stacks. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Kind of room">
+              {(id) => (
+                <Select
+                  id={id}
+                  value={roomType}
+                  options={[
+                    { value: "", label: "Any kind" },
+                    ...ROOM_TYPES.map((type) => ({
+                      value: type,
+                      label: ROOM_TYPE_LABEL[type],
+                    })),
+                  ]}
+                  onChange={setRoomType}
+                />
+              )}
+            </Field>
+            <Field
+              label="Seats needed"
+              hint="Left blank, the group's own size is used."
+            >
+              {(id) => (
+                <Input
+                  id={id}
+                  value={minCapacity}
+                  onChange={(e) =>
+                    setMinCapacity(
+                      e.target.value.replace(/[^\d]/g, "").slice(0, 4),
+                    )
+                  }
+                  inputMode="numeric"
+                  placeholder="Group size"
+                  className="placeholder:font-body font-mono tabular-nums"
+                />
+              )}
+            </Field>
+          </div>
+
+          <Field
+            label="Preferred room"
+            hint="Tried first; the builder falls back to anything that fits."
+          >
+            {(id) => (
+              <SearchSelect
+                id={id}
+                value={
+                  selectedRoom
+                    ? { id: selectedRoom.id, label: selectedRoom.code }
+                    : null
+                }
+                onChange={(id) => setPreferredRoomId(id ?? "")}
+                page={{
+                  rows: rooms.slice(0, 30).map((room) => ({
+                    id: room.id,
+                    label: room.code,
+                    card: {
+                      label: room.code,
+                      avatar: { kind: "icon" as const, name: "door" as const },
+                      title: room.code,
+                      subtitle: room.building.name,
+                      meta: [`${room.capacity} seats`],
+                    },
+                  })),
+                  total: rooms.length,
+                  hasMore: rooms.length > 30,
+                }}
+                loading={workspace.isLoading}
+                query={roomQuery}
+                onQueryChange={setRoomQuery}
+                placeholder="Search rooms…"
+                emptyOption="No preference"
+                listId="requirement-room"
+              />
+            )}
+          </Field>
+        </div>
+
+        <div className="pt-5 shadow-[inset_0_1px_0_var(--hair-soft)]">
+          <Field label="Notes" optional>
+            {(id) => (
+              <Input
+                id={id}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Anything the reviewers should know"
+              />
+            )}
+          </Field>
+        </div>
       </div>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">{label}</span>
-      {children}
-      {hint && <span className="text-faint text-[11.5px]">{hint}</span>}
-    </label>
   );
 }

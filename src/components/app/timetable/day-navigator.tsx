@@ -1,7 +1,7 @@
 "use client";
 
+import { Button, IconButton } from "~/components/ui/button";
 import { DatePicker } from "~/components/ui/date-picker";
-import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
 import {
   addDays,
@@ -45,7 +45,8 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
  * Split out from the navigator so the schedule and the timetable can put them
  * up beside the page's title, where the question "which day am I looking at" is
  * asked, while the strip of dated tabs stays down with the calendar it indexes.
- * The booking screen still takes the pair together as `DayNavigator`.
+ * The booking screen splits them the same way; `DayNavigator` is for a screen
+ * that wants both in one place.
  */
 export function DayControls({
   date,
@@ -92,20 +93,29 @@ export function DayControls({
         label={`Next ${span}`}
         onClick={() => onChange(stepSpan(day, span, 1, timeZone))}
       />
-      <button
-        type="button"
+      {/*
+        Two dresses for one button. Away from now it is a white button like the
+        arrows beside it, because it is the way home and has to be findable;
+        already at now it steps back to plain muted words and goes inert. It
+        used to fade a tinted chip to 40% instead, which read as a control that
+        had broken rather than as "you are already here".
+
+        At `lg` it takes the date field's 12px inset and 12px type rather than
+        the stock button's 16px and 13px: on a laptop this row shares the
+        title's line, and the timetable's `--tt-ceiling` is worked out on the
+        promise that it fits there with the sidebar open at 1024px. The stock
+        button, with the 36px arrows, was enough to wrap the row onto a second
+        line under a ceiling that did not know. (Variant classes, so they land
+        after the base `px-4 text-sm` without a merge.)
+      */}
+      <Button
+        variant={atNow ? "ghost" : "secondary"}
+        className="lg:px-3 lg:text-xs"
         disabled={atNow}
         onClick={() => onChange(startOfLocalDay(now, timeZone))}
-        className="h-10 shrink-0 rounded-[10px] px-3 text-[12.5px] font-semibold lg:h-8.5"
-        style={{
-          background: "rgba(68,88,121,0.07)",
-          color: "var(--slate)",
-          opacity: atNow ? 0.4 : 1,
-          cursor: atNow ? "default" : "pointer",
-        }}
       >
         Today
-      </button>
+      </Button>
     </div>
   );
 }
@@ -154,6 +164,13 @@ export function DayStrip({
         value={stripValue(day, span, timeZone)}
         onChange={(value) => onChange(new Date(value))}
         size="sm"
+        // Today stays marked when another day is chosen, so the way home is
+        // visible on the strip as well as in the Today button.
+        marker={stripValue(
+          startOfLocalDay(new Date(), timeZone),
+          span,
+          timeZone,
+        )}
       />
     </div>
   );
@@ -241,7 +258,7 @@ function stripFor(
     // repeating it on every pill is what makes a strip too wide to scan.
     return weeksTouchingMonth(day, timeZone).map((at) => ({
       value: at.toISOString(),
-      label: `${toWallTime(at, timeZone).day}–${toWallTime(addDays(at, 6, timeZone), timeZone).day}`,
+      label: `${toWallTime(at, timeZone).day}-${toWallTime(addDays(at, 6, timeZone), timeZone).day}`,
     }));
   }
 
@@ -267,9 +284,12 @@ function stripValue(day: Date, span: ScheduleSpan, timeZone: string): string {
 }
 
 /**
- * One span back or forward. A 34px chip is comfortable under a mouse and mean
- * under a thumb, so it only shrinks to that where there is a sidebar to prove
- * we are on a desktop; everywhere else it is a 40px target.
+ * One span back or forward.
+ *
+ * The shared icon button, at the size the date field beside it is: 40px where
+ * the pointer is a thumb and 36px where there is a sidebar to prove it is a
+ * mouse. White and ringed like the field, so the arrows and the date read as
+ * one control in one language rather than tinted chips either side of a field.
  */
 function Step({
   icon,
@@ -281,14 +301,12 @@ function Step({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
+    <IconButton
+      icon={icon}
+      label={label}
+      variant="secondary"
+      iconSize={15}
       onClick={onClick}
-      className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
-      style={{ background: "rgba(68,88,121,0.07)" }}
-    >
-      <Icon name={icon} size={14} color="var(--slate)" stroke={2.2} />
-    </button>
+    />
   );
 }

@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 
+import { Button, IconButton, iconButtonClass } from "~/components/ui/button";
 import { Dialog } from "~/components/ui/dialog";
+import { Input, triggerClass } from "~/components/ui/field";
 import { Icon } from "~/components/ui/icon";
 import { Popover } from "~/components/ui/popover";
 import { useLongPress } from "~/components/ui/use-long-press";
@@ -157,8 +159,14 @@ export function ViewAs({
          * is as wide as the screen allows and stays there.
          */}
         <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-          <span className="text-faint shrink-0 font-mono text-[12px]">
-            view as
+          {/*
+           * Sentence case in the body face. It was a lowercase mono label,
+           * and mono is for times, codes and counts, not for decoration. Not
+           * tied to the trigger as its name on purpose: the trigger is named
+           * by whose schedule it shows, which is what it is found by.
+           */}
+          <span className="text-muted shrink-0 text-xs font-medium">
+            View as
           </span>
 
           {/*
@@ -184,13 +192,18 @@ export function ViewAs({
               }}
               aria-haspopup="listbox"
               aria-expanded={open}
-              className="bg-surface flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] lg:min-h-0 lg:py-1.5"
-              style={{ boxShadow: "var(--ring)" }}
+              // The field look every picker trigger shares: ringed like a
+              // field, harder under the pointer, and wearing the focus ring
+              // for as long as its list is open.
+              className={triggerClass("md")}
             >
-              <span className="text-title min-w-0 truncate font-medium">
-                {current.name}
-              </span>
-              <Icon name="chevronDown" size={14} color="var(--muted)" />
+              <span className="min-w-0 truncate">{current.name}</span>
+              <Icon
+                name="chevronDown"
+                size={14}
+                stroke={2}
+                color="var(--muted)"
+              />
             </button>
 
             <Popover
@@ -211,15 +224,23 @@ export function ViewAs({
                * on the row's `title`.
                */
               match="width"
-              className="bg-surface flex flex-col rounded-[10px] p-1.5"
-              style={{ boxShadow: "var(--ring), var(--shadow-float)" }}
+              // Raised, the height every popover is drawn at, and 12px round
+              // so the 8px rows inside its 6px of padding are concentric.
+              className="bg-surface flex flex-col rounded-[12px] p-1.5 shadow-[var(--ring),var(--shadow-md)]"
             >
-              <div className="relative mb-1.5 shrink-0">
-                <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2">
-                  <Icon name="search" size={13} color="var(--faint)" />
-                </span>
-                <input
+              <div className="mb-1.5 shrink-0">
+                {/*
+                 * The shared field, so it has a focus state: it used to opt out
+                 * of the outline and draw nothing in its place, and it takes
+                 * focus the moment the list opens.
+                 */}
+                <Input
                   autoFocus
+                  icon="search"
+                  // The trigger's own size, so the panel opens on a field as
+                  // legible as the control that opened it.
+                  size="md"
+                  aria-label="Search perspectives and people"
                   value={query}
                   onChange={(e) => onQueryChange(e.target.value)}
                   onKeyDown={(e) => {
@@ -235,16 +256,24 @@ export function ViewAs({
                       setOpen(false);
                     }
                   }}
-                  placeholder="Search perspectives, students and staff…"
+                  // Short enough to be read whole in a phone-width panel at
+                  // 16px, where the old wording was cut off mid-word.
+                  placeholder="Search perspectives and people…"
                   // 16px on a phone: anything smaller and Safari zooms the page on
                   // focus, which on this toolbar throws the calendar off screen.
-                  className="bg-paper min-h-10 w-full rounded-lg py-1.5 pr-2 pl-8 text-[16px] outline-none sm:min-h-0 sm:text-[12.5px]"
+                  inputClassName="max-sm:text-[16px]"
                 />
               </div>
 
+              {/*
+               * The cap is tuned to the rows rather than round: at 280px the
+               * fifth row ended flush on the edge, the list looked complete,
+               * and nothing said the people below it were there. 300px leaves
+               * part of the next row showing, which is the cue to scroll.
+               */}
               <div
                 role="listbox"
-                className="plr-scroll max-h-[280px] min-h-0 overflow-y-auto"
+                className="plr-scroll max-h-[300px] min-h-0 overflow-y-auto"
               >
                 {shownFavourites.map((option) => (
                   <Row
@@ -299,7 +328,7 @@ export function ViewAs({
                 ))}
 
                 {nothing && (
-                  <p className="text-muted p-2 text-[12.5px]">
+                  <p className="text-muted px-2.5 py-2 text-sm">
                     {loading ? "Searching…" : "Nobody matches that."}
                   </p>
                 )}
@@ -310,8 +339,8 @@ export function ViewAs({
                  * say how many more.
                  */}
                 {total > people.length && (
-                  <p className="text-faint px-2.5 py-1.5 text-[11.5px]">
-                    {total - people.length} more — keep typing to narrow it.
+                  <p className="text-faint px-2.5 py-1.5 text-xs">
+                    {total - people.length} more. Keep typing to narrow it.
                   </p>
                 )}
               </div>
@@ -327,8 +356,13 @@ export function ViewAs({
            * does not narrow the list they are starred from.
            */}
           {onClear && (
-            <button
-              type="button"
+            <IconButton
+              icon="x"
+              // `title` and `aria-label` both, from the one label.
+              label="Back to your own schedule"
+              variant="quiet"
+              // The trigger's own height, so the two read as one control.
+              size="md"
               // The trigger takes focus first, because this control is about to
               // stop existing: activated from the keyboard it would otherwise
               // drop focus to <body> and the next Tab would restart at the top
@@ -337,13 +371,7 @@ export function ViewAs({
                 triggerRef.current?.focus();
                 onClear();
               }}
-              title="Back to your own schedule"
-              aria-label="Back to your own schedule"
-              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] lg:h-8.5 lg:w-8.5"
-              style={{ background: "rgba(68,88,121,0.07)" }}
-            >
-              <Icon name="x" size={15} color="var(--slate)" stroke={2.2} />
-            </button>
+            />
           )}
         </div>
 
@@ -370,45 +398,47 @@ export function ViewAs({
         subtitle={detail?.hint ?? undefined}
         onClose={() => setDetail(null)}
         width={360}
-      >
-        {detail && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <Avatar option={detail} size={40} />
-              <p className="text-muted m-0 text-[13px]">
-                {detail.kind === "perspective"
-                  ? "One of your own angles on your timetable. Starred, so it is one tap away."
-                  : "Starred, so their schedule is one tap away from yours."}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(detail);
-                  setDetail(null);
-                }}
-                className="min-h-10 cursor-pointer rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-                style={{ background: "var(--slate)", color: "#fff" }}
-              >
-                View this schedule
-              </button>
-              <button
-                type="button"
+        /*
+         * In the dialog's footer, where every dialog keeps its buttons: the
+         * primary last, so on a phone it lands at the bottom under the thumb.
+         * Taking somebody out of the strip is undone with one star, so it is
+         * the quiet red rather than the final-step fill, and it carries no
+         * glyph: it used the same outline star as starring, which said the
+         * opposite of what it did.
+         */
+        footer={
+          detail && (
+            <>
+              <Button
+                variant="danger-quiet"
                 onClick={() => {
                   onToggleFavourite(detail, false);
                   setDetail(null);
                 }}
-                className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-                style={{
-                  background: "rgba(200,60,60,0.08)",
-                  color: "var(--danger, #b3261e)",
+              >
+                Remove from favourites
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  onPick(detail);
+                  setDetail(null);
                 }}
               >
-                <Icon name="star" size={13} stroke={2.2} color="currentColor" />
-                Remove from favourites
-              </button>
-            </div>
+                View this schedule
+              </Button>
+            </>
+          )
+        }
+      >
+        {detail && (
+          <div className="flex items-center gap-3">
+            <Avatar option={detail} size={40} />
+            <p className="text-muted m-0 text-sm">
+              {detail.kind === "perspective"
+                ? "One of your own angles on your timetable. Starred, so it is one tap away."
+                : "Starred, so their schedule is one tap away from yours."}
+            </p>
           </div>
         )}
       </Dialog>
@@ -419,10 +449,7 @@ export function ViewAs({
 /** The hairline between two groups of the list. */
 function Divider() {
   return (
-    <div
-      className="mx-2.5 my-1"
-      style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
-    />
+    <div className="mx-2.5 my-1 shadow-[inset_0_1px_0_var(--hair-soft)]" />
   );
 }
 
@@ -449,8 +476,12 @@ function Row({
     <div
       role="option"
       aria-selected={selected}
-      className="flex min-h-10 items-center gap-2 rounded-lg pr-1 lg:min-h-0"
-      style={selected ? { background: "var(--card-soft)" } : undefined}
+      // A wash under the pointer and a firmer one for the row on screen,
+      // with a check beside it, so "which one am I on" is not a matter of
+      // telling two pale washes apart.
+      className={`flex min-h-10 items-center gap-1 rounded-[8px] pr-1 transition-colors lg:min-h-0 ${
+        selected ? "bg-tint-selected" : "hover:bg-tint-hover"
+      }`}
     >
       <button
         type="button"
@@ -458,32 +489,50 @@ function Row({
         // The panel is a fixed width, so a long name truncates — and the title
         // is where the whole of it stays reachable.
         title={option.name}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-2.5 py-2 text-left"
+        // The ring inset, because the list scrolls and clips its sides.
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left focus-visible:outline-offset-[-2px]"
       >
-        <Avatar option={option} size={22} />
+        <Avatar option={option} size={24} />
         <span className="min-w-0 flex-1">
-          <span className="text-title block truncate text-[12.5px] font-medium">
+          <span className="text-title block truncate text-sm font-medium">
             {option.name}
           </span>
           {hint && (
-            <span className="text-faint block truncate text-[11px]">
-              {hint}
-            </span>
+            <span className="text-faint block truncate text-xs">{hint}</span>
           )}
         </span>
+        {selected && (
+          <Icon
+            name="check"
+            size={15}
+            stroke={2}
+            color="var(--slate)"
+            className="shrink-0"
+          />
+        )}
       </button>
+      {/*
+       * Filled and gold when kept, an outline when not, so the state is in
+       * the shape as well as the colour. Gold because a favourite is "yours"
+       * in the same sense the timetable's gold is.
+       */}
       <button
         type="button"
         aria-label={starred ? `Unstar ${option.name}` : `Star ${option.name}`}
         aria-pressed={starred}
         onClick={() => onToggleFavourite(option, !starred)}
-        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg lg:h-7 lg:w-7"
+        className={iconButtonClass(
+          "ghost",
+          "sm",
+          "rounded-[8px] focus-visible:outline-offset-[-2px]",
+        )}
       >
         <Icon
           name="star"
-          size={14}
-          color={starred ? "var(--orange)" : "var(--faint)"}
-          stroke={starred ? 2.4 : 1.8}
+          size={15}
+          stroke={2}
+          color={starred ? "var(--mine-ring)" : "var(--faint)"}
+          fill={starred ? "var(--mine-fill)" : "none"}
         />
       </button>
     </div>
@@ -514,7 +563,13 @@ function Favourites({
      * of the first and last. The negative margin hands the space back, so
      * nothing around it moves.
      */
-    <div className="plr-scroll -m-1 flex max-w-full min-w-0 items-center gap-1.5 overflow-x-auto p-1">
+    /*
+     * Below `lg` each avatar is padded out to a 40px target (see
+     * `FavouriteChip`), so the gap widens to keep the pads from overlapping
+     * and the padding grows to hold them: a scroller clips hit-testing as
+     * well as paint, so a pad outside it would be a pad nobody could tap.
+     */
+    <div className="plr-scroll -m-1.5 flex max-w-full min-w-0 items-center gap-3 overflow-x-auto p-1.5 lg:-m-1 lg:gap-1.5 lg:p-1">
       {favourites.map((option) => (
         <FavouriteChip
           key={keyOf(option)}
@@ -553,12 +608,18 @@ function FavouriteChip({
       aria-pressed={on}
       onClick={() => onPick(option)}
       {...press}
-      className="shrink-0 cursor-pointer rounded-full"
-      style={{
+      /*
+       * The avatar is drawn at 28px everywhere, and below `lg` a pseudo-element
+       * pads the target out to 40px without moving anything: these are the
+       * one-tap switch a coordinator uses all week, and 28px is too small for
+       * a thumb. The selected ring hugs the tile; the focus outline stands 2px
+       * off it, so the two never look like one state.
+       */
+      className={`relative shrink-0 cursor-pointer rounded-[30%] transition-[scale] duration-150 ease-out active:scale-[0.95] max-lg:before:absolute max-lg:before:-inset-1.5 max-lg:before:content-[''] ${
         // The ring rather than a fill, so the avatar underneath still reads as
         // the person it names.
-        boxShadow: on ? "0 0 0 2px var(--slate)" : undefined,
-      }}
+        on ? "shadow-[0_0_0_2px_var(--slate)]" : ""
+      }`}
     >
       <Avatar option={option} size={28} />
     </button>
@@ -573,18 +634,25 @@ function FavouriteChip({
  * are not the same brightness. `--orange` is the case that proves it: readable
  * as a fill at 16%, and illegible as text on anything. These are the pairs
  * `Badge` already settled, plus the two tones in the palette it had no use for.
+ *
+ * Literals rather than tokens because this is a palette a hash picks from, the
+ * same kind of thing as the course tones; the shared `Avatar` has one soft
+ * tone and no glyphs, so these stay here until it grows a hashed variant.
  */
 const TONES: ReadonlyArray<{ fill: string; ink: string }> = [
   { fill: "rgba(68,88,121,0.12)", ink: "#324464" },
   { fill: "rgba(122,46,143,0.12)", ink: "#6b2880" },
   { fill: "rgba(78,125,58,0.14)", ink: "#3f6a2e" },
-  { fill: "rgba(220,56,72,0.10)", ink: "#b02636" },
+  // Teal where red was. Red means "happening now" on this very screen, and a
+  // red avatar beside the red now-line read as a second live thing.
+  { fill: "rgba(19,129,108,0.13)", ink: "#0e6656" },
   // Darker than the `--orange` ink `Badge` uses. That one is 4.18:1 here and
   // fails AA: a badge sets it at 11px semibold against a 16% tint, and these
   // are two letters that have to be told apart at a glance. 5.60:1.
   { fill: "rgba(246,167,59,0.18)", ink: "#8a5309" },
   // Pink rather than the palette's `--magenta`, whose readable ink is #c02a44
-  // — twenty-one units from the red above it, which is to say the same colour.
+  // — near enough the live red this screen keeps for "happening now", which is
+  // to say the same colour.
   // Six tones are only worth having if all six are distinguishable.
   { fill: "rgba(168,37,138,0.12)", ink: "#a8258a" },
 ];
@@ -635,17 +703,20 @@ function Avatar({ option, size }: { option: ViewAsSubject; size: number }) {
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-full font-bold"
+      // A rounded square, the shape the shared `Avatar` draws people in, and
+      // semibold like it: the round, bold discs were the one circle on a
+      // screen of rounded rectangles.
+      className="flex shrink-0 items-center justify-center rounded-[30%] font-semibold"
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.38,
+        fontSize: Math.round(size * 0.38),
         background: tone.fill,
         color: tone.ink,
         // The hairline is the ink at low opacity rather than the shared
         // `--hair`, so an avatar reads as one colour rather than as a tinted
-        // disc somebody has drawn a grey ring around.
-        boxShadow: `inset 0 0 0 1px ${tone.ink}22`,
+        // tile somebody has drawn a grey ring around.
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${tone.ink} 14%, transparent)`,
       }}
     >
       {icon ? (
@@ -653,7 +724,7 @@ function Avatar({ option, size }: { option: ViewAsSubject; size: number }) {
           name={icon}
           size={Math.round(size * 0.5)}
           color={tone.ink}
-          stroke={1.9}
+          stroke={2}
         />
       ) : (
         initialsOf(option.name)

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { DEFAULT_TIMEZONE, formatFullDate } from "~/lib/dates";
 import { api } from "~/trpc/react";
@@ -123,13 +125,24 @@ export function ApiKeysView({
         }
       />
 
-      <div className="flex flex-col gap-6 px-4 pt-2 pb-8 sm:px-6 lg:gap-7 lg:px-9 lg:pb-10">
-        <About />
-
+      {/*
+       * The list first, the explanation beside it. Somebody opening this
+       * screen has come to audit the keys and act on one; "what a key is" is
+       * read once, and as the first card it pushed the list below the fold on
+       * every screen (most of a phone's height of prose before the first
+       * row). From `lg` it is an aside in its own column; below, it follows
+       * the list.
+       */}
+      <PageBody
+        width="wide"
+        className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8"
+      >
         <Card
           title="Keys"
           action={
-            <span className="text-faint font-mono text-[11.5px]">
+            // The words are the ones read out, in the body face with tabular
+            // figures; the mono face is for the handles and counts in rows.
+            <span className="text-faint text-xs tabular-nums">
               {keys.length === 0
                 ? "none yet"
                 : `${live} active of ${keys.length}`}
@@ -137,13 +150,24 @@ export function ApiKeysView({
           }
         >
           {ordered.length === 0 ? (
-            <p className="text-muted m-0 text-[14px]">
-              No keys yet. Nothing outside Plannr can read or change the
-              timetable until one is minted — which is the right default, so
-              mint one only when there is something waiting for it.
-            </p>
+            <EmptyState
+              compact
+              icon="key"
+              title="No keys yet."
+              action={
+                // Not "Create key": that is the header's button, and the one
+                // a person (or a test) reaches for by name.
+                <Button icon="plus" onClick={() => setCreating(true)}>
+                  Create the first key
+                </Button>
+              }
+            >
+              Nothing outside Plannr can read or change the timetable until one
+              is minted. That is the right default, so mint one only when there
+              is something waiting for it.
+            </EmptyState>
           ) : (
-            <div className="flex flex-col">
+            <div className="-mx-2 flex flex-col">
               {ordered.map((key, i) => (
                 <KeyRow
                   key={key.id}
@@ -156,7 +180,9 @@ export function ApiKeysView({
             </div>
           )}
         </Card>
-      </div>
+
+        <About />
+      </PageBody>
 
       {/*
        * The secret is shown alone. It is the one dialog in the app that must
@@ -203,7 +229,8 @@ export function ApiKeysView({
 }
 
 /**
- * The first thing anyone reading this screen needs to understand.
+ * The first thing anyone new to this screen needs to understand, and the
+ * thing everybody else has already read — hence beside the list, not above it.
  *
  * Written as prose rather than a bulleted feature list because the three
  * surprising properties of a key — that it is not you, that it holds its own
@@ -212,67 +239,78 @@ export function ApiKeysView({
  */
 function About() {
   return (
-    <Card title="What a key is">
-      <div className="flex flex-col gap-3 text-[13.5px] leading-relaxed">
-        <p className="text-muted m-0">
-          An API key lets something that is not a person use Plannr — the room
+    // Plain prose on the paper rather than a card: it is reading matter, not a
+    // panel to act in, and a second white box beside the list would compete
+    // with it. A hairline above marks where it starts when it follows the list
+    // on a narrower screen.
+    <aside className="flex flex-col gap-3 pt-5 shadow-[inset_0_1px_0_var(--hair-soft)] lg:pt-1 lg:shadow-none">
+      <h2 className="font-display text-title text-md font-semibold tracking-[-0.01em]">
+        What a key is
+      </h2>
+      <div className="text-muted flex max-w-[60ch] flex-col gap-3 text-sm leading-relaxed">
+        <p>
+          An API key lets something that is not a person use Plannr: the room
           display in the foyer, the college website, a script that files next
           term&rsquo;s lectures. The app sends the key as an{" "}
-          <span className="text-ink font-mono text-[12.5px]">
+          <span className="text-ink font-mono text-xs">
             Authorization: Bearer
           </span>{" "}
           header on every request to{" "}
-          <span className="text-ink font-mono text-[12.5px]">/api/v1</span>, and
+          <span className="text-ink font-mono text-xs">/api/v1</span>, and
           Plannr answers it exactly as it would answer a signed-in person with
           the same permissions.
         </p>
-        <p className="text-muted m-0">
-          It does not act as you. Every key gets an account of its own — a
+        <p>
+          It does not act as you. Every key gets an account of its own (a
           service principal, hidden from the people screen, carrying the
-          key&rsquo;s name — so &ldquo;scheduled by&rdquo; on the lectures it
+          key&rsquo;s name), so &ldquo;scheduled by&rdquo; on the lectures it
           books, and the audit trail behind every change it requests, names the
           integration rather than whoever minted it. That record survives the
           key being switched off.
         </p>
-        <p className="text-muted m-0">
+        <p>
           A key can do only what its scopes say, and you can grant only scopes
           you hold yourself. Administrator cannot be granted at all: it means
           &ldquo;and everything added in future releases too&rdquo;, which is
           not a promise anybody can make on behalf of an app they no longer
           control.
         </p>
-        <p className="text-muted m-0">
+        <p>
           Two things a key can never do, however it is scoped. It cannot call
-          the <span className="text-ink font-mono text-[12.5px]">my …</span>{" "}
-          endpoints — my week, my day, my attendance — because it has no week of
-          its own; an integration names the room, group or member of faculty it
-          is asking about. And it cannot manage keys, including itself, so a
-          leaked token can neither mint a quiet replacement nor switch off every
-          other integration the college has.
+          the <span className="text-ink font-mono text-xs">my …</span> endpoints
+          (my week, my day, my attendance), because it has no week of its own;
+          an integration names the room, group or member of faculty it is asking
+          about. And it cannot manage keys, including itself, so a leaked token
+          can neither mint a quiet replacement nor switch off every other
+          integration the college has.
         </p>
-
-        <div className="mt-1 flex flex-wrap gap-2">
-          <DocLink href="/api/v1/openapi.json">
-            Every endpoint, as OpenAPI
-          </DocLink>
-          <DocLink href="/api/v1/me">Check what a caller is</DocLink>
-        </div>
       </div>
-    </Card>
+
+      <div className="flex flex-col items-start">
+        <DocLink href="/api/v1/openapi.json">
+          Every endpoint, as OpenAPI
+        </DocLink>
+        <DocLink href="/api/v1/me">Check what a caller is</DocLink>
+      </div>
+    </aside>
   );
 }
 
+/*
+ * A text link with an arrow, not a tinted pill: the pills read as one more
+ * scope chip, and the chips beside them read as things to press. Tall enough
+ * to hit with a thumb below `lg`, where the pointer is a finger.
+ */
 function DocLink({ href, children }: { href: string; children: string }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="text-slate inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold"
-      style={{ background: "rgba(68,88,121,0.08)" }}
+      className="text-slate-ink inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold underline-offset-4 hover:underline lg:min-h-8"
     >
       {children}
-      <Icon name="arrowRight" size={13} stroke={2.2} color="currentColor" />
+      <Icon name="arrowRight" size={14} stroke={2} />
     </a>
   );
 }
@@ -292,43 +330,55 @@ function KeyRow({
   const revoked = apiKey.status === "revoked";
   const shown = apiKey.scopes.slice(0, SCOPES_PER_ROW);
   const hidden = apiKey.scopes.length - shown.length;
+  const [use, life] = metaFor(apiKey);
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full cursor-pointer items-start gap-3 px-1 py-3.5 text-left"
+      // The hairline between rows is a pseudo-element inset to the content,
+      // not the row's own edge, so the hover wash can be a rounded tile of its
+      // own without carrying a line across its top.
+      className={`group hover:bg-tint-hover relative flex w-full cursor-pointer items-start gap-3 rounded-[10px] px-2 py-3.5 text-left transition-colors duration-150 focus-visible:outline-offset-[-2px] ${
+        first
+          ? ""
+          : "before:bg-hair-soft before:absolute before:inset-x-2 before:top-0 before:h-px"
+      }`}
       style={{
-        boxShadow: first ? undefined : "inset 0 1px 0 var(--hair-soft)",
         // Still legible, plainly retired. A revoked key is history rather than
-        // noise — somebody arrives here looking for one.
-        opacity: revoked ? 0.55 : 1,
+        // noise — somebody arrives here looking for one — so it is dimmed
+        // only so far: its meta lines are small, and at the old 55% they
+        // fell below anything readable.
+        opacity: revoked ? 0.7 : 1,
       }}
     >
       <span
-        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
-        style={{ background: "var(--card-soft)" }}
+        className={`bg-tint mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] ${
+          revoked ? "text-faint" : "text-slate"
+        }`}
       >
-        <Icon name="key" size={16} color="var(--slate)" stroke={1.9} />
+        <Icon name="key" size={16} stroke={1.9} />
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <span className="text-title text-[14px] font-semibold">
-            {apiKey.name}
+        <span className="flex flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span className="text-title text-base font-semibold">
+              {apiKey.name}
+            </span>
+            <Badge tone={status.tone} dot>
+              {status.label}
+            </Badge>
           </span>
-          <Badge tone={status.tone} dot>
-            {status.label}
-          </Badge>
-          {/* Only flung to the far end once it shares a line: a lone
-              right-aligned handle on a phone reads as a stray. */}
-          <span className="text-faint font-mono text-[11.5px] break-all sm:ml-auto">
+          {/* Under the name at every width: flung to the far edge it was a
+              long eye-jump from the name on a laptop and a stray on a phone. */}
+          <span className="text-muted font-mono text-xs break-all">
             {tokenHandle(apiKey.prefix, apiKey.last4)}
           </span>
         </span>
 
         {apiKey.description && (
-          <span className="text-muted text-[12.5px]">{apiKey.description}</span>
+          <span className="text-muted text-sm">{apiKey.description}</span>
         )}
 
         <span className="flex flex-wrap items-center gap-1.5">
@@ -337,41 +387,67 @@ function KeyRow({
               {labels.get(scope) ?? scope}
             </Badge>
           ))}
-          {hidden > 0 && (
-            <span className="text-faint font-mono text-[11px]">
-              +{hidden} more
-            </span>
-          )}
+          {/* The last chip of the row rather than loose text after it, so on
+              a phone it wraps with the chips instead of being left alone. */}
+          {hidden > 0 && <Badge>+{hidden} more</Badge>}
         </span>
 
-        <span className="text-faint font-mono text-[11.5px]">
-          {metaFor(apiKey)}
+        <span className="text-faint flex flex-col text-xs tabular-nums">
+          <span>{use}</span>
+          <span>{life}</span>
         </span>
       </span>
+
+      <Icon
+        name="chevronRight"
+        size={16}
+        stroke={2}
+        className="text-faint group-hover:text-muted mt-2 shrink-0 transition-colors"
+      />
     </button>
   );
 }
 
-/** The one line that answers "is anything still using this, and how much?". */
-function metaFor(apiKey: ApiKey): string {
-  const parts = [
-    apiKey.createdBy?.name
-      ? `by ${apiKey.createdBy.name}`
-      : "by a deleted account",
-    apiKey.lastUsedAt
-      ? `used ${relativeTime(apiKey.lastUsedAt)}`
-      : "never used",
-    `${apiKey.requestCount.toLocaleString()} request${apiKey.requestCount === 1 ? "" : "s"}`,
-  ];
+/**
+ * The two lines that answer "is anything still using this, and how much?",
+ * and "who made it, and how long has it got?". Two, so no line carries more
+ * than one middle dot, and so a phone wraps each fact whole rather than
+ * starting a line on a dot.
+ */
+function metaFor(apiKey: ApiKey): [string, ReactNode] {
+  const requests = `${apiKey.requestCount.toLocaleString()} request${apiKey.requestCount === 1 ? "" : "s"}`;
+  const used = apiKey.lastUsedAt
+    ? `used ${relativeTime(apiKey.lastUsedAt)}`
+    : "never used";
 
+  const by = apiKey.createdBy?.name
+    ? `By ${apiKey.createdBy.name}`
+    : "By a deleted account";
+  // The date is one unit: at 390px "expires Wed, 28 Oct 2026" would otherwise
+  // break between the weekday and the day, leaving "Wed," orphaned.
+  const date = (when: Date) => (
+    <span className="whitespace-nowrap">
+      {formatFullDate(when, DEFAULT_TIMEZONE)}
+    </span>
+  );
+  let life: ReactNode;
   if (apiKey.revokedAt) {
-    parts.push(`revoked ${formatFullDate(apiKey.revokedAt, DEFAULT_TIMEZONE)}`);
+    life = <>revoked {date(apiKey.revokedAt)}</>;
   } else if (apiKey.expiresAt) {
     const verb = apiKey.status === "expired" ? "expired" : "expires";
-    parts.push(`${verb} ${formatFullDate(apiKey.expiresAt, DEFAULT_TIMEZONE)}`);
+    life = (
+      <>
+        {verb} {date(apiKey.expiresAt)}
+      </>
+    );
   } else {
-    parts.push("never expires");
+    life = "never expires";
   }
 
-  return parts.join(" · ");
+  return [
+    `${requests} · ${used}`,
+    <>
+      {by} · {life}
+    </>,
+  ];
 }

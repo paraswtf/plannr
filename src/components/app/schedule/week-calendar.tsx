@@ -18,7 +18,8 @@ import {
   packOverlaps,
   ROW_HEIGHT,
 } from "./day-layout";
-import type { DayCalendarEvent } from "./day-calendar";
+import { blockPaint, NowMark } from "./block-paint";
+import { clashesWithNow, type DayCalendarEvent } from "./day-calendar";
 
 /**
  * A week, drawn as seven of the day beside each other.
@@ -117,178 +118,215 @@ export function WeekCalendar({
   }, []);
 
   return (
-    <div
-      ref={scroller}
-      // Containing the overscroll keeps a swipe that runs off the end of the
-      // week from being read as the browser's back gesture. Only sideways: once
-      // the day is taller than the box, a swipe that runs off the bottom has to
-      // carry on down the page, which is what chaining does.
-      className={`plr-scroll bg-surface overflow-x-auto overscroll-x-contain rounded-[var(--radius-card)] ${GEOMETRY}`}
-      style={{ boxShadow: "var(--ring), var(--shadow-card)" }}
-    >
+    <div className={CARD_FRAME}>
       <div
-        style={{
-          minWidth: `calc(${GUTTER}px + 7 * var(--sched-day-w))`,
-        }}
+        ref={scroller}
+        // Containing the overscroll keeps a swipe that runs off the end of the
+        // week from being read as the browser's back gesture. Only sideways: once
+        // the day is taller than the box, a swipe that runs off the bottom has to
+        // carry on down the page, which is what chaining does. The card's ring is
+        // the frame's, drawn over this box rather than inside it.
+        className={`plr-scroll bg-surface overflow-x-auto overscroll-x-contain rounded-[var(--radius-card)] shadow-[var(--shadow-card)] ${GEOMETRY}`}
       >
-        {/* The dates across the top. */}
-        <div className="flex" style={{ boxShadow: "0 1px 0 var(--hair)" }}>
-          <div className="shrink-0" style={{ width: GUTTER }} />
-          {days.map((day, index) => {
-            const wall = toWallTime(day, timeZone);
-            const isToday = isSameLocalDay(day, now, timeZone);
-            return (
-              <button
-                key={day.toISOString()}
-                type="button"
-                onClick={onDayClick ? () => onDayClick(day) : undefined}
-                className="flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 px-1 py-2 lg:min-h-0"
-                style={{
-                  minWidth: "var(--sched-day-w)",
-                  cursor: onDayClick ? "pointer" : "default",
-                }}
-              >
-                <span className="text-muted text-[12px] font-semibold">
-                  {DAY_NAMES[index]}
-                </span>
-                <span
-                  className={`font-display flex h-6 w-6 items-center justify-center rounded-full text-[12.5px] font-bold ${
-                    isToday ? "text-white" : "text-title"
-                  }`}
-                  style={isToday ? { background: "var(--slate)" } : undefined}
+        <div
+          style={{
+            minWidth: `calc(${GUTTER}px + 7 * var(--sched-day-w))`,
+          }}
+        >
+          {/* The dates across the top. */}
+          <div className="flex shadow-[0_1px_0_var(--hair)]">
+            {/*
+             * The corner above the hour gutter holds still with it, so the
+             * dates slide under one unbroken edge rather than under a gap.
+             */}
+            <div
+              className={`shrink-0 ${STICKY_GUTTER}`}
+              style={{ width: GUTTER }}
+            />
+            {days.map((day, index) => {
+              const wall = toWallTime(day, timeZone);
+              const isToday = isSameLocalDay(day, now, timeZone);
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={onDayClick ? () => onDayClick(day) : undefined}
+                  // A wash under the pointer, because this drops into the day
+                  // and nothing else said it could be pressed. The focus ring is
+                  // inset: the scroller clips anything drawn outside its box.
+                  className="hover:bg-tint-hover flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 px-1 py-2 transition-colors focus-visible:outline-offset-[-2px] lg:min-h-0"
+                  style={{
+                    minWidth: "var(--sched-day-w)",
+                    cursor: onDayClick ? "pointer" : "default",
+                  }}
                 >
-                  {wall.day}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* The week itself. */}
-        <div className="relative flex" style={{ height }}>
-          <div className="relative shrink-0" style={{ width: GUTTER }}>
-            {hoursIn(startHour, endHour).map((hour) => (
-              <span
-                key={hour}
-                className="text-faint absolute right-3 -translate-y-1/2 font-mono text-[11px]"
-                style={{ top: (hour - startHour) * rowHeight }}
-              >
-                {formatHourLabel(
-                  new Date(Date.UTC(2000, 0, 1, hour, 0)),
-                  "UTC",
-                )}
-              </span>
-            ))}
+                  <span className="text-muted text-xs font-semibold">
+                    {DAY_NAMES[index]}
+                  </span>
+                  <span
+                    className={`font-display flex h-6 w-6 items-center justify-center rounded-full text-sm font-semibold ${
+                      isToday ? "bg-slate text-white" : "text-title"
+                    }`}
+                  >
+                    {wall.day}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {days.map((day) => {
-            const isToday = isSameLocalDay(day, now, timeZone);
-            return (
-              <div
-                key={day.toISOString()}
-                ref={isToday ? todayColumn : null}
-                className="relative flex-1"
-                style={{
-                  minWidth: "var(--sched-day-w)",
-                  boxShadow: "inset 1px 0 0 var(--hair-soft)",
-                }}
-              >
-                {/*
-                 * The rules, as hairlines rather than as full-height bands. A
-                 * band per hour would have to stop one short of `endHour` or
-                 * stand a whole row proud of the column — which the scroller
-                 * then offers as an hour of empty day to scroll into. Lines
-                 * have no such end to get wrong, and they are drawn with a
-                 * height of their own because an inset shadow on a box with no
-                 * height paints nothing at all.
-                 */}
-                {hoursIn(startHour, endHour).map((hour) => (
-                  <div key={hour} className="pointer-events-none">
-                    <div
-                      className="absolute w-full"
-                      style={{
-                        top: (hour - startHour) * rowHeight,
-                        height: 1,
-                        boxShadow: "inset 0 1px 0 var(--hair-soft)",
-                      }}
-                    />
-                    {hour < endHour && (
+          {/* The week itself. */}
+          <div className="relative flex" style={{ height }}>
+            {/*
+             * The hour gutter stays put while the columns pan under it.
+             *
+             * A phone opens the week centred on today, which used to leave the
+             * gutter scrolled off to the left: no hours and no now-label on the
+             * first screen, so not one block could be placed in time. Sticky
+             * inside the scroller, over the blocks, with the surface behind it so
+             * a class sliding underneath does not show through the labels. The
+             * centring arithmetic above is unchanged by it.
+             */}
+            <div
+              className={`relative shrink-0 ${STICKY_HOURS}`}
+              style={{ width: GUTTER }}
+            >
+              {hoursIn(startHour, endHour).map((hour) => (
+                <span
+                  key={hour}
+                  className={`text-faint absolute right-3 font-mono text-[11px] ${hourNudge(hour, startHour, endHour)}`}
+                  style={{
+                    top: (hour - startHour) * rowHeight,
+                    visibility: clashesWithNow(
+                      hour,
+                      showNow ? nowHour : undefined,
+                      rowHeight,
+                    )
+                      ? "hidden"
+                      : undefined,
+                  }}
+                >
+                  {formatHourLabel(
+                    new Date(Date.UTC(2000, 0, 1, hour, 0)),
+                    "UTC",
+                  )}
+                </span>
+              ))}
+
+              {/*
+               * The now-label and its lamp, in the gutter that holds still, so
+               * the time is on screen however far the week has been panned. The
+               * faint line they lead into stays behind, all the way across.
+               */}
+              {showNow && (
+                <div
+                  className="pointer-events-none absolute left-0 flex -translate-y-1/2 items-center"
+                  style={{ top: (nowHour - startHour) * rowHeight }}
+                >
+                  <span
+                    className="text-bad text-right font-mono text-[11px] font-semibold"
+                    style={{ width: GUTTER - 12 }}
+                  >
+                    {formatHourLabel(now, timeZone)}
+                  </span>
+                  <span className="bg-red ml-[6px] h-[7px] w-[7px] shrink-0 rounded-full" />
+                </div>
+              )}
+            </div>
+
+            {days.map((day) => {
+              const isToday = isSameLocalDay(day, now, timeZone);
+              return (
+                <div
+                  key={day.toISOString()}
+                  ref={isToday ? todayColumn : null}
+                  className="relative flex-1"
+                  style={{
+                    minWidth: "var(--sched-day-w)",
+                    boxShadow: "inset 1px 0 0 var(--hair-soft)",
+                  }}
+                >
+                  {/*
+                   * The rules, as hairlines rather than as full-height bands. A
+                   * band per hour would have to stop one short of `endHour` or
+                   * stand a whole row proud of the column — which the scroller
+                   * then offers as an hour of empty day to scroll into. Lines
+                   * have no such end to get wrong, and they are drawn with a
+                   * height of their own because an inset shadow on a box with no
+                   * height paints nothing at all.
+                   */}
+                  {hoursIn(startHour, endHour).map((hour) => (
+                    <div key={hour} className="pointer-events-none">
                       <div
                         className="absolute w-full"
                         style={{
-                          top: (hour - startHour + 0.5) * rowHeight,
+                          top: (hour - startHour) * rowHeight,
                           height: 1,
-                          boxShadow: "inset 0 1px 0 rgba(68,88,121,0.05)",
+                          boxShadow: "inset 0 1px 0 var(--hair-soft)",
                         }}
                       />
-                    )}
-                  </div>
-                ))}
+                      {hour < endHour && (
+                        <div
+                          className="absolute w-full"
+                          style={{
+                            top: (hour - startHour + 0.5) * rowHeight,
+                            height: 1,
+                            boxShadow: "inset 0 1px 0 var(--tint-hover)",
+                          }}
+                        />
+                      )}
+                    </div>
+                  ))}
 
-                {packOverlaps(byDay.get(day.getTime()) ?? []).map(
-                  ({ event, column, columns }) => (
-                    <WeekBlock
-                      key={event.id}
-                      event={event}
-                      column={column}
-                      columns={columns}
-                      startHour={startHour}
-                      rowHeight={rowHeight}
-                      timeZone={timeZone}
-                      now={now}
-                      onClick={onEventClick}
-                      onPress={onEventPress}
+                  {packOverlaps(byDay.get(day.getTime()) ?? []).map(
+                    ({ event, column, columns }) => (
+                      <WeekBlock
+                        key={event.id}
+                        event={event}
+                        column={column}
+                        columns={columns}
+                        startHour={startHour}
+                        rowHeight={rowHeight}
+                        timeZone={timeZone}
+                        now={now}
+                        onClick={onEventClick}
+                        onPress={onEventPress}
+                      />
+                    ),
+                  )}
+
+                  {/*
+                   * The bright half of the now-line, drawn inside today's column
+                   * so that "which column is now in" needs no arithmetic about
+                   * where that column starts.
+                   */}
+                  {showNow && isToday && (
+                    <div
+                      className="bg-red pointer-events-none absolute inset-x-0 z-[5] h-[2px]"
+                      style={{ top: (nowHour - startHour) * rowHeight }}
                     />
-                  ),
-                )}
+                  )}
+                </div>
+              );
+            })}
 
-                {/*
-                 * The bright half of the now-line, drawn inside today's column
-                 * so that "which column is now in" needs no arithmetic about
-                 * where that column starts.
-                 */}
-                {showNow && isToday && (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 z-[5] h-[2px]"
-                    style={{
-                      top: (nowHour - startHour) * rowHeight,
-                      background: "var(--red)",
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-
-          {/*
-           * And the faint half, all the way across: the hour you are at is read
-           * against the other six columns as much as against today's.
-           */}
-          {showNow && (
-            <div
-              className="pointer-events-none absolute right-0 z-[4] flex items-center"
-              style={{ left: 0, top: (nowHour - startHour) * rowHeight }}
-            >
-              <span
-                className="font-mono text-[11px] font-semibold"
+            {/*
+             * And the faint half, all the way across: the hour you are at is read
+             * against the other six columns as much as against today's. Its label
+             * and lamp moved into the sticky gutter above; this is the line alone,
+             * starting where the gutter ends. The red's own line token, so it is
+             * the same faint red as every other quiet red edge in the app.
+             */}
+            {showNow && (
+              <div
+                className="bg-bad-line pointer-events-none absolute right-0 z-[4] h-[1px]"
                 style={{
-                  color: "var(--red)",
-                  width: GUTTER - 12,
-                  textAlign: "right",
+                  left: GUTTER,
+                  top: (nowHour - startHour) * rowHeight,
                 }}
-              >
-                {formatHourLabel(now, timeZone)}
-              </span>
-              <span
-                className="ml-[6px] h-[7px] w-[7px] shrink-0 rounded-full"
-                style={{ background: "var(--red)" }}
               />
-              <span
-                className="h-[1px] flex-1"
-                style={{ background: "rgba(220,56,72,0.35)" }}
-              />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -338,7 +376,8 @@ function WeekBlock({
       type="button"
       onClick={onClick ? () => onClick(event) : undefined}
       {...press}
-      className="plr-clip absolute overflow-hidden rounded-lg px-2 py-1.5 text-left select-none"
+      // The day's states, at the week's size: see `DayBlock`.
+      className="plr-clip absolute overflow-hidden rounded-lg px-2 py-1.5 text-left select-none hover:brightness-[0.97] focus-visible:outline-offset-[-3px] active:scale-[0.97]"
       style={{
         top: (from - startHour) * rowHeight + 2,
         height: blockHeight(span, rowHeight),
@@ -347,20 +386,18 @@ function WeekBlock({
         // the day view's arithmetic for subtracting a gutter it sits inside.
         left: `calc(2px + ${(column / columns) * 100}%)`,
         width: `calc(${(1 / columns) * 100}% - 4px)`,
-        background: live ? "var(--live-fill)" : tone.fill,
-        boxShadow: live
-          ? "inset 0 0 0 1px var(--red)"
-          : `inset 0 0 0 1px ${tone.ring}`,
-        opacity: past && !live ? 0.62 : 1,
+        ...blockPaint(tone, { live, past: past && !live }),
         cursor: onClick ? "pointer" : "default",
         WebkitTouchCallout: "none",
       }}
     >
+      {/* Solid inks on the fill, at `fitLines`'s sizes: see `DayBlock`. */}
       <span className="text-title block truncate text-[12px] leading-tight font-semibold">
         {event.title}
       </span>
       {span >= 0.5 && (
-        <span className="text-muted mt-0.5 block truncate font-mono text-[10.5px]">
+        <span className="text-ink mt-0.5 block truncate font-mono text-[10.5px] font-medium">
+          {live && <NowMark />}
           {[formatHourLabel(event.start, timeZone), event.roomCode]
             .filter(Boolean)
             .join(" · ")}
@@ -369,13 +406,58 @@ function WeekBlock({
       {lines.map((line) => (
         <span
           key={line}
-          className="text-faint mt-0.5 block truncate text-[10.5px]"
+          className="text-ink mt-0.5 block truncate text-[10.5px]"
         >
           {line}
         </span>
       ))}
     </button>
   );
+}
+
+/**
+ * The gutter's sticky treatment, shared with the skeleton so the loading frame
+ * pans the same way. Above the blocks (which have no z-index) and the now-line
+ * (z-5), with a hairline down its right edge where the columns pass under it.
+ * This one is the corner above the hours.
+ */
+export const STICKY_GUTTER =
+  "bg-surface sticky left-0 z-[6] shadow-[inset_-1px_0_0_var(--hair-soft)]";
+
+/**
+ * The hours' half of the gutter: the same, plus the dates' bottom rule along
+ * its top. That rule is the header row's outer shadow, so it lands on the first
+ * pixel of the body, and an opaque gutter sitting over it cut the line short at
+ * the gutter's right edge. Drawing it here carries it across to the card edge.
+ */
+export const STICKY_HOURS =
+  "bg-surface sticky left-0 z-[6] shadow-[inset_-1px_0_0_var(--hair-soft),inset_0_1px_0_var(--hair)]";
+
+/**
+ * The box around the week's scroller, which draws the card's ring *over* it.
+ *
+ * The ring is an inset shadow, and an inset shadow paints under the box's own
+ * children. The opaque sticky gutter covered it down the whole left side and
+ * round both left corners, and a block panned to either edge covered it too.
+ * As a pseudo-element above everything in the scroller (the gutter is z-6), it
+ * stays a whole, rounded edge whatever slides beneath it. It cannot live inside
+ * the scroller: an absolute child there scrolls away with the columns.
+ * `isolate` keeps that z-7 local to the card. Pointer-transparent, so it takes
+ * nothing from the cells or the scrollbar under it.
+ */
+export const CARD_FRAME =
+  "relative isolate rounded-[var(--radius-card)] after:pointer-events-none after:absolute after:inset-0 after:z-[7] after:rounded-[inherit] after:shadow-[var(--ring)]";
+
+/**
+ * Where an hour label sits against its rule. Centred on it, except the first
+ * and the last: the scroller clips its box on both axes, so a centred first
+ * label was half under the dates' hairline and the last was cut by the card's
+ * bottom edge. Those two sit just inside instead; nothing else moves.
+ */
+export function hourNudge(hour: number, startHour: number, endHour: number) {
+  if (hour === startHour) return "translate-y-0.5";
+  if (hour === endHour) return "-translate-y-[calc(100%+2px)]";
+  return "-translate-y-1/2";
 }
 
 /** The whole hours the window spans, for the rules and the gutter labels. */

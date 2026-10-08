@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
-import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Segmented } from "~/components/ui/segmented";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { CourseAttendance } from "./course-attendance";
@@ -56,9 +57,16 @@ export function AttendanceOverview({
         }
       />
 
-      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
+      {/*
+        A reading column on both sides of the switch. The student's cards are
+        a figure, a bar and a sentence, and full width on a laptop they read as
+        four stripes 1100px long with the title and its number at opposite
+        ends; the teacher's roster is a name and a percentage, and the eye has
+        to carry one across to the other.
+      */}
+      <PageBody width="narrow" className="flex flex-col gap-5">
         {studies && teaches && (
-          <div className="mb-5">
+          <div>
             <Segmented
               items={[
                 { value: "mine" as const, label: "My attendance" },
@@ -76,15 +84,13 @@ export function AttendanceOverview({
         ) : studies ? (
           <MyAttendance mine={mine} />
         ) : (
-          <Card>
-            <p className="text-muted m-0 text-[14px]">
-              There is no attendance for you to read. Students see their own
-              register here once they are in a group, and teachers see their
-              courses once the timetable puts their name on a lecture.
-            </p>
-          </Card>
+          <EmptyState icon="checkCircle" title="No attendance to show">
+            There is no attendance for you to read. Students see their own
+            register here once they are in a group, and teachers see their
+            courses once the timetable puts their name on a lecture.
+          </EmptyState>
         )}
-      </div>
+      </PageBody>
     </>
   );
 }
@@ -92,7 +98,8 @@ export function AttendanceOverview({
 function summariseMine(mine: Mine): string {
   if (mine.courses.length === 0) return "Nothing to show yet";
   const short = mine.courses.filter(
-    (course) => course.percentage !== null && course.percentage < mine.threshold,
+    (course) =>
+      course.percentage !== null && course.percentage < mine.threshold,
   ).length;
   return short === 0
     ? `All ${mine.courses.length} courses at or above ${mine.threshold}%`

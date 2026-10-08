@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { useLongPress } from "~/components/ui/use-long-press";
 import { courseTone } from "~/lib/course-colour";
 import { decimalHour, formatHourLabel } from "~/lib/dates";
+import { blockPaint, NowMark } from "./block-paint";
 import {
   blockHeight,
   dayWindow,
@@ -126,7 +127,12 @@ export function DayCalendar({
 
   return (
     <div className="relative" style={{ height }}>
-      <HourGrid startHour={startHour} endHour={endHour} rowHeight={rowHeight} />
+      <HourGrid
+        startHour={startHour}
+        endHour={endHour}
+        rowHeight={rowHeight}
+        nowHour={showNow ? nowHour : undefined}
+      />
 
       {packOverlaps(events).map(({ event, column, columns }) => (
         <DayBlock
@@ -150,23 +156,13 @@ export function DayCalendar({
           style={{ left: 0, top: (nowHour - startHour) * rowHeight }}
         >
           <span
-            className="font-mono text-[11px] font-semibold"
-            style={{
-              color: "var(--red)",
-              width: GUTTER - 12,
-              textAlign: "right",
-            }}
+            className="text-bad text-right font-mono text-[11px] font-semibold"
+            style={{ width: GUTTER - 12 }}
           >
             {formatHourLabel(now, timeZone)}
           </span>
-          <span
-            className="ml-[6px] h-[7px] w-[7px] shrink-0 rounded-full"
-            style={{ background: "var(--red)" }}
-          />
-          <span
-            className="h-[2px] flex-1"
-            style={{ background: "var(--red)" }}
-          />
+          <span className="bg-red ml-[6px] h-[7px] w-[7px] shrink-0 rounded-full" />
+          <span className="bg-red h-[2px] flex-1" />
         </div>
       )}
     </div>
@@ -210,7 +206,8 @@ function DayBlock({
   const tone = courseTone(event.courseTitle);
   const span = to - from;
 
-  const when = `${formatHourLabel(event.start, timeZone)} – ${formatHourLabel(event.end, timeZone)}`;
+  // A plain hyphen and no spaces, the house's way of writing a range.
+  const when = `${formatHourLabel(event.start, timeZone)}-${formatHourLabel(event.end, timeZone)}`;
   const room = [when, event.roomCode].filter(Boolean).join(" · ");
   const lines = fitLines(span, rowHeight, event.lines ?? []);
 
@@ -219,7 +216,13 @@ function DayBlock({
       type="button"
       onClick={onClick ? () => onClick(event) : undefined}
       {...press}
-      className="plr-clip absolute overflow-hidden rounded-xl px-3 py-2 text-left select-none"
+      /*
+       * Hover darkens a shade and a press gives a touch, both on the inside of
+       * the box: its top, height, left and width are arithmetic and stay put.
+       * The focus ring is drawn inset, inside the course's own hairline, so a
+       * neighbouring block or the edge of the page cannot paint over it.
+       */
+      className="plr-clip absolute overflow-hidden rounded-xl px-3 py-2 text-left select-none hover:brightness-[0.97] focus-visible:outline-offset-[-3px] active:scale-[0.985]"
       style={{
         top: (from - startHour) * rowHeight + 2,
         height: blockHeight(span, rowHeight),
@@ -231,11 +234,7 @@ function DayBlock({
          * everybody else's, and on your own schedule they are all yours — or,
          * under "view as", all somebody else's, which gold would misname.
          */
-        background: live ? "var(--live-fill)" : tone.fill,
-        boxShadow: live
-          ? "inset 0 0 0 1px var(--red)"
-          : `inset 0 0 0 1px ${tone.ring}`,
-        opacity: past && !live ? 0.62 : 1,
+        ...blockPaint(tone, { live, past: past && !live }),
         cursor: onClick ? "pointer" : "default",
         // iOS answers a long press on its own, with a magnifier and a callout
         // menu. The gesture is ours here, so both go; `select-none` above is
@@ -245,19 +244,24 @@ function DayBlock({
         WebkitTouchCallout: "none",
       }}
     >
+      {/*
+       * Solid inks on the course fill, title and body, both of which the
+       * palette's own test holds above 4.5:1 on every tone. The tiers are
+       * weight now rather than alpha: muted and faint over a saturated fill
+       * came out near 2:1. The sizes are `fitLines`'s and stay exactly as
+       * they are.
+       */}
       <span className="text-title block truncate text-[13px] leading-tight font-semibold">
         {event.title}
       </span>
       {span >= 0.5 && (
-        <span className="text-muted mt-0.5 block truncate font-mono text-[11px]">
+        <span className="text-ink mt-0.5 block truncate font-mono text-[11px] font-medium">
+          {live && <NowMark />}
           {room}
         </span>
       )}
       {lines.map((line) => (
-        <span
-          key={line}
-          className="text-faint mt-0.5 block truncate text-[11px]"
-        >
+        <span key={line} className="text-ink mt-0.5 block truncate text-[11px]">
           {line}
         </span>
       ))}
@@ -276,10 +280,17 @@ export function HourGrid({
   startHour,
   endHour,
   rowHeight = ROW_HEIGHT,
+  nowHour,
 }: {
   startHour: number;
   endHour: number;
   rowHeight?: number;
+  /**
+   * Where the now-line's own time label sits, when there is one. An hour
+   * label within a few pixels of it steps aside rather than printing "10am"
+   * under "10:05am" in the same gutter.
+   */
+  nowHour?: number;
 }) {
   const hours = Array.from(
     { length: endHour - startHour + 1 },
@@ -296,6 +307,17 @@ export function HourGrid({
               top: (hour - startHour) * rowHeight,
               left: 0,
               width: GUTTER - 12,
+              // Hidden rather than removed, so the gutter keeps its shape.
+              // The day's now row is placed by its top, not its middle, so its
+              // label is centred half a line below the now position.
+              visibility: clashesWithNow(
+                hour,
+                nowHour,
+                rowHeight,
+                NOW_LABEL_DROP,
+              )
+                ? "hidden"
+                : undefined,
             }}
           >
             <span className="block text-right">
@@ -317,7 +339,8 @@ export function HourGrid({
               style={{
                 top: (hour - startHour + 0.5) * rowHeight,
                 left: GUTTER,
-                boxShadow: "inset 0 1px 0 rgba(68,88,121,0.05)",
+                // The half hour: the faintest slate there is, under the hour.
+                boxShadow: "inset 0 1px 0 var(--tint-hover)",
                 height: 1,
               }}
             />
@@ -327,3 +350,35 @@ export function HourGrid({
     </>
   );
 }
+
+/**
+ * Whether an hour label would collide with the now-line's label: closer than
+ * a line of 11px type, measured in pixels so it holds at any row height.
+ * Shared with the week, whose gutter has the same two labels in it.
+ *
+ * Both are compared by their centres. An hour label is centred on its rule;
+ * the now-label is centred on the now position in the week (translated up by
+ * half), but in the day it hangs `labelDrop` pixels below it, and a test that
+ * ignored that hid the wrong labels by half a line. The threshold is one line
+ * box of 11px type at the inherited 1.5 leading (16.5px), rounded up: any
+ * nearer and the two lines overlap.
+ */
+export function clashesWithNow(
+  hour: number,
+  nowHour: number | undefined,
+  rowHeight: number,
+  labelDrop = 0,
+): boolean {
+  return (
+    nowHour !== undefined &&
+    Math.abs((hour - nowHour) * rowHeight - labelDrop) < 17
+  );
+}
+
+/**
+ * How far below the now position the day's now-label is centred. The now row
+ * is placed at that position by its top and centres its children, and its
+ * height is its tallest child: the label's 16.5px line box (11px type at 1.5).
+ * The line itself is not moved to match; its top is the arithmetic.
+ */
+const NOW_LABEL_DROP = 16.5 / 2;

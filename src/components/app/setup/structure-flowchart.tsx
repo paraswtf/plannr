@@ -27,8 +27,6 @@ interface Step {
   note?: string;
   href: string;
   icon: IconName;
-  /** Icon-chip tint. The steps walk the brand gradient, left to right. */
-  tint: string;
   /** Filled rather than outlined: everything else is dated against it. */
   pivot?: boolean;
 }
@@ -51,7 +49,6 @@ export function StructureFlowchart({
       caption: "The degrees the college runs",
       href: "/groups",
       icon: "building",
-      tint: "var(--violet)",
     },
     {
       label: "Batch",
@@ -59,7 +56,6 @@ export function StructureFlowchart({
       caption: "One intake a year, e.g. 23-27 BCA",
       href: "/groups",
       icon: "users",
-      tint: "#c9306c",
     },
     {
       label: "Semester",
@@ -67,7 +63,6 @@ export function StructureFlowchart({
       caption: "One calendar the whole college keeps",
       href: "/timetable",
       icon: "calendar",
-      tint: "var(--slate)",
       pivot: true,
     },
     {
@@ -76,7 +71,6 @@ export function StructureFlowchart({
       caption: "Part of a batch, taught together",
       href: "/groups",
       icon: "layers",
-      tint: "var(--magenta)",
     },
     {
       label: "Course",
@@ -84,7 +78,6 @@ export function StructureFlowchart({
       caption: "A subject taught this semester",
       href: "/courses",
       icon: "book",
-      tint: "#f2743c",
     },
     {
       // A lecture is the series, not the hour: one weekly slot expands into a
@@ -95,7 +88,6 @@ export function StructureFlowchart({
       note: `${COUNT.format(totals.registers)} registers taken, one per sitting`,
       href: "/timetable",
       icon: "grid",
-      tint: "var(--orange)",
     },
   ];
 
@@ -127,7 +119,7 @@ export function StructureFlowchart({
         ))}
       </ol>
 
-      <p className="text-muted mt-4 text-[12.5px] 2xl:text-center">
+      <p className="text-muted mt-4 text-sm 2xl:text-center">
         There is no separate enrolment: a student&rsquo;s courses are the
         courses of the groups they are in, so putting a name from{" "}
         <Link
@@ -157,35 +149,33 @@ function StepCard({ step }: { step: Step }) {
   return (
     <Link
       href={step.href}
+      // The ring and shadow are classes rather than an inline style so the
+      // pointer can deepen the shadow as the node lifts; an inline boxShadow
+      // would outrank any hover state.
       className={`plr-clip plr-hoverlift grid h-full grid-cols-[auto_1fr_auto] content-start items-center gap-x-2.5 gap-y-1.5 rounded-[var(--radius-card)] p-3.5 md:grid-cols-[auto_1fr] ${
-        pivot ? "text-white" : "bg-surface"
-      }`}
-      style={
         pivot
-          ? { background: "var(--slate)", boxShadow: "var(--shadow-md)" }
-          : { boxShadow: "var(--ring), var(--shadow-card)" }
-      }
+          ? "bg-slate text-white shadow-[var(--shadow-md)]"
+          : "bg-surface shadow-[var(--ring),var(--shadow-card)] hover:shadow-[var(--ring),var(--shadow-md)]"
+      }`}
     >
+      {/* One slate chip for every step. The chips used to walk the brand
+          gradient from violet to orange, five colours that meant nothing but
+          position; the gradient is the logo's now, and the order is already
+          the list's. The pivot keeps its white-on-slate chip, since it is the
+          one node that is filled. */}
       <span
-        className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px]"
-        style={{
-          // Mixed against the surface token rather than a literal white, so the
-          // chip stays a tint of the card it sits on.
-          background: pivot
-            ? "rgba(255,255,255,0.18)"
-            : `color-mix(in srgb, ${step.tint} 15%, var(--surface))`,
-        }}
+        className={`flex h-[30px] w-[30px] items-center justify-center rounded-[9px] ${
+          pivot ? "bg-white/18 text-white" : "bg-tint text-slate"
+        }`}
       >
-        <Icon
-          name={step.icon}
-          size={16}
-          stroke={1.9}
-          color={pivot ? "#fff" : step.tint}
-        />
+        <Icon name={step.icon} size={16} stroke={1.9} />
       </span>
 
+      {/* Sentence case, at the size it always was: the width this label and
+          the chip need together is what the node's 150px floor is built on,
+          and dropping the spaced capitals only ever makes it narrower. */}
       <span
-        className={`text-[11.5px] font-semibold tracking-[0.06em] uppercase ${
+        className={`text-[11.5px] font-semibold ${
           pivot ? "text-white/75" : "text-muted"
         }`}
       >
@@ -193,7 +183,7 @@ function StepCard({ step }: { step: Step }) {
       </span>
 
       <span
-        className={`font-display justify-self-end leading-none font-bold tracking-[-0.02em] md:col-span-2 md:justify-self-start ${
+        className={`font-display justify-self-end leading-none font-semibold tracking-[-0.02em] md:col-span-2 md:justify-self-start ${
           numeric ? "text-[26px]" : "text-[17px]"
         } ${pivot ? "text-white" : "text-title"}`}
       >

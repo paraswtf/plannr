@@ -317,7 +317,7 @@ export function SpanCarousel({
        * arrows are not a fallback, they are how this works everywhere else, so
        * nothing is reachable only by swiping.
        */}
-      <p className="text-faint mt-3 text-[12.5px]">
+      <p className="text-faint mt-3 text-sm">
         Swipe across the calendar to move to the next {noun} or back to the
         last. The arrows above do the same on any device.
       </p>

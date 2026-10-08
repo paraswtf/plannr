@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Icon } from "~/components/ui/icon";
 import { useLongPress } from "~/components/ui/use-long-press";
 import { courseTone } from "~/lib/course-colour";
 import { decimalHour, formatHourLabel, SNAP_MINUTES } from "~/lib/dates";
@@ -80,6 +81,12 @@ interface TimetableGridProps {
   rowHeight?: number;
   /** Show the now-line when the grid is displaying today. */
   showNowLine?: boolean;
+  /**
+   * The clock to draw the now line and the live blocks from, for a screen
+   * that says something about "now" beside the grid and must not disagree
+   * with it. Left out, the grid keeps its own 30-second clock.
+   */
+  now?: Date;
   onEventClick?: (event: GridEvent) => void;
   /** A press-and-hold or a right-click on a booked block. */
   onEventPress?: (event: GridEvent) => void;
@@ -104,7 +111,27 @@ interface TimetableGridProps {
    * `compact-fit.ts`, which owns the arithmetic and explains the floor.
    */
   compact?: boolean;
+  /**
+   * The block whose details are open beside or over the grid, drawn with the
+   * same slate edge a chosen span has, so the panel and the block it is about
+   * can be matched across the screen.
+   */
+  highlightedOccurrenceId?: string | null;
 }
+
+/**
+ * A course tone's ring, softened for drawing.
+ *
+ * The palette's rings are each hue taken nearly to black, which is right for
+ * telling two touching blocks apart and wrong at full strength: forty-odd dark
+ * outlines turned the grid into a sheet of stickers in which "yours" and "on
+ * now" — the two rings that matter — were just two more outlines. Mixed back
+ * towards transparent the edge is still the hue, still separates neighbours,
+ * and leaves gold and red as the only full-strength rings on the grid. The
+ * palette itself is untouched; the key draws its swatches through this too.
+ */
+export const softRing = (ring: string) =>
+  `color-mix(in srgb, ${ring} 45%, transparent)`;
 
 /**
  * Column geometry, as CSS variables rather than numbers, because a phone cannot
@@ -158,6 +185,7 @@ export function TimetableGrid({
   endHour,
   rowHeight = 60,
   showNowLine = false,
+  now: nowProp,
   onEventClick,
   onEventPress,
   onEventMove,
@@ -166,8 +194,13 @@ export function TimetableGrid({
   unavailableRoomIds,
   snapMinutes = SNAP_MINUTES,
   compact = false,
+  highlightedOccurrenceId = null,
 }: TimetableGridProps) {
-  const now = useNow(30_000);
+  // Its own clock only when it was not handed one: a second interval ticking
+  // beside the screen's would re-render the grid twice a tick, and could
+  // stand the now line up to half a minute away from what the screen says.
+  const ownNow = useNow(nowProp ? null : 30_000);
+  const now = nowProp ?? ownNow;
   const rootRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
@@ -410,6 +443,42 @@ export function TimetableGrid({
 
   const nowHour = decimalHour(now, timeZone);
   const nowVisible = showNowLine && nowHour >= startHour && nowHour <= endHour;
+  const nowTop = (nowHour - startHour) * rowHeight;
+  /*
+   * The time the now line stands at, as a clock without its am/pm: it sits in
+   * the hour gutter between "10am" and "11am", which already say which half of
+   * the day it is, and the gutter on a phone is 46px — room for "10:20" in the
+   * mono face, not for "10:20am".
+   */
+  const nowMinutes = Math.floor(nowHour * 60);
+  const nowClock = `${Math.floor(nowMinutes / 60) % 12 || 12}:${String(nowMinutes % 60).padStart(2, "0")}`;
+
+  /*
+   * Whether there are rooms off the right-hand edge. Fourteen rooms are nine
+   * columns on a laptop and under three on a phone, and an overlay scrollbar
+   * says nothing until it is touched, so the edge fades while there is more
+   * to scroll to and stops fading at the end. Listened for rather than
+   * handled on the scroller's JSX, which belongs to the compact fit; reading
+   * its scroll position changes nothing about its size.
+   */
+  const [moreRight, setMoreRight] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const update = () =>
+      setMoreRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, [rooms.length, compact]);
 
   /**
    * How the grid is made to fit, when it is asked to.
@@ -573,7 +642,9 @@ export function TimetableGrid({
                     title={
                       unavailable ? "Does not fit this booking" : undefined
                     }
-                    className="font-display flex items-center justify-center px-1 text-center font-bold"
+                    // Semibold, as display type is everywhere now; the size is
+                    // the fit's, below, and stays exactly what it was.
+                    className="font-display flex items-center justify-center px-1 text-center font-semibold"
                     style={{
                       color: unavailable ? "var(--faint)" : "var(--app-title)",
                       textDecoration: unavailable ? "line-through" : undefined,
@@ -617,18 +688,42 @@ export function TimetableGrid({
                 className="bg-surface sticky left-0 z-8"
                 style={{ boxShadow: "inset -1px 0 0 var(--hair-soft)" }}
               >
-                {hours.map((hour) => (
+                {hours.map((hour) => {
+                  const top = (hour - startHour) * rowHeight;
+                  return (
+                    <div
+                      key={hour}
+                      // Centred on its line, except a label within reach of
+                      // the top edge: half of "8am" used to sit under the
+                      // sticky room row. Stepped out of the way of the now
+                      // chip too, rather than drawn under it.
+                      className={`text-faint absolute right-2 font-mono text-[11px] tabular-nums ${top < 9 ? "translate-y-0.5" : "-translate-y-1/2"} ${nowVisible && !zoomed && Math.abs(top - nowTop) < 13 ? "opacity-0" : ""}`}
+                      style={{ top }}
+                    >
+                      {formatHourLabel(
+                        new Date(Date.UTC(2000, 0, 1, hour, 0)),
+                        "UTC",
+                      )}
+                    </div>
+                  );
+                })}
+                {/*
+                 * The now line's time, in the gutter at its height. The line
+                 * itself now runs under the blocks, so this is the one place
+                 * the current time is written; filled in the deeper red that
+                 * white type can sit on. Dropped when the grid is zoomed, where
+                 * it would scale down to an unreadable sliver, and the dot on
+                 * the line's end comes back instead.
+                 */}
+                {nowVisible && !zoomed && (
                   <div
-                    key={hour}
-                    className="text-faint absolute right-2 -translate-y-1/2 font-mono text-[11px]"
-                    style={{ top: (hour - startHour) * rowHeight }}
+                    aria-hidden
+                    className="bg-red-strong pointer-events-none absolute right-1 -translate-y-1/2 rounded-[4px] px-1 font-mono text-[10px] leading-[15px] font-semibold text-white tabular-nums"
+                    style={{ top: nowTop }}
                   >
-                    {formatHourLabel(
-                      new Date(Date.UTC(2000, 0, 1, hour, 0)),
-                      "UTC",
-                    )}
+                    {nowClock}
                   </div>
-                ))}
+                )}
               </div>
 
               {rooms.map((room, index) => {
@@ -673,7 +768,7 @@ export function TimetableGrid({
                       // Hatched rather than merely pale: a room that cannot take
                       // this booking should not read as one that is simply free.
                       backgroundImage: unavailable
-                        ? `repeating-linear-gradient(45deg, rgba(68,88,121,0.06) 0 ${hair(5)}px, transparent ${hair(5)}px ${hair(11)}px)`
+                        ? `repeating-linear-gradient(45deg, var(--tint) 0 ${hair(5)}px, transparent ${hair(5)}px ${hair(11)}px)`
                         : undefined,
                     }}
                   >
@@ -703,7 +798,7 @@ export function TimetableGrid({
                             className="absolute w-full"
                             style={{
                               top: rowHeight / 2,
-                              boxShadow: `inset 0 ${hair(1)}px 0 rgba(68,88,121,0.05)`,
+                              boxShadow: `inset 0 ${hair(1)}px 0 var(--tint-hover)`,
                             }}
                           />
                         )}
@@ -786,7 +881,11 @@ export function TimetableGrid({
                           moving?.event?.occurrenceId === event.occurrenceId
                         }
                         grabbing={drag?.kind === "move"}
+                        highlighted={
+                          highlightedOccurrenceId === event.occurrenceId
+                        }
                         zoom={zoom}
+                        fitted={fit !== null}
                         movedRef={movedRef}
                         onEventClick={onEventClick}
                         onEventPress={onEventPress}
@@ -886,33 +985,54 @@ export function TimetableGrid({
                 );
               })}
 
+              {/*
+               * Under the blocks rather than over them. Drawn on top, its red
+               * rule ran through the title of every block in its row, and a
+               * line through a word is how this grid says a room is struck
+               * out; so the line now shows in the empty columns and the gaps,
+               * and the blocks it passes behind are the ones ringed in red for
+               * running now. Above the hour lines and the drag surface, below
+               * the blocks (z-2), the ranges (z-6), the gutter and the header.
+               */}
               {nowVisible && (
                 <div
-                  className="pointer-events-none absolute right-0 z-[5] flex items-center"
+                  className="pointer-events-none absolute right-0 z-[1] flex items-center"
                   style={{
                     left: "var(--tt-gutter)",
-                    top: (nowHour - startHour) * rowHeight,
+                    top: nowTop,
                   }}
                 >
-                  <span
-                    className="shrink-0 rounded-full"
-                    style={{
-                      background: "var(--red)",
-                      width: hair(7),
-                      height: hair(7),
-                      marginLeft: hair(-3.5),
-                    }}
-                  />
-                  <span
-                    className="flex-1"
-                    style={{ background: "var(--red)", height: hair(2) }}
-                  />
+                  {zoomed && (
+                    <span
+                      className="bg-red shrink-0 rounded-full"
+                      style={{
+                        width: hair(7),
+                        height: hair(7),
+                        marginLeft: hair(-3.5),
+                      }}
+                    />
+                  )}
+                  <span className="bg-red flex-1" style={{ height: hair(2) }} />
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+      {/*
+       * The fade over the right-hand edge while more rooms lie beyond it.
+       * Outside the scroller, so it never scrolls or scales with the grid, and
+       * inset by the card's 1px ring so the ring is not faded with it. Above
+       * the sticky room row (z-10) so the cut-off code fades too, and below the
+       * page's own sticky header (z-20). Never in compact, which has no
+       * sideways scroll to hint at.
+       */}
+      {moreRight && !fit && (
+        <div
+          aria-hidden
+          className="from-surface pointer-events-none absolute inset-y-px right-px z-11 w-8 rounded-r-[13px] bg-linear-to-l to-transparent"
+        />
+      )}
     </div>
   );
 }
@@ -947,7 +1067,9 @@ function EventBlock({
   now,
   beingMoved,
   grabbing,
+  highlighted,
   zoom,
+  fitted,
   movedRef,
   onEventClick,
   onEventPress,
@@ -963,8 +1085,12 @@ function EventBlock({
   now: Date;
   beingMoved: boolean;
   grabbing: boolean;
+  /** Its details are open in the drawer or the modal. */
+  highlighted: boolean;
   /** What the grid is drawn at, so a block knows if its words will be read. */
   zoom: number;
+  /** Compact is on, so the columns are narrowed to fit rather than set. */
+  fitted: boolean;
   /** Set by a drag that landed somewhere, so the release does not also click. */
   movedRef: React.RefObject<boolean>;
   onEventClick?: (event: GridEvent) => void;
@@ -987,6 +1113,53 @@ function EventBlock({
   const to = decimalHour(event.end, timeZone);
   const live = event.start <= now && now < event.end;
   const tone = courseTone(event.courseTitle);
+  const height = Math.max(22, (to - from) * rowHeight - 4);
+
+  /*
+   * The edge, as one list of inset shadows, handed to the class below as a
+   * custom property so that hover can add a lift to it without an inline
+   * `boxShadow` beating the hover class.
+   *
+   * Running now adds a 3px red leading edge inside the red ring: the live
+   * fill is a salmon close to the blossom course tone, and colour alone is
+   * not a signal everybody can read, so the block says "now" in shape too.
+   * An open block trades its ring for the 2px slate edge a chosen span wears,
+   * plus a raised shadow, and keeps the red edge if it is running.
+   */
+  const ring = [
+    live && "inset 3px 0 0 var(--red)",
+    highlighted
+      ? "inset 0 0 0 2px var(--slate)"
+      : live
+        ? "inset 0 0 0 1px var(--red)"
+        : event.isMine
+          ? "inset 0 0 0 1px var(--mine-ring)"
+          : `inset 0 0 0 1px ${softRing(tone.ring)}`,
+    highlighted && "var(--shadow-md)",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  /*
+   * How many lines the title may take. A title used to be one truncated line
+   * even in a two-hour block with room for three. Worked out from the block's
+   * own height, so it can never push the subtitle off the bottom: 12px at
+   * `leading-tight` is 15px a line, the 11px subtitle at the body's 1.5 is
+   * 16.5px, and the vertical padding is 12px. At most three, past which a
+   * title is better cut than spread down a long block.
+   *
+   * One line in compact, where the columns are narrowed to forty-odd pixels
+   * and a second line only shows a word cut off at the column's edge; there
+   * the blocks are an occupancy map first, and the ellipsis says "more".
+   */
+  const showSubtitle =
+    Boolean(event.subtitle) && to - from >= 0.75 && legible(11, zoom);
+  const titleLines = fitted
+    ? 1
+    : Math.max(
+        1,
+        Math.min(3, Math.floor((height - 12 - (showSubtitle ? 16.5 : 0)) / 15)),
+      );
 
   return (
     <button
@@ -1032,10 +1205,17 @@ function EventBlock({
       // starts a drag anyway — and the hold above answers `pointercancel`, so
       // a scroll that claims the finger cancels the press rather than fighting
       // it.
-      className="plr-clip absolute inset-x-1 touch-auto overflow-hidden rounded-lg px-2 py-1.5 text-left select-none"
+      //
+      // A column, so the title sits at the top of the block next to the hour
+      // it starts at rather than floating in the middle of a long one, which
+      // is where a button puts its content by default. Above the now line
+      // (z-1) and below the ranges (z-6). The scroll margins keep a block that
+      // takes keyboard focus clear of the sticky room row and hour gutter,
+      // which would otherwise cover it and its focus ring.
+      className="plr-clip absolute inset-x-1 z-[2] flex touch-auto scroll-mt-[42px] scroll-ml-(--tt-gutter) flex-col items-stretch justify-start overflow-hidden rounded-lg px-2 py-1.5 text-left [box-shadow:var(--tt-ring)] select-none hover:[box-shadow:var(--tt-ring),var(--shadow-card)]"
       style={{
         top: (from - startHour) * rowHeight + 2,
-        height: Math.max(22, (to - from) * rowHeight - 4),
+        height,
         /*
          * Three questions now, answered in two places, in a fixed order of
          * precedence — so a block that is several of these things at once still
@@ -1059,11 +1239,7 @@ function EventBlock({
           : live
             ? "var(--live-fill)"
             : tone.fill,
-        boxShadow: live
-          ? "inset 0 0 0 1px var(--red)"
-          : event.isMine
-            ? "inset 0 0 0 1px var(--mine-ring)"
-            : `inset 0 0 0 1px ${tone.ring}`,
+        ["--tt-ring" as string]: ring,
         opacity: beingMoved ? 0.35 : 1,
         cursor: onEventMove
           ? grabbing
@@ -1090,12 +1266,33 @@ function EventBlock({
        * question the full-size one cannot answer at all.
        */}
       {legible(12, zoom) && (
-        <span className="text-title block truncate text-[12px] leading-tight font-semibold">
+        <span
+          className={`text-title text-[12px] leading-tight font-semibold ${titleLines === 1 ? "block truncate" : ""}`}
+          style={
+            titleLines > 1
+              ? {
+                  display: "-webkit-box",
+                  WebkitBoxOrient: "vertical",
+                  WebkitLineClamp: titleLines,
+                  overflow: "hidden",
+                  // A word longer than the column is hyphenated, or failing
+                  // that broken, rather than clipped mid-letter at the edge.
+                  overflowWrap: "break-word",
+                  hyphens: "auto",
+                }
+              : undefined
+          }
+        >
           {event.title}
         </span>
       )}
-      {event.subtitle && to - from >= 0.75 && legible(11, zoom) && (
-        <span className="text-muted block truncate text-[11px]">
+      {/*
+       * The ink rather than the muted grey: these lines sit on saturated
+       * course colours, where the grey fell under 3:1 on the moss and the
+       * teal. Weight is what keeps it below the title.
+       */}
+      {showSubtitle && (
+        <span className="text-ink block truncate text-[11px]">
           {event.subtitle}
         </span>
       )}
@@ -1130,7 +1327,7 @@ function RangeBlock({
   const height = (range.endHour - range.startHour) * rowHeight;
   // A quarter-hour block is barely taller than its own text, so the range only
   // spells itself out once there is room; below that it is a bare tint.
-  const label = `${hourLabel(range.startHour)} – ${hourLabel(range.endHour)}`;
+  const label = `${hourLabel(range.startHour)}-${hourLabel(range.endHour)}`;
   const roomForLabel = height >= 30;
   const handleHeight = Math.max(5, Math.min(11, (height - 6) / 3));
 
@@ -1140,8 +1337,7 @@ function RangeBlock({
       style={{
         top: (range.startHour - gridStartHour) * rowHeight + 2,
         height: Math.max(9, height - 4),
-        background:
-          tone === "pending" ? "rgba(68,88,121,0.16)" : "rgba(68,88,121,0.07)",
+        background: tone === "pending" ? "var(--tint-strong)" : "var(--tint)",
         boxShadow:
           tone === "pending"
             ? "inset 0 0 0 2px var(--slate)"
@@ -1165,12 +1361,24 @@ function RangeBlock({
         <span
           className="pointer-events-none absolute inset-0 flex items-center justify-center px-2"
           style={{
-            color: tone === "pending" ? "var(--slate)" : "var(--faint)",
+            color: tone === "pending" ? "var(--slate-ink)" : "var(--muted)",
           }}
         >
-          <span className="truncate font-mono text-[10.5px] font-bold">
-            {tone === "pending" ? label : "+ book"}
-          </span>
+          {/*
+           * The span's times are times, so they are mono; the hover ghost is
+           * an invitation in words, so it is in the body face with a plus
+           * glyph rather than a lowercase "+ book" that read as code.
+           */}
+          {tone === "pending" ? (
+            <span className="truncate font-mono text-[10.5px] font-bold">
+              {label}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 truncate text-[10.5px] font-semibold">
+              <Icon name="plus" size={10} stroke={2.4} />
+              Book
+            </span>
+          )}
         </span>
       )}
 
@@ -1222,8 +1430,8 @@ function ResizeHandle({
       {...dragHandlers}
     >
       <span
-        className="rounded-full"
-        style={{ height: 3, width: 26, background: "var(--slate)" }}
+        className="bg-slate rounded-full"
+        style={{ height: 3, width: 26 }}
       />
     </div>
   );

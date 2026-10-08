@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { Icon } from "~/components/ui/icon";
+import { Checkbox } from "~/components/ui/checkbox";
 import {
   bitsToScopes,
   impliedScopes,
@@ -139,20 +139,27 @@ export function ScopePicker({
   const chosen = bitsToScopes(grantedBits).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-muted text-[12.5px] font-semibold">Scopes</span>
-        <span className="text-faint font-mono text-[11.5px]">
+    <div className="flex flex-col gap-4">
+      {/* The same label-and-counter pair as every field above it: the words in
+          the field label's size and ink, the count in tabular figures so it
+          does not shuffle sideways as boxes are ticked. The counter's words
+          are the ones a person reads, set in sentence case by hand rather than
+          transformed. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-title text-xs font-semibold">Scopes</span>
+        <span className="text-faint text-xs tabular-nums">
           {chosen === 0 ? "none chosen" : `${chosen} in force`}
         </span>
       </div>
 
       {grantable.map((group) => (
         <div key={group.category}>
-          <div className="text-faint mb-2 font-mono text-[11px] font-bold tracking-[0.06em] uppercase">
+          {/* Sentence case, in the body face: the category was a spaced-out
+              mono capital, which is decoration the house style has dropped. */}
+          <div className="text-muted mb-1.5 text-xs font-semibold">
             {group.category}
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             {group.scopes.map((scope) => {
               const name = scope.name;
               const bit = PermissionFlags[name];
@@ -164,52 +171,42 @@ export function ScopePicker({
               const source = isImplied ? sourceOf(name) : null;
 
               return (
-                <label
+                <div
                   key={name}
-                  className="flex items-start gap-3 rounded-[10px] px-3 py-2.5"
-                  style={{
-                    background: checked
-                      ? "rgba(68,88,121,0.06)"
-                      : "transparent",
-                    cursor: immovable ? "default" : "pointer",
-                    opacity: disabled ? 0.6 : withheld ? 0.45 : 1,
-                  }}
+                  className={`rounded-[10px] transition-colors duration-150 ${
+                    checked ? "bg-tint" : ""
+                  } ${immovable ? "" : "hover:bg-tint-hover"}`}
                 >
-                  <span
-                    className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px]"
-                    style={{
-                      background: checked ? "var(--slate)" : "var(--surface)",
-                      boxShadow: checked ? "none" : "var(--ring)",
-                      opacity: isImplied ? 0.55 : 1,
-                    }}
-                  >
-                    {checked && (
-                      <Icon name="check" size={12} color="#fff" stroke={3} />
-                    )}
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="sr-only"
+                  {/*
+                   * The shared checkbox is the whole row's label, so a scope's
+                   * accessible name is still the scope, who granted it, and the
+                   * sentence under it. Dimming is the checkbox's own
+                   * disabled look, which a withheld or implied scope shares.
+                   */}
+                  <Checkbox
                     checked={checked}
                     disabled={immovable}
                     onChange={() => toggle(name)}
+                    className="px-3"
+                    label={
+                      <span className="text-base font-semibold">
+                        {scope.label}
+                        {source && (
+                          <span className="text-faint ml-2 text-xs font-medium">
+                            granted by {labels.get(source) ?? source}
+                          </span>
+                        )}
+                      </span>
+                    }
+                    description={
+                      <span className="text-sm">
+                        {withheld
+                          ? "You cannot grant this to a key, because you do not hold it yourself."
+                          : scope.description}
+                      </span>
+                    }
                   />
-                  <span className="min-w-0">
-                    <span className="text-title block text-[13.5px] font-semibold">
-                      {scope.label}
-                      {source && (
-                        <span className="text-faint ml-2 text-[11.5px] font-medium">
-                          granted by {labels.get(source) ?? source}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-muted block text-[12.5px]">
-                      {withheld
-                        ? "You cannot grant this to a key, because you do not hold it yourself."
-                        : scope.description}
-                    </span>
-                  </span>
-                </label>
+                </div>
               );
             })}
           </div>

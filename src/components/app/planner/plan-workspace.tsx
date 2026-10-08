@@ -4,11 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { PageBody } from "~/components/app/shell/page-body";
 import { PageHeader } from "~/components/app/shell/page-header";
 import { Badge } from "~/components/ui/badge";
+import {
+  Button,
+  buttonClass,
+  IconButton,
+  type ButtonVariant,
+} from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Card } from "~/components/ui/card";
+import { EmptyState } from "~/components/ui/empty-state";
 import { Icon } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
+import { Skeleton } from "~/components/ui/skeleton";
 import { formatFullDate } from "~/lib/dates";
 import {
   PLAN_STATUS_HINT,
@@ -58,7 +68,7 @@ export function PlanWorkspace({ planId }: { planId: string }) {
         text:
           result.unplaced === 0
             ? `Laid out ${result.placed} sessions with no clashes.`
-            : `Placed ${result.placed}, but ${result.unplaced} would not fit — see what is blocking them.`,
+            : `Placed ${result.placed}, but ${result.unplaced} would not fit. See what is blocking them on the timetable.`,
         bad: result.unplaced > 0,
       });
     },
@@ -91,11 +101,9 @@ export function PlanWorkspace({ planId }: { planId: string }) {
     return (
       <>
         <PageHeader title="Schedule builder" />
-        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
-          <Card>
-            <p className="text-muted m-0 text-[14px]">Loading the plan…</p>
-          </Card>
-        </div>
+        <PageBody>
+          <WorkspaceSkeleton />
+        </PageBody>
       </>
     );
   }
@@ -104,21 +112,27 @@ export function PlanWorkspace({ planId }: { planId: string }) {
     return (
       <>
         <PageHeader title="Schedule builder" />
-        <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
-          <Card>
-            <p className="text-title m-0 text-[14px] font-semibold">
-              {plan.error?.data?.code === "NOT_FOUND"
-                ? "That plan does not exist, or it is still a private draft."
-                : (plan.error?.message ?? "That plan could not be opened.")}
-            </p>
-            <Link
-              href="/planner"
-              className="text-slate mt-3 inline-block text-[13px] font-bold"
-            >
-              ← Back to all plans
-            </Link>
+        <PageBody width="narrow">
+          <Card pad={0}>
+            <EmptyState
+              icon="alert"
+              title={
+                plan.error?.data?.code === "NOT_FOUND"
+                  ? "That plan does not exist, or it is still a private draft."
+                  : (plan.error?.message ?? "That plan could not be opened.")
+              }
+              action={
+                <Link
+                  href="/planner"
+                  className={buttonClass("secondary", "md")}
+                >
+                  <Icon name="chevronLeft" size={15} stroke={2} />
+                  Back to all plans
+                </Link>
+              }
+            />
           </Card>
-        </div>
+        </PageBody>
       </>
     );
   }
@@ -131,42 +145,60 @@ export function PlanWorkspace({ planId }: { planId: string }) {
     (r) => r.decision === "PENDING",
   ).length;
 
+  /*
+   * One filled button per stage: the next thing this plan is waiting for. It
+   * used to be a slate Regenerate beside a gradient Share, two loud fills
+   * pulling against each other on every draft. An approved plan waits to be
+   * applied; a drafted week waits to be shared; a draft with demand but no
+   * week waits to be generated; a refused one waits to be revised. A plan in
+   * review is waiting on other people, so nothing here is filled at all, and
+   * neither is an empty draft, whose next step ("Add a subject") is the empty
+   * state's own button below.
+   */
+  const primary: "apply" | "share" | "generate" | "revise" | null = data.can
+    .apply
+    ? "apply"
+    : data.can.share && data.status === "DRAFT" && data.sessions.length > 0
+      ? "share"
+      : data.can.edit && data.status === "DRAFT" && data.requirements.length > 0
+        ? "generate"
+        : data.can.revise && data.status === "CHANGES_REQUESTED"
+          ? "revise"
+          : null;
+  const variantFor = (action: NonNullable<typeof primary>): ButtonVariant =>
+    primary === action ? "primary" : "secondary";
+
+  const range = `Week of ${formatFullDate(data.weekStart, data.timeZone)}${
+    data.repeatUntil
+      ? ` until ${formatFullDate(data.repeatUntil, data.timeZone)}`
+      : ""
+  }`;
+
   return (
     <>
       <PageHeader
         title={data.name}
-        subtitle={`${PLAN_STATUS_HINT[data.status]} · week of ${formatFullDate(
-          data.weekStart,
-          data.timeZone,
-        )}${data.repeatUntil ? ` until ${formatFullDate(data.repeatUntil, data.timeZone)}` : ""}`}
+        // Two sentences rather than a sentence glued to a date by ". ·": the
+        // stage hint says who can see the plan, the range says when it runs.
+        subtitle={`${PLAN_STATUS_HINT[data.status]} ${range}.`}
+        back={{ href: "/planner", label: "All plans" }}
         actions={
           // A plan can offer six actions at once, and on a phone that is more
           // than one row of the header. Each label keeps its leading word and
           // drops the qualifier below `sm`; the button's aria-label carries the
           // whole phrase, so nothing is lost to anyone reading it aloud.
           <>
-            <Link
-              href="/planner"
-              className="text-muted flex min-h-10 items-center rounded-[var(--radius-btn)] px-3 text-[13px] font-semibold lg:min-h-0 lg:py-2"
-              style={{ boxShadow: "var(--ring)" }}
-            >
-              All plans
-            </Link>
-
             {data.can.edit && (
               <>
-                <button
-                  type="button"
+                <IconButton
+                  icon="settings"
+                  label="Plan settings"
+                  variant="secondary"
                   onClick={() => setSettingsOpen(true)}
-                  aria-label="Plan settings"
-                  title="Plan settings"
-                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[var(--radius-btn)] lg:h-[34px] lg:w-[34px]"
-                  style={{ boxShadow: "var(--ring)" }}
-                >
-                  <Icon name="settings" size={15} color="var(--muted)" />
-                </button>
-                <button
-                  type="button"
+                />
+                <Button
+                  variant={variantFor("generate")}
+                  icon="sparkles"
                   disabled={
                     generate.isPending || data.requirements.length === 0
                   }
@@ -176,20 +208,7 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                       ? "Regenerate timetable"
                       : "Generate timetable"
                   }
-                  className="flex min-h-10 items-center gap-2 rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-                  style={{
-                    background: "var(--slate)",
-                    opacity:
-                      generate.isPending || data.requirements.length === 0
-                        ? 0.5
-                        : 1,
-                    cursor:
-                      generate.isPending || data.requirements.length === 0
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
                 >
-                  <Icon name="sparkles" size={15} color="#fff" />
                   {generate.isPending ? (
                     "Working…"
                   ) : data.sessions.length > 0 ? (
@@ -200,42 +219,38 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                       <span className="hidden sm:inline"> timetable</span>
                     </span>
                   )}
-                </button>
+                </Button>
               </>
             )}
 
             {data.can.share && data.status === "DRAFT" && (
-              <button
-                type="button"
+              <Button
+                variant={variantFor("share")}
                 onClick={() => setSharing(true)}
                 aria-label="Share for approval"
-                className="flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-                style={{ background: "var(--grad-brand)" }}
               >
-                Share
-                <span className="hidden sm:inline">&nbsp;for approval</span>
-              </button>
+                <span>
+                  Share
+                  <span className="hidden sm:inline">&nbsp;for approval</span>
+                </span>
+              </Button>
             )}
 
             {data.can.share && data.status === "IN_REVIEW" && (
-              <button
-                type="button"
+              <Button
+                disabled={withdraw.isPending}
                 onClick={() => withdraw.mutate({ id: data.id })}
-                className="text-muted flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
-                style={{ boxShadow: "var(--ring)" }}
               >
-                Withdraw
-              </button>
+                {withdraw.isPending ? "Withdrawing…" : "Withdraw"}
+              </Button>
             )}
 
             {data.can.revise && data.status !== "DRAFT" && (
-              <button
-                type="button"
+              <Button
+                variant={variantFor("revise")}
                 disabled={revise.isPending}
                 onClick={() => revise.mutate({ id: data.id })}
                 aria-label="Revise as new draft"
-                className="text-muted flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold lg:min-h-0 lg:py-2"
-                style={{ boxShadow: "var(--ring)" }}
               >
                 {revise.isPending ? (
                   "Copying…"
@@ -245,99 +260,100 @@ export function PlanWorkspace({ planId }: { planId: string }) {
                     <span className="hidden sm:inline"> as new draft</span>
                   </span>
                 )}
-              </button>
+              </Button>
             )}
 
             {data.can.apply && (
-              <button
-                type="button"
+              <Button
+                variant={variantFor("apply")}
                 onClick={() => setApplying(true)}
                 aria-label="Apply to timetable"
-                className="flex min-h-10 cursor-pointer items-center rounded-[var(--radius-btn)] px-3.5 text-[13px] font-semibold text-white lg:min-h-0 lg:py-2"
-                style={{ background: "var(--grad-brand)" }}
               >
-                Apply
-                <span className="hidden sm:inline">&nbsp;to timetable</span>
-              </button>
+                <span>
+                  Apply
+                  <span className="hidden sm:inline">&nbsp;to timetable</span>
+                </span>
+              </Button>
             )}
           </>
         }
       />
 
-      <div className="px-4 pt-2 pb-10 sm:px-6 lg:px-9">
-        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <Badge tone={PLAN_STATUS_TONE[data.status]} dot>
+      <PageBody className="flex flex-col gap-5">
+        {/* Who made it and where it stands, as one line of facts. The author is
+            a name, so it is set in the body face rather than the mono it was
+            in; mono is for times, codes and counts. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Badge tone={PLAN_STATUS_TONE[data.status]}>
             {PLAN_STATUS_LABEL[data.status]}
           </Badge>
-          {data.version > 1 && (
-            <Badge tone="neutral">version {data.version}</Badge>
-          )}
-          {data.semester && <Badge tone="slate">{data.semester.name}</Badge>}
-          <span className="text-faint font-mono text-[12px]">
-            by {data.author.name}
+          <span className="text-muted text-sm">
+            {data.semester ? `${data.semester.name} · ` : ""}by{" "}
+            {data.author.name}
+            {data.version > 1 && `, version ${data.version}`}
           </span>
           {data.status === "IN_REVIEW" && pendingReviewers > 0 && (
-            <span className="text-muted text-[12.5px]">
-              waiting on {pendingReviewers}{" "}
+            <span className="text-warn text-sm font-semibold">
+              Waiting on {pendingReviewers}{" "}
               {pendingReviewers === 1 ? "person" : "people"}
             </span>
           )}
         </div>
 
         {data.status === "CHANGES_REQUESTED" && (
-          <Banner tone="red">
-            A reviewer asked for changes. This draft is locked — take a copy
-            with <b>Revise as new draft</b>, fix it there, and share it again
-            for a fresh round of approvals.
-          </Banner>
+          <Callout tone="bad">
+            A reviewer asked for changes. This draft is locked: take a copy with{" "}
+            <b>Revise as new draft</b>, fix it there, and share it again for a
+            fresh round of approvals.
+          </Callout>
         )}
         {data.status === "APPLIED" && (
-          <Banner tone="green">
+          <Callout tone="good">
             These classes are on the live timetable.{" "}
-            <Link href="/timetable" className="font-bold underline">
+            <Link
+              href="/timetable"
+              className="font-semibold underline underline-offset-2"
+            >
               Open the timetable
             </Link>
             .
-          </Banner>
+          </Callout>
         )}
         {data.status === "APPROVED" && data.can.apply && (
-          <Banner tone="green">
+          <Callout tone="good">
             Everyone signed off. <b>Apply to timetable</b> will schedule{" "}
             {placed} recurring {placed === 1 ? "class" : "classes"}.
-          </Banner>
+          </Callout>
         )}
 
-        <div className="mb-5">
-          <Segmented
-            items={[
-              {
-                value: "demand" as const,
-                label: `Demand (${data.requirements.length})`,
-              },
-              {
-                value: "timetable" as const,
-                label:
-                  unplaced > 0
-                    ? `Timetable (${unplaced} unplaced)`
-                    : "Timetable",
-              },
-              {
-                value: "review" as const,
-                label: openComments > 0 ? `Review (${openComments})` : "Review",
-              },
-            ]}
-            value={tab}
-            onChange={setTab}
-            size="sm"
-          />
-        </div>
+        <Segmented
+          items={[
+            {
+              value: "demand" as const,
+              label: `Demand (${data.requirements.length})`,
+            },
+            {
+              value: "timetable" as const,
+              label:
+                unplaced > 0 ? `Timetable (${unplaced} unplaced)` : "Timetable",
+            },
+            {
+              value: "review" as const,
+              label: openComments > 0 ? `Review (${openComments})` : "Review",
+            },
+          ]}
+          value={tab}
+          onChange={setTab}
+          size="sm"
+          ariaLabel="Stage"
+        />
 
         {tab === "demand" && <DemandPanel plan={data} onChanged={refresh} />}
         {tab === "timetable" && (
           <TimetablePanel plan={data} onChanged={refresh} />
         )}
         {tab === "review" && <ReviewPanel plan={data} onChanged={refresh} />}
-      </div>
+      </PageBody>
 
       {sharing && (
         <ShareDialog
@@ -373,58 +389,62 @@ export function PlanWorkspace({ planId }: { planId: string }) {
         // Pinned to both edges on a phone: these messages run to a couple of
         // lines, and anchored to the right alone the box grew off the left of
         // the screen instead of wrapping.
+        //
+        // Reduced motion swaps the travel for a fade in globals.css.
         <div
-          className="plr-toast fixed right-4 bottom-4 left-4 z-40 flex items-start gap-2.5 rounded-xl px-4 py-3 sm:right-8 sm:bottom-8 sm:left-auto sm:items-center"
-          style={{
-            background: "var(--surface)",
-            boxShadow: "var(--ring), var(--shadow-float)",
-          }}
+          role="status"
+          className="plr-toast bg-surface fixed right-4 bottom-4 left-4 z-40 flex items-start gap-2.5 rounded-[12px] py-3 pr-2 pl-4 shadow-[var(--ring),var(--shadow-float)] sm:right-8 sm:bottom-8 sm:left-auto sm:items-center"
         >
           <Icon
             name={flash.bad ? "alert" : "checkCircle"}
             size={18}
-            color={flash.bad ? "var(--red)" : "#4e7d3a"}
             stroke={2}
+            className={`mt-px shrink-0 sm:mt-0 ${flash.bad ? "text-bad" : "text-good"}`}
           />
-          <span className="text-title min-w-0 flex-1 text-[13.5px] font-semibold sm:max-w-[360px] sm:flex-none">
+          <span className="text-title min-w-0 flex-1 text-sm font-semibold sm:max-w-[360px] sm:flex-none">
             {flash.text}
           </span>
-          <button
-            type="button"
+          {/* Finger-sized until the sidebar's breakpoint rather than `sm`, which
+              a tablet held upright is already past. */}
+          <IconButton
+            icon="x"
+            label="Dismiss"
+            size="sm"
+            iconSize={13}
             onClick={() => setFlash(null)}
-            aria-label="Dismiss"
-            className="-my-1 -mr-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg sm:my-0 sm:mr-0 sm:ml-1.5 sm:h-6 sm:w-6"
-          >
-            <Icon name="x" size={13} color="var(--muted)" />
-          </button>
+            className="-my-2 shrink-0 sm:my-0"
+          />
         </div>
       )}
     </>
   );
 }
 
-function Banner({
-  tone,
-  children,
-}: {
-  tone: "red" | "green";
-  children: React.ReactNode;
-}) {
-  const tones = {
-    red: {
-      background: "rgba(220,56,72,0.07)",
-      boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-      color: "#b02636",
-    },
-    green: {
-      background: "rgba(78,125,58,0.08)",
-      boxShadow: "inset 0 0 0 1px rgba(78,125,58,0.3)",
-      color: "#3f6a2e",
-    },
-  };
+/** The workspace's shape while the plan loads: meta line, stages, a table. */
+function WorkspaceSkeleton() {
   return (
-    <div className="mb-5 rounded-xl p-3.5 text-[13px]" style={tones[tone]}>
-      {children}
+    <div
+      role="status"
+      aria-label="Loading the plan"
+      className="flex flex-col gap-5"
+    >
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-6 w-16" />
+        <Skeleton className="h-3.5 w-48" />
+      </div>
+      <Skeleton className="h-10 w-72 max-w-full rounded-[11px]" />
+      <div className="bg-surface rounded-[var(--radius-card)] shadow-[var(--ring),var(--shadow-card)]">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-6 px-4 py-4 shadow-[inset_0_-1px_0_var(--hair-soft)] last:shadow-none"
+          >
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3.5 w-48 max-w-full" />
+            <Skeleton className="ml-auto hidden h-3.5 w-24 sm:block" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

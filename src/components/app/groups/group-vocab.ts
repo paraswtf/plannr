@@ -24,13 +24,18 @@ export const KIND_LABEL: Record<GroupKindName, string> = {
 
 /** What each split is for, shown where there is room to explain. */
 export const KIND_HINT: Record<GroupKindName, string> = {
-  DIVISION: "Splits the batch — everyone is in exactly one.",
+  DIVISION: "Splits the batch: everyone is in exactly one.",
   MAJOR: "A specialisation the batch chooses.",
   MINOR: "A second, smaller specialisation.",
   SUBJECT: "An elective cohort, possibly across batches.",
   OTHER: "Anything else, such as a combined lecture.",
 };
 
+/*
+ * A Major keeps the brand wash: it is the one kind a batch chooses as its
+ * specialisation, and the badge's gradient tone is now a thin wash under a
+ * deep violet ink (AA at 11px) rather than white type on the solid gradient.
+ */
 export const KIND_TONE: Record<GroupKindName, BadgeTone> = {
   DIVISION: "slate",
   MAJOR: "gradient",

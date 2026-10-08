@@ -2,91 +2,88 @@
 
 import type { ReactNode } from "react";
 
-import { Icon, type IconName } from "~/components/ui/icon";
+import { Button as UiButton, type ButtonVariant } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
+import { Input } from "~/components/ui/field";
+import type { IconName } from "~/components/ui/icon";
 
 /**
  * The buttons and fields this screen repeats, in one place.
  *
- * Everywhere else in the app a button is written inline, and that is fine when
- * a panel has two of them. This screen has five dialogs and a confirmation
- * gesture on three of them, which is around twenty buttons — enough that the
- * inline style objects stop being local colour and start hiding the logic they
- * are wrapped around. The styles below are the same values the rest of the app
- * uses, lifted rather than invented; nothing here is a new visual idea.
+ * This screen has five dialogs and a confirmation gesture on three of them,
+ * which is around twenty buttons. They used to be drawn here from inline style
+ * objects; the app has its own `Button`, `Input` and `Callout` now, so what is
+ * left is the console's own vocabulary laid over them — the four kinds of
+ * button an API key needs, and the two kinds of warning — so the dialogs can
+ * keep saying "destructive" where they mean it rather than re-deciding at every
+ * call site which of the app's variants that is.
  */
 
 type Variant = "primary" | "ghost" | "danger" | "destructive";
 
-const VARIANTS: Record<Variant, React.CSSProperties> = {
-  primary: { background: "var(--grad-brand)", color: "#fff" },
-  ghost: { boxShadow: "var(--ring)", color: "var(--muted)" },
+/*
+ * `danger` and `destructive` are not two names for red. Rolling a key, or the
+ * step that leads to revoking one, is the bad wash with red ink: plainly
+ * dangerous, still recoverable. The act that cannot be taken back is the solid
+ * red fill, so the only warning between the two — that the second is filled —
+ * survives the move onto the shared button. `ghost` was a ringed white button
+ * here before it had a name, which is the shared `secondary`.
+ */
+const VARIANTS: Record<Variant, ButtonVariant> = {
+  primary: "primary",
+  ghost: "secondary",
   /** An action you can undo, or that only threatens one key. */
-  danger: { boxShadow: "var(--ring)", color: "var(--red)" },
+  danger: "danger-quiet",
   /** The one that cannot be taken back, and is filled so it reads that way. */
-  destructive: { background: "var(--red)", color: "#fff" },
+  destructive: "danger",
 };
 
 export function Button({
   children,
   variant = "ghost",
+  size = "md",
   icon,
   disabled = false,
+  block = false,
   onClick,
   className = "",
 }: {
   children: ReactNode;
   variant?: Variant;
+  size?: "sm" | "md";
   icon?: IconName;
   disabled?: boolean;
+  /** Full width, for the one action a phone-width box is about. */
+  block?: boolean;
   onClick: () => void;
   className?: string;
 }) {
   return (
-    <button
-      type="button"
+    // The shared button is `type="button"` and DOM-disabled, which is what the
+    // "a double press cannot mint two credentials" guarantees upstairs rest on.
+    <UiButton
+      variant={VARIANTS[variant]}
+      size={size}
+      icon={icon}
       disabled={disabled}
+      block={block}
       onClick={onClick}
-      // The floor on the height is the touch target, which the pointer-driven
-      // layout above the sidebar's breakpoint has no need of.
-      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap lg:min-h-0 ${className}`}
-      style={{
-        ...VARIANTS[variant],
-        opacity: disabled ? 0.5 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
+      className={className}
     >
-      {icon && <Icon name={icon} size={14} color="currentColor" stroke={2} />}
       {children}
-    </button>
-  );
-}
-
-export function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-muted text-[12.5px] font-semibold">{label}</span>
-      {children}
-      {hint && <span className="text-faint text-[11.5px]">{hint}</span>}
-    </div>
+    </UiButton>
   );
 }
 
 /**
- * 16px on a phone: below that, Safari zooms the page in as the field takes
- * focus, which on a dialog leaves it half off screen.
+ * The label-hint-error frame, which is the app's own now: it renders a real
+ * `<label>` tied to the control by id, so a field passed as a render function
+ * is named by the words above it.
  */
-export const INPUT_CLASS =
-  "bg-surface text-ink min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0";
+export { Field } from "~/components/ui/field";
 
 export function TextInput({
+  id,
   value,
   onChange,
   placeholder,
@@ -94,6 +91,8 @@ export function TextInput({
   maxLength,
   ariaLabel,
 }: {
+  /** From `Field`'s render function, so the label names this field. */
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -101,16 +100,18 @@ export function TextInput({
   maxLength?: number;
   ariaLabel?: string;
 }) {
+  // 13px on the scale, and 16px under a coarse pointer by the rule in
+  // globals.css: below that, Safari zooms the page in as the field takes
+  // focus, which on a dialog leaves it half off screen.
   return (
-    <input
+    <Input
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
       maxLength={maxLength}
       aria-label={ariaLabel}
-      className={INPUT_CLASS}
-      style={{ boxShadow: "var(--ring)", opacity: disabled ? 0.6 : 1 }}
     />
   );
 }
@@ -119,37 +120,24 @@ export function TextInput({
  * A short warning, stated once and coloured.
  *
  * Red for "this cannot be taken back", amber for "read this before you press
- * the button". The same fill-plus-ring pair as everything else on these
- * screens, so it reads as part of the page rather than as an alert box bolted
- * on to it.
+ * the button" — the app's `bad` and `warn`, so a warning here is the same red
+ * as a badge or a refusal anywhere else. Given a `title`, the title carries the
+ * tone and the explanation under it drops to ordinary ink, so a paragraph of
+ * consequences is not a paragraph of red.
  */
 export function Notice({
   tone,
+  title,
   children,
 }: {
   tone: "red" | "orange";
-  children: ReactNode;
+  title?: ReactNode;
+  children?: ReactNode;
 }) {
-  const colour = tone === "red" ? "var(--red)" : "var(--orange)";
   return (
-    <div
-      className="flex items-start gap-2.5 rounded-[10px] px-3.5 py-3"
-      style={{
-        background: `color-mix(in srgb, ${colour} 11%, var(--surface))`,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${colour} 42%, transparent)`,
-      }}
-    >
-      <Icon
-        name="alert"
-        size={15}
-        stroke={2}
-        color={tone === "red" ? "#b02636" : "#a2660f"}
-        className="mt-px"
-      />
-      <div className="text-ink min-w-0 text-[12.5px] leading-relaxed">
-        {children}
-      </div>
-    </div>
+    <Callout tone={tone === "red" ? "bad" : "warn"} title={title}>
+      {children}
+    </Callout>
   );
 }
 

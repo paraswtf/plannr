@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Callout } from "~/components/ui/callout";
 import { Dialog } from "~/components/ui/dialog";
+import { scopeDenialMessage } from "~/lib/api-scopes";
 import { api } from "~/trpc/react";
 import { Button } from "./controls";
 import {
@@ -84,8 +86,8 @@ export function CreateKeyDialog({
         </>
       }
     >
-      <div className="flex flex-col gap-4">
-        <p className="text-muted m-0 text-[13px]">
+      <div className="flex flex-col gap-5">
+        <p className="text-muted text-sm">
           The key is shown once, on the next screen, and never again. Have
           somewhere to put it before you press create.
         </p>
@@ -98,11 +100,16 @@ export function CreateKeyDialog({
           disabled={create.isPending}
         />
 
+        {/*
+         * Why "Create key" is still greyed out, said where the eye ends up
+         * after the last box. The words are the server's own refusal, read
+         * from the function that writes it, so the warning before the round
+         * trip and the error after it can never drift apart.
+         */}
         {draft.scopes.length === 0 && (
-          <p className="text-faint m-0 text-[12.5px]">
-            A key needs at least one scope — one that can do nothing is not a
-            credential, it is a liability.
-          </p>
+          <Callout tone="info">
+            {scopeDenialMessage({ reason: "EMPTY" })}
+          </Callout>
         )}
       </div>
     </Dialog>

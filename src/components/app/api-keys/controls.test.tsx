@@ -102,56 +102,51 @@ describe("Button", () => {
       </>,
     );
 
-    const danger = screen
-      .getByRole("button", { name: "Revoke" })
-      .getAttribute("style");
-    const destructive = screen
-      .getByRole("button", { name: "Delete for good" })
-      .getAttribute("style");
+    const danger = screen.getByRole("button", { name: "Revoke" }).className;
+    const destructive = screen.getByRole("button", {
+      name: "Delete for good",
+    }).className;
 
-    // The one that cannot be taken back is filled; the one that only threatens
-    // a single key is outlined and merely tinted. This is the whole of the
-    // warning a person gets before the gesture, so it is asserted rather than
-    // left to the eye.
-    expect(destructive).toContain("background: var(--red)");
-    expect(danger).not.toContain("background:");
-    expect(danger).toContain("color: var(--red)");
+    // The one that cannot be taken back is filled solid red; the one that only
+    // threatens a single key is red ink on a faint red wash. This is the whole
+    // of the warning a person gets before the gesture, so it is asserted rather
+    // than left to the eye — through the token classes the shared button draws
+    // them with, now that neither is an inline style.
+    expect(destructive).toContain("bg-red-strong");
+    expect(destructive).toContain("text-white");
+    expect(danger).not.toContain("bg-red-strong");
+    expect(danger).toContain("bg-bad-wash");
+    expect(danger).toContain("text-bad");
   });
 });
 
 describe("Field", () => {
   it("states the label and the sentence under it", () => {
     render(
-      <Field label="Rate limit" hint="Requests a minute, 1–10,000.">
+      <Field label="Rate limit" hint="Requests a minute, 1-10,000.">
         <TextInput value="120" onChange={() => undefined} />
       </Field>,
     );
 
     expect(screen.getByText("Rate limit")).toBeInTheDocument();
     expect(
-      screen.getByText("Requests a minute, 1–10,000."),
+      screen.getByText("Requests a minute, 1-10,000."),
     ).toBeInTheDocument();
   });
 
   /**
-   * A known gap, pinned rather than shrugged at.
+   * Once a known gap, pinned with `it.fails` until somebody closed it.
    *
-   * `Field` draws its label as a `<span>`, so nothing ties the words to the
-   * control beneath them: a screen reader reads "edit text, blank" and the
-   * label is just some prose that happened to come before it. Every call site
-   * therefore has to name its own control, which is what `key-form` now does
-   * for all four of its fields — but a caller who forgets gets no warning.
-   *
-   * The fix is for `Field` to render a `<label>` (as `DeleteConfirmation` in
-   * `key-dialog` already does with the same markup) or to hand a generated id
-   * down. Left alone here because `Field` is shared with dialogs another pass
-   * is testing; when somebody does it, this test starts passing and vitest
-   * will say so.
+   * `Field` drew its label as a `<span>`, so nothing tied the words to the
+   * control beneath them and every call site had to name its own. It is the
+   * app's shared field now, which renders a real `<label>` and hands its id
+   * down through a render function — so the words above a field are its name,
+   * and this is an ordinary test again.
    */
-  it.fails("names the control it wraps", () => {
+  it("names the control it wraps", () => {
     render(
       <Field label="Rate limit">
-        <TextInput value="120" onChange={() => undefined} />
+        {(id) => <TextInput id={id} value="120" onChange={() => undefined} />}
       </Field>,
     );
 
@@ -222,8 +217,12 @@ describe("Notice", () => {
     );
     const orangeBox = orange.firstElementChild;
 
-    expect(redBox?.getAttribute("style")).toContain("var(--red)");
-    expect(orangeBox?.getAttribute("style")).toContain("var(--orange)");
+    // The app's `bad` and `warn` washes, by class now rather than inline style:
+    // red for what cannot be taken back, amber for what only needs reading.
+    expect(redBox?.className).toContain("bg-bad-wash");
+    expect(redBox?.className).not.toContain("bg-warn-wash");
+    expect(orangeBox?.className).toContain("bg-warn-wash");
+    expect(orangeBox?.className).not.toContain("bg-bad-wash");
   });
 
   it("says the sentence it was given", () => {

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "~/components/ui/button";
+import { Callout } from "~/components/ui/callout";
 import { Dialog } from "~/components/ui/dialog";
+import { Field, Input } from "~/components/ui/field";
 import { EntityPicker, useDebounced } from "~/components/ui/entity-picker";
 import { roleCard } from "./entity-cards";
 import { api } from "~/trpc/react";
@@ -63,16 +66,11 @@ export function AddPersonDialog({
       onClose={onClose}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted min-h-10 cursor-pointer rounded-lg px-3.5 py-2 text-[13px] font-semibold lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!ready || create.isPending}
             onClick={() =>
               create.mutate({
@@ -83,123 +81,92 @@ export function AddPersonDialog({
                 department: department.trim() || undefined,
               })
             }
-            className="min-h-10 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white lg:min-h-0"
-            style={{
-              background: "var(--grad-brand)",
-              opacity: ready && !create.isPending ? 1 : 0.5,
-              cursor: ready && !create.isPending ? "pointer" : "not-allowed",
-            }}
           >
             {create.isPending ? "Adding…" : "Add person"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-4">
         {error && (
-          <div
-            className="rounded-xl p-3 text-[13px] font-medium text-[#b02636]"
-            style={{
-              background: "rgba(220,56,72,0.07)",
-              boxShadow: "inset 0 0 0 1px rgba(220,56,72,0.3)",
-            }}
-          >
+          <Callout tone="bad" role="alert">
             {error}
-          </div>
+          </Callout>
         )}
 
-        <Labelled label="Full name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Riya Kapoor"
-            // 16px on a phone: below that, Safari zooms the page in as the
-            // field takes focus, which on a dialog leaves it half off screen.
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Labelled>
+        {/* Phones get 16px type from the global `pointer: coarse` rule:
+            below that, Safari zooms the page in as the field takes focus,
+            which on a dialog leaves it half off screen. */}
+        <Field label="Full name">
+          {(id) => (
+            <Input
+              id={id}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Riya Kapoor"
+            />
+          )}
+        </Field>
 
-        <Labelled label="Email">
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@college.edu"
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Labelled>
+        <Field label="Email">
+          {(id) => (
+            <Input
+              id={id}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@college.edu"
+            />
+          )}
+        </Field>
 
-        <Labelled
-          label="PRN"
-          hint="Students only — needed for group membership."
-        >
-          <input
-            value={prn}
-            onChange={(e) => setPrn(e.target.value)}
-            placeholder="11 digits"
-            className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 font-mono text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-            style={{ boxShadow: "var(--ring)" }}
-          />
-        </Labelled>
+        <Field label="PRN" hint="Students only, needed for group membership.">
+          {(id) => (
+            <Input
+              id={id}
+              value={prn}
+              onChange={(e) => setPrn(e.target.value)}
+              placeholder="11 digits"
+              className="font-mono"
+            />
+          )}
+        </Field>
 
         {isFaculty && (
-          <Labelled label="Department">
-            <input
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              placeholder="e.g. Computer Science"
-              className="bg-surface min-h-10 w-full rounded-[10px] px-3 py-2 text-[16px] outline-none sm:text-[13.5px] lg:min-h-0"
-              style={{ boxShadow: "var(--ring)" }}
-            />
-          </Labelled>
+          <Field label="Department">
+            {(id) => (
+              <Input
+                id={id}
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. Computer Science"
+              />
+            )}
+          </Field>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-ink text-[13px] font-semibold">Roles</span>
-          <EntityPicker
-            selected={(roles.data?.rows ?? [])
-              .filter((r) => roleIds.includes(r.id))
-              .map(roleCard)}
-            onChange={setRoleIds}
-            page={{
-              rows: roleRows.map(roleCard),
-              total: roleRows.length,
-              hasMore: false,
-            }}
-            loading={roles.isLoading}
-            query={roleQuery}
-            onQueryChange={setRoleQuery}
-            placeholder="Search roles…"
-            emptyLabel="No roles"
-            listId="add-person-roles"
-          />
-        </div>
+        <Field label="Roles">
+          {(id) => (
+            <EntityPicker
+              id={id}
+              selected={(roles.data?.rows ?? [])
+                .filter((r) => roleIds.includes(r.id))
+                .map(roleCard)}
+              onChange={setRoleIds}
+              page={{
+                rows: roleRows.map(roleCard),
+                total: roleRows.length,
+                hasMore: false,
+              }}
+              loading={roles.isLoading}
+              query={roleQuery}
+              onQueryChange={setRoleQuery}
+              placeholder="Search roles…"
+              emptyLabel="No roles"
+              listId="add-person-roles"
+            />
+          )}
+        </Field>
       </div>
     </Dialog>
-  );
-}
-
-function Labelled({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-ink text-[13px] font-semibold">
-        {label}
-        {hint && (
-          <span className="text-faint ml-2 text-[11.5px] font-medium">
-            {hint}
-          </span>
-        )}
-      </span>
-      {children}
-    </label>
   );
 }

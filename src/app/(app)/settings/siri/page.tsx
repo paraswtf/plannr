@@ -10,7 +10,7 @@ import { api } from "~/trpc/server";
 export const metadata: Metadata = {
   title: "Siri",
   description:
-    "Ask your phone when your next lecture is — a key, a shortcut, and then just ask.",
+    "Ask your phone when your next lecture is: a key, a shortcut, and then just ask.",
 };
 
 export default async function SiriPage() {
