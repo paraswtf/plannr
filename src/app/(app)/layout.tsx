@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Toaster } from "sonner";
 
+import { ServiceWorker } from "~/components/app/pwa/service-worker";
 import { AppShell, NAV_COOKIE } from "~/components/app/shell/app-shell";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -45,6 +46,7 @@ export default async function AppLayout({
       >
         {children}
       </AppShell>
+      <ServiceWorker />
       {/*
        * Where the app's toasts land. It belongs here rather than in the root
        * layout because every screen that raises one is behind this gate, and

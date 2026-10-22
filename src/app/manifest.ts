@@ -21,6 +21,11 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#eef0f3",
     theme_color: "#eef0f3",
     categories: ["education", "productivity"],
+    // Long-press the home-screen icon: the two things most opened.
+    shortcuts: [
+      { name: "My schedule", url: "/schedule" },
+      { name: "Timetable", url: "/timetable" },
+    ],
     icons: [
       {
         src: "/web-app-manifest-192x192.png",
