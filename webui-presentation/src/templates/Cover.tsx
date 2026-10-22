@@ -1,0 +1,128 @@
+"use client";
+
+import { useRef, type ReactNode } from "react";
+
+import type { SpeakerId } from "~/deck/types";
+import { PlannrMark } from "~/ui/brand";
+import { SpeakerChip } from "~/ui/people";
+
+import { TimetableDrift } from "./_closing-backdrop";
+import { useEntrance, useSlideActive } from "./_closing-motion";
+
+export interface CoverProps {
+  /** Small line above the title: "Design Thinking · UI/UX". */
+  kicker?: ReactNode;
+  /** "Presenting Plannr" */
+  title: ReactNode;
+  subtitle: ReactNode;
+  /** Mono chips under the subtitle (the stack). */
+  chips?: ReactNode[];
+  /** Presenters, in speaking order. */
+  team: SpeakerId[];
+  /** "SICSR, Pune · 2026" */
+  footer: ReactNode;
+  step: number;
+  /**
+   * Lets the backdrop drift only while the slide is on screen. Optional: when
+   * the section does not pass it, the slide's frame is watched instead.
+   */
+  active?: boolean;
+}
+
+/**
+ * The title slide. Its big mark carries flip id "deck-mark", so on the way to
+ * slide two it shrinks into the top bar's corner. No chrome on this slide.
+ *
+ * Behind it, a week of pale class blocks drifts by on a tilted plane, masked
+ * away from the type (see _closing-backdrop). The words rise in as it opens;
+ * the team and the place sit on one hairline at the foot.
+ */
+export function Cover({
+  kicker,
+  title,
+  subtitle,
+  chips = [],
+  team,
+  footer,
+  active,
+}: CoverProps) {
+  const root = useRef<HTMLDivElement>(null);
+  const live = useSlideActive(root, active);
+
+  useEntrance(root, (tl) => {
+    tl.from(".cv-drift", { opacity: 0, duration: 2.4, ease: "power1.out" }, 0);
+    tl.from(
+      ".cv-rise",
+      { y: 42, opacity: 0, duration: 1, ease: "deck.enter", stagger: 0.09 },
+      0.15,
+    );
+    tl.from(
+      ".cv-rule",
+      {
+        scaleX: 0,
+        transformOrigin: "0% 50%",
+        duration: 1.1,
+        ease: "deck.enter",
+      },
+      0.5,
+    );
+    tl.from(
+      ".cv-chip",
+      { y: 24, opacity: 0, duration: 0.8, ease: "deck.enter", stagger: 0.07 },
+      0.6,
+    );
+  });
+
+  return (
+    <div ref={root} data-no-enter className="absolute inset-0">
+      <div className="cv-drift absolute inset-0">
+        <TimetableDrift active={live} variant="cover" />
+      </div>
+
+      <div className="absolute top-[300px] left-[160px]">
+        <PlannrMark height={260} flipId="deck-mark" />
+      </div>
+
+      <div className="absolute top-[284px] left-[480px] flex max-w-[1240px] flex-col">
+        {kicker && (
+          <p className="cv-rise text-muted mb-9 text-[26px] leading-none font-medium">
+            {kicker}
+          </p>
+        )}
+        <h1 className="cv-rise t-hero text-fg">{title}</h1>
+        <p className="cv-rise t-lede text-body mt-9 max-w-[34ch] text-pretty">
+          {subtitle}
+        </p>
+        {chips.length > 0 && (
+          <div className="mt-12 flex flex-wrap gap-3">
+            {chips.map((c, i) => (
+              <span
+                key={i}
+                className="cv-chip t-mono bg-sunken text-fg inline-flex rounded-[12px] px-5 py-3 text-[26px] font-medium"
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="absolute right-[128px] bottom-[96px] left-[480px]">
+        <span
+          aria-hidden
+          className="cv-rule bg-line-strong absolute inset-x-0 top-0 h-px"
+        />
+        <div className="flex items-center justify-between pt-8">
+          <div className="flex gap-10">
+            {team.map((p) => (
+              <span key={p} className="cv-chip inline-flex">
+                <SpeakerChip person={p} size={52} />
+              </span>
+            ))}
+          </div>
+          <p className="cv-chip text-muted text-[24px] font-medium">{footer}</p>
+        </div>
+      </div>
+    </div>
+  );
+}

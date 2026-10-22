@@ -1,0 +1,373 @@
+@import "tailwindcss";
+
+/*
+ * The deck's design tokens. DESIGN.md explains the system; this file is its
+ * single source.
+ *
+ * Every slide is laid out on a fixed 1920 × 1080 canvas that the deck scales
+ * to the screen, so sizes below are real pixels on that canvas: a 28px body
+ * line is 28px on a 1080p projector, whatever the laptop's window is.
+ *
+ * The stage is light: a cool off-white ground, ink type, one accent. All the
+ * greys are tinted the same cool slate as Plannr's own palette, so nothing on
+ * a slide mixes warm and cool neutrals.
+ */
+:root {
+  /* Plannr's app surface, for the product mock-ups drawn on slides */
+  --surface: #ffffff;
+  --paper: #eef0f3;
+  --app-ink: #2c3135;
+  --app-title: #0d1117;
+  --app-muted: rgba(44, 49, 53, 0.58);
+  --app-faint: rgba(44, 49, 53, 0.4);
+  --hair: rgba(68, 88, 121, 0.16);
+  --card-ring: rgba(68, 88, 121, 0.28);
+  --card-soft: rgba(68, 88, 121, 0.08);
+  --mine-fill: #ffc667;
+  --mine-ring: #d99425;
+  --live-fill: #ffa7a4;
+
+  /* Brand */
+  --slate: #445879;
+  --slate-hover: #4b6186;
+  --slate-muted: #9facc2;
+  --red: #dc3848;
+  --green: #4e7d3a;
+  --orange: #f6a73b;
+  --violet: #7a2e8f;
+  --magenta: #e8455e;
+  /* The full brand gradient lives in the mark. On type it appears twice in
+     the whole deck: the cover's "Plannr" and the closing thesis. */
+  --grad-brand: linear-gradient(
+    135deg,
+    #7a2e8f 0%,
+    #c9306c 38%,
+    #e8455e 62%,
+    #f2743c 82%,
+    #f6a73b 100%
+  );
+  --grad-brand-h: linear-gradient(
+    90deg,
+    #7a2e8f 0%,
+    #c9306c 32%,
+    #e8455e 55%,
+    #f2743c 78%,
+    #f6a73b 100%
+  );
+
+  /* Dark neutrals, kept for the presenter's own tools */
+  --ink-0: #0d1117;
+  --ink-1: #151d28;
+  --ink-2: #1e2630;
+  --ink-3: #263141;
+
+  /*
+   * The one accent: the berry from the middle of the brand gradient. It is
+   * the only colour that means "look here" — a key phrase, the top of a
+   * ranking, the line that matters. At #c8305f it holds 5:1 on the ground,
+   * so it is safe for text as well as shapes.
+   */
+  --accent: #c8305f;
+  --accent-bright: #e8455e;
+  --accent-soft: rgba(200, 48, 95, 0.09);
+  --accent-line: rgba(200, 48, 95, 0.34);
+
+  /*
+   * The stakeholders used to have a colour each. One accent reads calmer and
+   * makes the accent mean something, so every stakeholder now points at it;
+   * their identity is carried by photo, icon and name instead.
+   */
+  --students: var(--accent);
+  --faculty: var(--accent);
+  --coordinators: var(--accent);
+  --admins: var(--accent);
+
+  /* Signals: real state only (worked / friction / broke) */
+  --good: #2f7a4b;
+  --warn: #a66b12;
+  --bad: var(--accent);
+
+  /* Elevation: soft, diffused, tinted with the ground's slate */
+  --shadow-1:
+    0 1px 1px rgba(16, 24, 40, 0.04), 0 2px 8px -2px rgba(16, 24, 40, 0.06);
+  --shadow-2:
+    0 2px 4px rgba(16, 24, 40, 0.04), 0 18px 48px -18px rgba(16, 24, 40, 0.2);
+  --shadow-3:
+    0 6px 16px -8px rgba(16, 24, 40, 0.16),
+    0 44px 96px -32px rgba(16, 24, 40, 0.34);
+
+  /* Radii: one documented scale (see DESIGN.md) */
+  --r-chip: 12px;
+  --r-inner: 22px;
+  --r-outer: 30px;
+
+  /* Motion, shared by the engine and every slide */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/*
+ * Theme tokens. The whole deck is light. `dark` survives for the presenter's
+ * tools (overview, notes) and must not be used on a slide.
+ */
+:root,
+[data-theme="light"] {
+  --bg: #f2f3f6;
+  --bg-raised: #fbfbfd;
+  --bg-card: #fbfbfd;
+  --bg-sunken: #e7e9ee;
+  --fg: #10141b;
+  --fg-body: #353d4a;
+  --fg-muted: #5f6878;
+  --fg-faint: #8f97a6;
+  --line: rgba(16, 24, 40, 0.08);
+  --line-strong: rgba(16, 24, 40, 0.15);
+  --glow: transparent;
+}
+
+[data-theme="dark"] {
+  --bg: var(--ink-0);
+  --bg-raised: var(--ink-1);
+  --bg-card: #18212d;
+  --bg-sunken: #0a0e13;
+  --fg: #f4f5f7;
+  --fg-body: rgba(244, 245, 247, 0.82);
+  --fg-muted: rgba(244, 245, 247, 0.62);
+  --fg-faint: rgba(244, 245, 247, 0.4);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --glow: transparent;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-raised: var(--bg-raised);
+  --color-card: var(--bg-card);
+  --color-sunken: var(--bg-sunken);
+  --color-fg: var(--fg);
+  --color-body: var(--fg-body);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-surface: var(--surface);
+  --color-paper: var(--paper);
+  --color-app-ink: var(--app-ink);
+  --color-app-title: var(--app-title);
+  --color-app-muted: var(--app-muted);
+  --color-app-faint: var(--app-faint);
+
+  --color-slate: var(--slate);
+  --color-slate-muted: var(--slate-muted);
+  --color-red: var(--red);
+  --color-green: var(--green);
+  --color-orange: var(--orange);
+  --color-violet: var(--violet);
+  --color-magenta: var(--magenta);
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-students: var(--students);
+  --color-faculty: var(--faculty);
+  --color-coordinators: var(--coordinators);
+  --color-admins: var(--admins);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-warn: var(--warn);
+
+  --font-display:
+    var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body:
+    var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+/*
+ * The type scale, in canvas pixels. Plannr's own faces: Space Grotesk for
+ * anything read from the back of the room, Instrument Sans for sentences,
+ * JetBrains Mono only for times, codes and counts. Display type is semibold
+ * rather than bold: at these sizes weight comes from scale, not stroke.
+ */
+@utility t-hero {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 168px;
+  line-height: 0.94;
+  letter-spacing: -0.045em;
+}
+@utility t-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 112px;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+@utility t-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 76px;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+@utility t-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 52px;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+@utility t-h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+}
+@utility t-lede {
+  font-family: var(--font-body);
+  font-size: 34px;
+  line-height: 1.38;
+  letter-spacing: -0.005em;
+}
+@utility t-body {
+  font-family: var(--font-body);
+  font-size: 28px;
+  line-height: 1.45;
+}
+@utility t-small {
+  font-family: var(--font-body);
+  font-size: 22px;
+  line-height: 1.4;
+}
+/* A quiet functional label: sentence case, never spaced-out capitals. */
+@utility t-label {
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+@utility t-mono {
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The brand gradient on type: the cover and the closing thesis only. */
+@utility grad-text {
+  background: var(--grad-brand-h);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * The double bezel: a frame for anything precious (a photo, a product shot,
+ * a quote). An outer tray with a hairline and a soft shadow holds an inner
+ * plate with its own highlight, and the radii stay concentric.
+ */
+@utility bezel {
+  padding: 8px;
+  border-radius: var(--r-outer);
+  background: rgba(16, 24, 40, 0.035);
+  box-shadow:
+    inset 0 0 0 1px rgba(16, 24, 40, 0.06),
+    var(--shadow-2);
+}
+@utility bezel-core {
+  border-radius: var(--r-inner);
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(16, 24, 40, 0.05);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* In the base layer, so a utility such as whitespace-nowrap still wins. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/*
+ * Film grain over the whole stage, so the light ground reads as a surface
+ * rather than a screen. Fixed and inert, drawn once.
+ */
+.deck-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.12 0 0 0 0 0.16 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/*
+ * Copy the team still has to write. It is marked so nobody presents a
+ * placeholder by accident; `H` hides the marks for a clean rehearsal.
+ */
+.ph {
+  text-decoration: underline dashed 2px;
+  text-decoration-color: color-mix(in srgb, var(--orange) 85%, transparent);
+  text-underline-offset: 0.18em;
+  background: color-mix(in srgb, var(--orange) 14%, transparent);
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+html[data-placeholders="hidden"] .ph {
+  text-decoration: none;
+  background: none;
+}
+
+.ph-box {
+  outline: 2px dashed color-mix(in srgb, var(--orange) 70%, transparent);
+  outline-offset: -2px;
+}
+html[data-placeholders="hidden"] .ph-box {
+  outline-color: var(--line);
+}
+
+/* Hairline ring, the app's way of drawing an edge without a border. */
+.ring-hair {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ring-strong {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+/* Thin scrollbars for the overview and the presenter's notes. */
+.deck-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
