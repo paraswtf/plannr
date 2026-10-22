@@ -155,7 +155,8 @@ describe("a personal key is its owner", () => {
     expect(bits & PermissionFlags.ViewOwnEvents).toBe(
       PermissionFlags.ViewOwnEvents,
     );
-    // A student's own role carries BookRoom, and the key was not given it.
+    // The key carries what it was given and nothing the role never held: a
+    // student's role has neither of these, so neither can appear on the key.
     expect(bits & PermissionFlags.BookRoom).toBe(0n);
     expect(bits & PermissionFlags.ManageAllEvents).toBe(0n);
   });

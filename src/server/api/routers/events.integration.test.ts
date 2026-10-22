@@ -791,7 +791,25 @@ describe("permissions", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("a student's booking waits for approval when the setting requires it", async () => {
+  it("a student cannot book a room", async () => {
+    const student = await makeActor(
+      "itest-student2@plannr-demo.invalid",
+      "Integration Student Two",
+      "student",
+    );
+
+    await expect(
+      callerFor(student).events.create({
+        kind: EventKind.BOOKING,
+        title: "Study session",
+        roomId: roomA,
+        startTime: at(3, 4, 9),
+        endTime: at(3, 4, 10),
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("a faculty member's booking waits for approval when the setting requires it", async () => {
     await db.orgSettings.update({
       where: { orgId },
       data: {
@@ -799,16 +817,15 @@ describe("permissions", () => {
         allowStudentSelfBooking: true,
       },
     });
-    const student = await makeActor(
-      "itest-student2@plannr-demo.invalid",
-      "Integration Student Two",
-      "student",
+    const lecturer = await makeActor(
+      "itest-faculty-booking@plannr-demo.invalid",
+      "Integration Faculty Booking",
+      "faculty",
     );
-    const caller = callerFor(student);
 
-    const { event } = await caller.events.create({
+    const { event } = await callerFor(lecturer).events.create({
       kind: EventKind.BOOKING,
-      title: "Study session",
+      title: "Revision session",
       roomId: roomA,
       startTime: at(3, 4, 9),
       endTime: at(3, 4, 10),

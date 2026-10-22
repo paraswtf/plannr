@@ -97,7 +97,7 @@ let roomA: string;
 let roomB: string;
 let admin: Actor;
 let coordinator: Actor;
-let student: Actor;
+let requester: Actor;
 let teacher: Actor;
 let facultyId: string;
 let groupId: string;
@@ -206,10 +206,10 @@ beforeEach(async () => {
     "Coordinator",
     "coordinator",
   );
-  student = await makeActor(
-    "approvals-student@test.local",
-    "Student",
-    "student",
+  requester = await makeActor(
+    "approvals-requester@test.local",
+    "Requester",
+    "faculty",
   );
   teacher = await makeActor(
     "approvals-teacher@test.local",
@@ -230,9 +230,9 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-/** A student asking for a room, which lands as a request rather than a booking. */
-async function studentBooks(hour: number, room = roomA) {
-  const result = await callerFor(student).events.create({
+/** A faculty member asking for a room, which lands as a request rather than a booking. */
+async function requesterBooks(hour: number, room = roomA) {
+  const result = await callerFor(requester).events.create({
     kind: EventKind.BOOKING,
     title: `Study group ${hour}`,
     roomId: room,
@@ -242,9 +242,9 @@ async function studentBooks(hour: number, room = roomA) {
   return result.event;
 }
 
-describe("a student's booking waits for a decision", () => {
+describe("a faculty member's booking waits for a decision", () => {
   it("is created PENDING and materialises no confirmed sitting", async () => {
-    const event = await studentBooks(10);
+    const event = await requesterBooks(10);
 
     expect(event.status).toBe(EventStatus.PENDING);
     const sittings = await db.eventOccurrence.findMany({
@@ -255,7 +255,7 @@ describe("a student's booking waits for a decision", () => {
   });
 
   it("shows up in the approver's queue with a verdict", async () => {
-    await studentBooks(10);
+    await requesterBooks(10);
 
     const queue = await callerFor(coordinator).events.approvalQueue();
     // The queue is merged from two tables and cannot be paged at the database,
@@ -266,12 +266,12 @@ describe("a student's booking waits for a decision", () => {
     expect(queue.rows[0]!.kind).toBe("booking");
     expect(queue.rows[0]!.severity).toBe("clear");
     expect(queue.rows[0]!.requestedBy?.email).toBe(
-      "approvals-student@test.local",
+      "approvals-requester@test.local",
     );
   });
 
   it("becomes a real booking when a coordinator approves it", async () => {
-    const event = await studentBooks(10);
+    const event = await requesterBooks(10);
     await callerFor(coordinator).events.approve({ id: event.id });
 
     const after = await db.event.findUniqueOrThrow({ where: { id: event.id } });
@@ -288,7 +288,7 @@ describe("a student's booking waits for a decision", () => {
         status: EventStatus.PENDING,
         title: "Rehearsal",
         roomId: roomA,
-        createdById: student.id,
+        createdById: requester.id,
         startTime: at(3, 3, 10),
         endTime: at(3, 3, 11),
         timezone: TZ,
@@ -308,7 +308,7 @@ describe("a student's booking waits for a decision", () => {
   });
 
   it("refuses to decide something that has already been decided", async () => {
-    const event = await studentBooks(10);
+    const event = await requesterBooks(10);
     await callerFor(coordinator).events.approve({ id: event.id });
 
     await expect(
@@ -317,7 +317,7 @@ describe("a student's booking waits for a decision", () => {
   });
 
   it("will not resurrect a refused booking", async () => {
-    const event = await studentBooks(10);
+    const event = await requesterBooks(10);
     await callerFor(coordinator).events.reject({ id: event.id });
 
     await expect(
@@ -328,8 +328,8 @@ describe("a student's booking waits for a decision", () => {
 
 describe("two requests for the same room", () => {
   it("tells the approver the slot is contested before they decide", async () => {
-    await studentBooks(14);
-    await studentBooks(14); // a second person wants the same hour
+    await requesterBooks(14);
+    await requesterBooks(14); // a second person wants the same hour
 
     const queue = await callerFor(coordinator).events.approvalQueue();
     expect(queue.rows).toHaveLength(2);
@@ -340,8 +340,8 @@ describe("two requests for the same room", () => {
   });
 
   it("lets the second be approved only once the first has not taken the room", async () => {
-    const first = await studentBooks(14);
-    const second = await studentBooks(14);
+    const first = await requesterBooks(14);
+    const second = await requesterBooks(14);
 
     await callerFor(coordinator).events.approve({ id: first.id });
     await expect(
@@ -358,8 +358,8 @@ describe("two requests for the same room", () => {
   // it proves nothing on its own and is kept only as a smoke test. What the
   // safety actually rests on is the lock itself, tested below.
   it("survives two coordinators approving at the very same moment", async () => {
-    const first = await studentBooks(16);
-    const second = await studentBooks(16);
+    const first = await requesterBooks(16);
+    const second = await requesterBooks(16);
 
     const results = await Promise.allSettled([
       callerFor(coordinator).events.approve({ id: first.id }),
@@ -580,7 +580,7 @@ describe("a change to something that already exists", () => {
     });
 
     await expect(
-      callerFor(student).events.withdrawChange({ id: request.id }),
+      callerFor(requester).events.withdrawChange({ id: request.id }),
     ).rejects.toThrow(/only the person who asked/i);
     await callerFor(teacher).events.withdrawChange({ id: request.id });
     expect(
@@ -606,9 +606,9 @@ describe("a change to something that already exists", () => {
     ).toBe(roomB);
   });
 
-  it("a student may still amend their own undecided booking", async () => {
-    const booking = await studentBooks(11);
-    const result = await callerFor(student).events.update({
+  it("a requester may still amend their own undecided booking", async () => {
+    const booking = await requesterBooks(11);
+    const result = await callerFor(requester).events.update({
       id: booking.id,
       scope: "series",
       patch: { roomId: roomB },
@@ -622,11 +622,11 @@ describe("a change to something that already exists", () => {
 
   // A two-hour cap is worth nothing if it can be escaped by booking for one
   // hour and then editing the booking to eight.
-  it("holds a student to the booking limit when they amend", async () => {
-    const booking = await studentBooks(11);
+  it("holds a requester to the booking limit when they amend", async () => {
+    const booking = await requesterBooks(11);
 
     await expect(
-      callerFor(student).events.update({
+      callerFor(requester).events.update({
         id: booking.id,
         scope: "series",
         patch: { endTime: at(3, 2, 19) },
@@ -651,7 +651,7 @@ describe("the queue", () => {
         timezone: TZ,
       },
     });
-    await studentBooks(10);
+    await requesterBooks(10);
     await callerFor(teacher).events.requestChange({
       eventId: lecture.id,
       newStartTime: at(5, 4, 11),
@@ -671,7 +671,7 @@ describe("the queue", () => {
   });
 
   it("is closed to people who cannot approve", async () => {
-    await expect(callerFor(student).events.approvalQueue()).rejects.toThrow();
+    await expect(callerFor(requester).events.approvalQueue()).rejects.toThrow();
     await expect(callerFor(teacher).events.approvalQueue()).rejects.toThrow();
   });
 });

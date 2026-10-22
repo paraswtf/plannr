@@ -419,8 +419,10 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
   {
     key: "student",
     name: "Student",
-    description: "Sees their own timetable and can book a study room.",
-    permissions: F.ViewOwnEvents | F.BookRoom,
+    // Booking a room is faculty and above. A student reads their day; the
+    // rooms they study in are asked for through someone who teaches.
+    description: "Sees their own timetable and attendance.",
+    permissions: F.ViewOwnEvents,
   },
   {
     key: "faculty",

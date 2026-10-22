@@ -28,9 +28,15 @@ describe("navFor", () => {
       "/timetable",
       "/attendance",
       "/rooms",
-      "/book",
       "/settings",
     ]);
+  });
+
+  it("offers room booking to faculty and above, not to students", () => {
+    expect(hrefs(permsFor("faculty"))).toContain("/book");
+    expect(hrefs(permsFor("coordinator"))).toContain("/book");
+    expect(hrefs(permsFor("student"))).not.toContain("/book");
+    expect(canOpen(permsFor("student"), "/book")).toBe(false);
   });
 
   it("shows faculty their schedule and the full timetable", () => {
