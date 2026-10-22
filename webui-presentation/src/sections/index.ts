@@ -23,6 +23,7 @@ import { slide as mainFeatures } from "~/slides/a5-main-features";
 import { slide as architecture } from "~/slides/a6-architecture";
 import { slide as erDiagram } from "~/slides/a7-er-diagram";
 import { slide as dfd } from "~/slides/a8-dfd";
+import { slide as dfdLevel1 } from "~/slides/a9-dfd-level1";
 import { slide as interfaceTour } from "~/slides/z0-interface";
 import { slide as demo } from "~/slides/z1-demo";
 import { slide as conclusion } from "~/slides/z2-conclusion";
@@ -46,6 +47,7 @@ export const SECTIONS: SectionDef[] = [
       architecture,
       erDiagram,
       dfd,
+      dfdLevel1,
     ],
   },
   {
