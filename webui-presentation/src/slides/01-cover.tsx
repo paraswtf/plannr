@@ -11,8 +11,8 @@ export const slide: SlideDef = {
     <Cover
       title="Plannr"
       subtitle="Everything under the hood, one slide at a time"
-      chips={["Next.js 15", "React 19", "tRPC", "PostgreSQL", "PWA"]}
-      team={["paras"]}
+      chips={["Next.js 15", "React 19", "TRPC", "PostgreSQL", "PWA"]}
+      team={["paras", "sonal", "tanisha"]}
       footer="Web UI and Content Management · Assessment 3 · SICSR"
       step={0}
       active={active}

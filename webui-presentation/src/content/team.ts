@@ -26,6 +26,19 @@ export const TEAM: Record<SpeakerId, Person> = {
     fullName: "Paras Deshpande",
     photo: "/paras-pfp.avif",
   },
+  sonal: {
+    id: "sonal",
+    name: "Sonal",
+    fullName: "Sonal Mohrir",
+    photo: "/sonal-pfp.jpg",
+    // A wide shot: uncropped, the face is a few pixels across in an avatar.
+    photoFocus: { x: 0.615, y: 0.56, zoom: 1.8 },
+  },
+  tanisha: {
+    id: "tanisha",
+    name: "Tanisha",
+    fullName: "Tanisha Nath",
+  },
 };
 
 export interface Stakeholder {

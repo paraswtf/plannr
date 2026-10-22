@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type SpeakerId = "paras";
+export type SpeakerId = "paras" | "sonal" | "tanisha";
 /** This deck has no stakeholder sections. */
 export type StakeholderId = "none";
 export type SectionId = string;

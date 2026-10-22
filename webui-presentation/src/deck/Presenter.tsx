@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { STAKEHOLDERS, TEAM } from "~/content/team";
-import type { SpeakerId } from "~/deck/types";
 import { Avatar } from "~/ui/people";
 
 import {
@@ -228,7 +227,7 @@ function PresenterView({ slides }: { slides: DeckSlide[] }) {
                   <div className="mt-2 flex items-center gap-2 text-[14px] text-white/70">
                     <Avatar person={upcoming.slide.speaker} size={22} />
                     Hand over to{" "}
-                    {TEAM[upcoming.slide.speaker as SpeakerId].name}
+                    {TEAM[upcoming.slide.speaker].name}
                   </div>
                 )}
               </div>
