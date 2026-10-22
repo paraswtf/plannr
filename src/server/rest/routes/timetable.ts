@@ -167,4 +167,51 @@ export const timetableRoutes: RouteDef[] = [
     input: "none",
     dangerous: true,
   },
+  {
+    method: "GET",
+    path: "/notifications/push",
+    procedure: "push.config",
+    summary:
+      "Whether push notifications are available, and the key to subscribe with",
+    description:
+      "Whether this deployment has push configured at all, the public VAPID key a browser needs to subscribe, and how many of the caller's own devices are already listening. Browser-only: a device subscription belongs to a person's phone, and an application has none.",
+    tag: "Notifications",
+    scopes: [],
+    actor: "session",
+    input: "none",
+  },
+  {
+    method: "POST",
+    path: "/notifications/push/subscriptions",
+    procedure: "push.subscribe",
+    summary: "Turn notifications on for this browser",
+    description:
+      "Registers the browser's push endpoint and its two encryption keys against the caller. The endpoint is unique, so signing in as somebody else on the same phone moves the registration to them rather than duplicating it.",
+    tag: "Notifications",
+    scopes: [],
+    actor: "session",
+  },
+  {
+    method: "POST",
+    path: "/notifications/push/unsubscribe",
+    procedure: "push.unsubscribe",
+    summary: "Turn notifications off for this browser",
+    description:
+      "Forgets one browser's registration. Only the caller's own can be removed; naming somebody else's endpoint removes nothing.",
+    tag: "Notifications",
+    scopes: [],
+    actor: "session",
+  },
+  {
+    method: "POST",
+    path: "/notifications/push/test",
+    procedure: "push.sendTest",
+    summary: "Send a test notification to the caller's devices",
+    description:
+      "Sends one notification to every device the caller has enabled and answers with how many accepted it.",
+    tag: "Notifications",
+    scopes: [],
+    actor: "session",
+    input: "none",
+  },
 ];

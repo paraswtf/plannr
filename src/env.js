@@ -58,6 +58,17 @@ export const env = createEnv({
      * silently write plaintext tokens.
      */
     CALENDAR_TOKEN_KEY: z.string().optional(),
+
+    // --- Push notifications ---
+    /**
+     * The VAPID key pair identifies this server to the browsers' push services
+     * (`npx web-push generate-vapid-keys`). Unset, push is off entirely: the
+     * settings screen offers nothing and class changes queue no notices, the
+     * same way an unconfigured calendar sync leaves no half-working button.
+     */
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    /** A `mailto:` or https URL the push services can reach the operator at. */
+    VAPID_SUBJECT: z.string().optional(),
   },
 
   /**
@@ -71,6 +82,8 @@ export const env = createEnv({
      * VERCEL_PROJECT_PRODUCTION_URL supplies it — see `appUrl` below.
      */
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+    /** The public half of the VAPID pair; the browser needs it to subscribe. */
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
   },
 
   /**
@@ -94,7 +107,10 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     GOOGLE_CALENDAR_SYNC_ENABLED: process.env.GOOGLE_CALENDAR_SYNC_ENABLED,
     CALENDAR_TOKEN_KEY: process.env.CALENDAR_TOKEN_KEY,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

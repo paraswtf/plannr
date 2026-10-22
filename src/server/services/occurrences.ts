@@ -19,6 +19,9 @@ import { ExceptionType } from "../../../generated/prisma";
 
 import { expandSeries, hasCount, setCount, setUntil } from "~/lib/recurrence";
 import { enqueueForEvent } from "./calendar/sync";
+import { pushEnabled } from "./push/config";
+import { recordClassChanges } from "./push/record";
+import type { Sitting } from "./push/diff";
 
 /** Prisma client or an interactive transaction — services accept either. */
 export type Db = PrismaClient | Prisma.TransactionClient;
@@ -100,6 +103,21 @@ export async function regenerateOccurrences(
     .filter((e) => !matchedExceptionIds.has(e.id))
     .map((e) => e.id);
 
+  // Read before the delete: once the rows are gone there is nothing to compare
+  // the new ones with, and "what changed" is the whole of a push notification.
+  const sittingsBefore: Sitting[] = pushEnabled()
+    ? await db.eventOccurrence.findMany({
+        where: { eventId },
+        select: {
+          start: true,
+          end: true,
+          roomId: true,
+          facultyId: true,
+          status: true,
+        },
+      })
+    : [];
+
   await db.eventOccurrence.deleteMany({ where: { eventId } });
   if (orphanIds.length) {
     await db.eventException.deleteMany({ where: { id: { in: orphanIds } } });
@@ -116,6 +134,12 @@ export async function regenerateOccurrences(
   // transaction and talks to nobody — the cron does the talking — so a Google
   // outage can never fail an edit to the timetable.
   await enqueueForEvent(db, eventId);
+
+  // And everyone with a phone in their pocket is told what changed, by the same
+  // rule: queued here, in this transaction, sent after the response.
+  if (await recordClassChanges(db, event, sittingsBefore, rows as Sitting[])) {
+    await sendAfterResponse();
+  }
 
   return { written: rows.length, prunedExceptions: orphanIds.length };
 }
@@ -214,4 +238,27 @@ export async function splitSeriesAt(
   await regenerateOccurrences(db, created.id);
 
   return created.id;
+}
+
+/**
+ * Asks for the queued notices to be sent once the response has gone.
+ *
+ * `after` runs when the request that made the edit has finished, which is after
+ * its transaction committed; if the edit rolled back there is nothing queued
+ * and the dispatcher finds nothing. Outside a request (a script, a test) there
+ * is no `after`, and the hourly cron sweep sends them instead.
+ */
+async function sendAfterResponse() {
+  try {
+    const { after } = await import("next/server");
+    after(async () => {
+      const [{ db }, { dispatchPending }] = await Promise.all([
+        import("~/server/db"),
+        import("./push/dispatch"),
+      ]);
+      await dispatchPending(db).catch(() => undefined);
+    });
+  } catch {
+    // Not inside a request: left for the cron.
+  }
 }

@@ -113,6 +113,7 @@ describe("PermissionBitField.fromRoles", () => {
     ]);
     expect(bits.has(F.BookRoom)).toBe(true);
     expect(bits.has(F.ManageOwnEvents)).toBe(true);
+    expect(bits.has(F.BookRoom)).toBe(true);
     expect(bits.has(F.ManageAllEvents)).toBe(false);
   });
 
@@ -156,7 +157,8 @@ describe("system roles", () => {
   it("gives students their own events and nothing more", () => {
     const bits = new PermissionBitField(roleByKey("student").permissions);
     expect(bits.has(F.ViewOwnEvents)).toBe(true);
-    expect(bits.has(F.BookRoom)).toBe(true);
+    // Booking a room is faculty and above; a student reads their day.
+    expect(bits.has(F.BookRoom)).toBe(false);
     expect(bits.has(F.ViewAllEvents)).toBe(false);
     expect(bits.has(F.ManageUsers)).toBe(false);
   });

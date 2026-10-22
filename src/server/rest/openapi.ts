@@ -650,6 +650,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   users: "User records and their linked accounts.",
   roles: "Roles and the permission bits they grant.",
   calendar: "Linked external calendars and their synchronisation.",
+  notifications: "Push notifications: turning them on for a device.",
   "api keys": "Minting, listing and revoking the keys that call this API.",
 };
 

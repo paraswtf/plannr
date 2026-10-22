@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "~/env";
 import { db } from "~/server/db";
 import { drain, sweepStaleConnections, syncEnabled } from "~/server/services/calendar/sync";
+import { dispatchPending } from "~/server/services/push/dispatch";
 
 /** Long enough for a full batch of API calls; Vercel caps this by plan. */
 export const maxDuration = 60;
@@ -40,8 +41,20 @@ async function run(request: NextRequest) {
   if (!authorised(request)) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
+
+  // The same hourly heartbeat sweeps up class-change notifications. They are
+  // sent the moment an edit is saved; this only catches the ones that could not
+  // be (a push service that was down, a lease that expired), so it needs no
+  // schedule of its own and costs one cheap query when there is nothing to do.
+  const pushed = await dispatchPending(db).catch((error: unknown) => ({
+    error: error instanceof Error ? error.message : "push sweep failed",
+  }));
+
   if (!syncEnabled()) {
-    return NextResponse.json({ skipped: "Calendar sync is switched off." });
+    return NextResponse.json({
+      skipped: "Calendar sync is switched off.",
+      pushed,
+    });
   }
 
   // Sweep first. It only enqueues, so anything it finds is drained by the same
@@ -54,6 +67,7 @@ async function run(request: NextRequest) {
     // in the logs rather than guesswork.
     schedule: request.headers.get("x-vercel-cron-schedule"),
     swept,
+    pushed,
     ...report,
   });
 }

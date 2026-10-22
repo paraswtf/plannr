@@ -7,6 +7,7 @@ import { groupsRouter } from "~/server/api/routers/groups";
 import { plansRouter } from "~/server/api/routers/plans";
 import { rolesRouter } from "~/server/api/routers/roles";
 import { semestersRouter } from "~/server/api/routers/semesters";
+import { pushRouter } from "~/server/api/routers/push";
 import { siriRouter } from "~/server/api/routers/siri";
 import { buildingsRouter, roomsRouter } from "~/server/api/routers/rooms";
 import { timetableRouter } from "~/server/api/routers/timetable";
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   calendar: calendarRouter,
   apiKeys: apiKeysRouter,
   siri: siriRouter,
+  push: pushRouter,
 });
 
 // export type definition of API

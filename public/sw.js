@@ -7,6 +7,10 @@
  * bottom. It is served from the site root (see next.config.js) so its scope is
  * the whole app.
  *
+ * It also receives push messages (a class moved, was cancelled, was added) and
+ * turns them into notifications, whether or not Plannr is open at the time;
+ * that is the part of the platform a web page alone cannot do.
+ *
  * Three caches, three jobs:
  *
  *   static  hashed build files, icons and fonts. They never change under the
@@ -61,7 +65,9 @@ self.addEventListener("activate", (event) => {
       const names = await caches.keys();
       await Promise.all(
         names
-          .filter((name) => name.startsWith("plannr-") && !CURRENT.includes(name))
+          .filter(
+            (name) => name.startsWith("plannr-") && !CURRENT.includes(name),
+          )
           .map((name) => caches.delete(name)),
       );
       await self.clients.claim();
@@ -213,4 +219,66 @@ self.addEventListener("fetch", (event) => {
   ) {
     event.respondWith(staleWhileRevalidate(event, STATIC));
   }
+});
+
+// ─── Push ───────────────────────────────────────────────────────────────────
+//
+// The server sends an encrypted message through the browser vendor's push
+// service; the browser wakes this worker with it even if every Plannr tab is
+// closed. The payload is `{ title, body, url, tag, kind }`.
+
+const FALLBACK_URL = "/schedule";
+
+/** Only ever a path on this site: a payload cannot send anyone elsewhere. */
+function targetOf(raw) {
+  try {
+    const url = new URL(raw || FALLBACK_URL, self.location.origin);
+    return url.origin === self.location.origin
+      ? url.href
+      : new URL(FALLBACK_URL, self.location.origin).href;
+  } catch {
+    return new URL(FALLBACK_URL, self.location.origin).href;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Plannr", {
+      body: data.body || "",
+      icon: "/web-app-manifest-192x192.png",
+      badge: "/favicon-96x96.png",
+      // Same tag, one notification: a change sent twice is shown once.
+      tag: data.tag || undefined,
+      data: { url: targetOf(data.url) },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || targetOf(FALLBACK_URL);
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Reuse a window that is already open rather than stacking another.
+      for (const client of windows) {
+        if (new URL(client.url).origin !== self.location.origin) continue;
+        await client.focus();
+        if ("navigate" in client) await client.navigate(target);
+        return;
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
 });

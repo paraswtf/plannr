@@ -84,6 +84,18 @@ const SECTIONS: Section[] = [
     group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
+  // The third thing a person does once on their own phone. Like the calendar,
+  // listed only when the institution has set it up, since a door onto "this
+  // is not switched on" is not worth the row.
+  {
+    href: "/settings/notifications",
+    title: "Notifications",
+    blurb:
+      "Get a message on your phone the moment one of your classes moves, is cancelled or is added.",
+    icon: "alert",
+    group: "personal",
+    requires: PermissionFlags.ViewOwnEvents,
+  },
   {
     href: "/settings/api-keys",
     title: "API keys",
@@ -116,7 +128,13 @@ export default async function SettingsPage() {
        * crypto and the Google client into a page that wanted one boolean.
        */
       (section.href !== "/settings/calendar" ||
-        env.GOOGLE_CALENDAR_SYNC_ENABLED),
+        env.GOOGLE_CALENDAR_SYNC_ENABLED) &&
+      (section.href !== "/settings/notifications" ||
+        Boolean(
+          env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
+          env.VAPID_PRIVATE_KEY &&
+          env.VAPID_SUBJECT,
+        )),
   );
 
   const groups = GROUPS.map((group) => ({

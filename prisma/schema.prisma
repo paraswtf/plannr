@@ -250,6 +250,8 @@ model User {
   scheduleFavourites ScheduleFavourite[]    @relation("FavouriteHolder")
   /// The people who keep *this* person one tap away.
   favouritedBy       ScheduleFavourite[]    @relation("FavouritePerson")
+  /// The devices this person has said yes to notifications on.
+  pushSubscriptions  PushSubscription[]
 
   @@index([orgId, name])
   @@index([orgId, email])
@@ -1259,6 +1261,63 @@ model CalendarSyncTask {
 
   @@unique([connectionId, eventId])
   @@index([status, nextAttemptAt])
+}
+
+// ─── Push notifications ─────────────────────────────────────────────────────
+
+/// One browser on one device that has said yes to notifications. The endpoint is
+/// the push service's address for that browser and is unique by construction, so
+/// signing in as somebody else on the same phone moves the row rather than
+/// doubling it. `p256dh` and `auth` are the browser's keys for encrypting what
+/// is sent: the push service relays the message and cannot read it.
+model PushSubscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum ClassChangeKind {
+  MOVED
+  CANCELLED
+  ADDED
+  RESTORED
+}
+
+/// A class change somebody should be told about, written in the same
+/// transaction as the edit that caused it, so the edit commits or nothing is
+/// queued. Who to tell is held as the groups and teachers it concerned at the
+/// moment of the edit, so a lecture moved between sections reaches both. The
+/// event is a plain id, not a relation: the notice outlives a deleted event.
+model ClassChangeNotice {
+  id      String @id @default(cuid())
+  eventId String
+
+  kind       ClassChangeKind
+  title      String
+  body       String
+  /// Where tapping the notification opens.
+  url        String
+  groupIds   String[]
+  facultyIds String[]
+
+  createdAt DateTime  @default(now())
+  /// Set when a dispatcher takes the notice; a lease, so a crashed one does not
+  /// hold it for ever (see `dispatchPending`).
+  claimedAt DateTime?
+  sentAt    DateTime?
+  attempts  Int       @default(0)
+
+  @@index([sentAt, createdAt])
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────

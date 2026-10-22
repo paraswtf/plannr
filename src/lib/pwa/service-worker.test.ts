@@ -79,11 +79,37 @@ function boot() {
     },
   };
 
+  const shown: Array<{ title: string; options: Record<string, unknown> }> = [];
+  const opened: string[] = [];
+  const navigated: string[] = [];
+  let windows: Array<{ url: string }> = [];
+
   const self = {
     location: { origin: ORIGIN },
     addEventListener: (type: string, fn: Listener) => (listeners[type] = fn),
     skipWaiting: async () => undefined,
-    clients: { claim: async () => undefined },
+    registration: {
+      showNotification: async (
+        title: string,
+        options: Record<string, unknown>,
+      ) => {
+        shown.push({ title, options });
+      },
+    },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () =>
+        windows.map((w) => ({
+          url: w.url,
+          focus: async () => undefined,
+          navigate: async (to: string) => {
+            navigated.push(to);
+          },
+        })),
+      openWindow: async (to: string) => {
+        opened.push(to);
+      },
+    },
   };
 
   vm.runInNewContext(SOURCE, {
@@ -125,8 +151,40 @@ function boot() {
     await Promise.all(pending);
   }
 
+  /** Delivers a push message and waits for the worker to finish with it. */
+  async function push(payload: unknown, raw = false) {
+    const pending: Promise<unknown>[] = [];
+    listeners.push!({
+      data: {
+        json: (): unknown =>
+          JSON.parse(raw ? String(payload) : JSON.stringify(payload)),
+        text: () => String(payload),
+      },
+      waitUntil: (p: Promise<unknown>) => pending.push(p),
+    });
+    await Promise.all(pending);
+  }
+
+  /** Taps a notification the worker showed. */
+  async function tap(url: string) {
+    const pending: Promise<unknown>[] = [];
+    let closed = false;
+    listeners.notificationclick!({
+      notification: { close: () => (closed = true), data: { url } },
+      waitUntil: (p: Promise<unknown>) => pending.push(p),
+    });
+    await Promise.all(pending);
+    return closed;
+  }
+
   return {
     store,
+    shown,
+    opened,
+    navigated,
+    setWindows: (list: Array<{ url: string }>) => (windows = list),
+    push,
+    tap,
     request,
     install,
     setNetwork: (fn: typeof network) => (network = fn),
@@ -247,5 +305,48 @@ describe("signing in and out", () => {
     await sw.request("/schedule", { navigate: true });
     await sw.request("/api/auth/callback/google?code=1");
     expect(await sw.cachedUrls("plannr-pages-v1")).toEqual([]);
+  });
+});
+
+describe("push", () => {
+  it("shows a class change as a notification, even with Plannr closed", async () => {
+    await sw.push({
+      title: "Design Thinking has moved",
+      body: "Now Wed 4 Nov, 11:00-12:00, room 403.",
+      url: "/schedule",
+      tag: "n1",
+    });
+    expect(sw.shown).toHaveLength(1);
+    expect(sw.shown[0]!.title).toBe("Design Thinking has moved");
+    expect(sw.shown[0]!.options).toMatchObject({
+      body: "Now Wed 4 Nov, 11:00-12:00, room 403.",
+      tag: "n1",
+      data: { url: `${ORIGIN}/schedule` },
+    });
+  });
+
+  it("still says something when the message is not what was expected", async () => {
+    await sw.push("not json", true);
+    expect(sw.shown[0]!.title).toBe("Plannr");
+  });
+
+  it("never lets a message point anywhere but this site", async () => {
+    await sw.push({ title: "x", url: "https://evil.example/login" });
+    expect(sw.shown[0]!.options).toMatchObject({
+      data: { url: `${ORIGIN}/schedule` },
+    });
+  });
+
+  it("opens the schedule when the notification is tapped and nothing is open", async () => {
+    const closed = await sw.tap(`${ORIGIN}/schedule`);
+    expect(closed).toBe(true);
+    expect(sw.opened).toEqual([`${ORIGIN}/schedule`]);
+  });
+
+  it("reuses a window that is already open instead of stacking another", async () => {
+    sw.setWindows([{ url: `${ORIGIN}/timetable` }]);
+    await sw.tap(`${ORIGIN}/schedule`);
+    expect(sw.opened).toEqual([]);
+    expect(sw.navigated).toEqual([`${ORIGIN}/schedule`]);
   });
 });
