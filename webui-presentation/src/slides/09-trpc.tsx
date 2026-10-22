@@ -32,7 +32,7 @@ export const slide: SlideDef = {
   title: "tRPC",
   steps: 3,
   notes: [
-    "Plannr talks to its backend with tRPC. The server declares a procedure once, with a zod input and a typed result. The browser calls it by name, api dot timetable dot mySchedule dot useQuery. The types flow across with no codegen and no hand-written client. Rename a field on the server and every screen that used it stops compiling. The code on the left is simplified.",
+    "Plannr talks to its backend with TRPC, over Ajax and REST. The server declares a procedure once, with a zod input and a typed result. The browser calls it by name, api dot timetable dot mySchedule dot useQuery. The types flow across with no codegen and no hand-written client. Rename a field on the server and every screen that used it stops compiling. The code on the left is simplified.",
     "On the wire it is plain Ajax over HTTP. Two queries made on one screen are batched into a single GET to slash api slash trpc by httpBatchStreamLink and streamed back. SuperJSON carries Dates and BigInts intact. Mutations are POST.",
     "And the same procedures serve three callers: browser hooks, server components through createCaller, and the public REST API, where each route calls its procedure. One rule, in one place.",
   ],
@@ -72,10 +72,10 @@ function Trpc({ step }: { step: number }) {
     <SlideFrame
       title={
         <>
-          Change the server, and <Grad>every broken screen tells you</Grad>
+          <Grad>TRPC (Ajax + REST)</Grad>, one typed backend for every screen
         </>
       }
-      subhead="A mismatch fails at compile time, not in front of a student."
+      subhead="Change the server and every screen that no longer fits fails at compile time, not in front of a student."
       tech={[
         { name: "httpBatchStreamLink" },
         { name: "SuperJSON" },
