@@ -67,7 +67,7 @@ function Demo({ step }: { step: number }) {
           ))}
         </div>
         <div
-          className="absolute right-0 bottom-0 left-0 grid grid-cols-3 gap-10 border-t pt-6"
+          className="absolute right-0 bottom-0 left-0 grid grid-cols-2 gap-10 border-t pt-6"
           style={{ borderColor: "var(--line)" }}
         >
           <div>
@@ -91,15 +91,6 @@ function Demo({ step }: { step: number }) {
               65 test files cover it.
             </p>
           </div>
-          <div>
-            <p className="font-display text-fg text-[28px] font-semibold">
-              Legacy version
-            </p>
-            <p className="text-body mt-2 text-[24px] leading-[1.3]">
-              The first build, in LAMP, jQuery and Ajax, lives on the
-              web-ui-compliance branch.
-            </p>
-          </div>
         </div>
       </div>
     </SlideFrame>
@@ -115,7 +106,7 @@ export const slide: SlideDef = {
     "As a student: my day, my week, and my attendance.",
     "As faculty: request an extra lecture.",
     "As a coordinator: approve it from the queue.",
-    "As an admin: import a CSV and run the planner. Underneath, regenerateOccurrences materialises recurrence in one transaction, advisory locks stop double booking, and the solver places the most constrained classes first, then repairs. 65 test files cover it. Project files are on github.com/paraswtf/plannr, and the legacy LAMP, jQuery and Ajax version is on the web-ui-compliance branch.",
+    "As an admin: import a CSV and run the planner. Underneath, regenerateOccurrences materialises recurrence in one transaction, advisory locks stop double booking, and the solver places the most constrained classes first, then repairs. 65 test files cover it. Project files are on github.com/paraswtf/plannr.",
   ],
   render: ({ step }) => <Demo step={step} />,
 };

@@ -81,8 +81,7 @@ function Why({ step }: { step: number }) {
           </span>
           <span className="text-fg text-[26px] leading-[1.25]">
             The college&rsquo;s LAMP timetable: one 141 KB page, desktop only,
-            plain HTTP. We re-created the viewer on LAMP too: the legacy
-            version, on the web-ui-compliance branch.
+            plain HTTP.
           </span>
         </div>
       </div>
@@ -96,7 +95,7 @@ export const slide: SlideDef = {
   steps: 2,
   notes: [
     "Why Next.js, serverless and PostgreSQL, and not LAMP with WordPress? Plannr is an application with scheduling logic, and a CMS would need all of it as custom plugins. TypeScript runs from the database to the browser, where PHP and jQuery split it in two. PostgreSQL gives us advisory locks and strict constraints that MySQL does not offer in the same way. And Vercel gives HTTPS and a preview for every change, with no server to patch.",
-    "Today&rsquo;s proof: the college's own LAMP timetable is one 141 kilobyte page, desktop only, over plain HTTP. For this course we also re-created the timetable viewer on LAMP with jQuery, jQuery UI and Ajax: that is the legacy version, on the web-ui-compliance branch.",
+    "Today&rsquo;s proof: the college's own LAMP timetable is one 141 kilobyte page, desktop only, over plain HTTP.",
   ],
   render: ({ step }) => <Why step={step} />,
 };

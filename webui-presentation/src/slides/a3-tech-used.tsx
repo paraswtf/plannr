@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { gsap } from "~/deck/gsap";
 import type { SlideDef } from "~/deck/types";
 
-import { Card, Grad, SlideFrame, useSteps } from "./_kit";
+import { Grad, SlideFrame, useSteps } from "./_kit";
 
 const TECH = [
   "Next.js 15",
@@ -46,16 +46,9 @@ function TechUsed({ step }: { step: number }) {
 
   useSteps(visual, step, (tl, mark) => {
     gsap.set(".cn", { opacity: 0.18 });
-    gsap.set(".legacy", { opacity: 0, y: 16 });
     tl.to(
       ".cn",
       { opacity: 1, duration: 0.6, ease: "deck.enter", stagger: 0.12 },
-      ">",
-    );
-    mark();
-    tl.to(
-      ".legacy",
-      { opacity: 1, y: 0, duration: 0.6, ease: "deck.enter" },
       ">",
     );
     mark();
@@ -100,12 +93,6 @@ function TechUsed({ step }: { step: number }) {
               </li>
             ))}
           </ul>
-          <Card accent className="legacy mt-5 px-7 py-4">
-            <p className="text-fg text-[25px] leading-[1.25]">
-              The legacy version, on the web-ui-compliance branch, applies PHP,
-              MySQL, Apache, jQuery, jQuery UI and Ajax directly.
-            </p>
-          </Card>
         </div>
       </div>
     </SlideFrame>
@@ -115,11 +102,10 @@ function TechUsed({ step }: { step: number }) {
 export const slide: SlideDef = {
   id: "tech-used",
   title: "Technology used",
-  steps: 3,
+  steps: 2,
   notes: [
     "This is the stack: Next.js 15 and React 19 in TypeScript, tRPC and a REST API with OpenAPI, Prisma on PostgreSQL, Auth.js with Google, Tailwind, Vercel, the Google Calendar API, and Vitest for tests.",
     "And here is how it maps to the syllabus. Ajax: every screen loads and saves with asynchronous JSON calls. DOM: React updates it, and we use direct DOM APIs for swipe and measuring. Server-side database: Prisma and PostgreSQL in Node, the role PHP and MySQL play in LAMP. LAMP integration: we import and reconcile the college's MRBS timetable, with a preview.",
-    "We also built a legacy version, on the web-ui-compliance branch, which applies PHP, MySQL, Apache, jQuery, jQuery UI and Ajax directly.",
   ],
   render: ({ step }) => <TechUsed step={step} />,
 };
