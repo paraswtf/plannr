@@ -67,6 +67,7 @@ interface UserRow {
     department: string | null;
   } | null;
   _count: { accounts: number };
+  lastSeenAt: Date | null;
 }
 
 const serialise = (u: UserRow) => {
@@ -101,6 +102,8 @@ const serialise = (u: UserRow) => {
     shortName: u.facultyProfile?.shortName ?? null,
     /** No linked OAuth account means they were imported but never signed in. */
     hasSignedIn: u._count.accounts > 0,
+    /** When they last used Plannr in a browser, to the quarter hour; null if never recorded. */
+    lastSeenAt: u.lastSeenAt,
   };
 };
 
@@ -217,10 +220,22 @@ export const usersRouter = createTRPCRouter({
         ctx.db.user.findMany({
           where,
           include: userInclude,
-          // A person imported with no name sorts after everybody named, not
-          // ahead of them: the screen labels them by their address or PRN,
-          // so a blank at the top of every list reads as noise.
+          // Active is the people using Plannr, so it reads most recently
+          // seen first. Every other list is by name, and a person imported
+          // with no name sorts after everybody named, not ahead of them: the
+          // screen labels them by their address or PRN, so a blank at the top
+          // of every list reads as noise.
           orderBy: [
+            ...(input.status === "active"
+              ? [
+                  {
+                    lastSeenAt: {
+                      sort: "desc" as const,
+                      nulls: "last" as const,
+                    },
+                  },
+                ]
+              : []),
             { name: { sort: "asc", nulls: "last" } },
             { email: "asc" },
             { id: "asc" },

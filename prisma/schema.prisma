@@ -217,6 +217,12 @@ model User {
   isActive           Boolean @default(true)
   emailNotifications Boolean @default(true)
 
+  /// When this person last used Plannr in a browser, to the nearest quarter
+  /// of an hour: written by the session check at most every fifteen minutes,
+  /// so using the app costs one write a quarter, not one a request. Null for
+  /// somebody never seen since it began being kept.
+  lastSeenAt DateTime?
+
   /// True for the machine identity behind an API key. Such a row can never sign
   /// in — it holds no Account and its address is on a domain Google will never
   /// vouch for — and it is filtered out of every people-facing query, because a

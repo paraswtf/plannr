@@ -18,6 +18,8 @@ import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { roleCard } from "./entity-cards";
+import { DEFAULT_TIMEZONE } from "~/lib/dates";
+import { lastSeenLabel } from "~/lib/last-seen";
 import { accountStatus, personName } from "~/lib/people";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
@@ -466,6 +468,11 @@ export function PeopleView({ permissions }: { permissions: string }) {
                           <RoleBadges roles={u.roles} />
                           <StatusBadge user={u} />
                         </span>
+                        {u.hasSignedIn && (
+                          <span className="text-muted mt-1 block text-xs">
+                            Last seen {lastSeen(u.lastSeenAt)}
+                          </span>
+                        )}
                       </span>
                     </button>
                   </div>
@@ -504,6 +511,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
                         <Th>PRN</Th>
                         <Th>Roles</Th>
                         <Th>Status</Th>
+                        <Th>Last seen</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -566,6 +574,24 @@ export function PeopleView({ permissions }: { permissions: string }) {
                           <Td>
                             <StatusBadge user={u} />
                           </Td>
+                          <Td>
+                            {/* Only for somebody who has signed in: for anybody
+                                else there is nothing to have seen. */}
+                            {u.hasSignedIn && (
+                              <span
+                                className="text-muted text-sm whitespace-nowrap tabular-nums"
+                                title={
+                                  u.lastSeenAt
+                                    ? u.lastSeenAt.toLocaleString("en-GB", {
+                                        timeZone: DEFAULT_TIMEZONE,
+                                      })
+                                    : undefined
+                                }
+                              >
+                                {lastSeen(u.lastSeenAt)}
+                              </span>
+                            )}
+                          </Td>
                         </tr>
                       ))}
                       {rows.length === 0 && (
@@ -578,7 +604,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
                             reader can manage users, so a centred message ends up
                             centred in 44px, well left of the table it belongs to.
                           */}
-                          <Td colSpan={canManage ? 5 : 4}>
+                          <Td colSpan={canManage ? 6 : 5}>
                             {list.isLoading ? (
                               <ListSkeleton />
                             ) : (
@@ -727,6 +753,15 @@ function RoleBadges({
  * thirty green "active" pills down a page were noise, and the rows somebody is
  * scanning for are the ones that are not.
  */
+/**
+ * When somebody was last in Plannr, in the institution's time. Worked out on
+ * each render against the clock, so "12 min ago" does not freeze while the
+ * page is open longer than the list is cached.
+ */
+function lastSeen(at: Date | null) {
+  return lastSeenLabel(at, new Date(), DEFAULT_TIMEZONE);
+}
+
 function StatusBadge({
   user,
 }: {

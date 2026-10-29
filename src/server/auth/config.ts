@@ -4,6 +4,7 @@ import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
 import { env } from "~/env";
+import { shouldRecordVisit } from "~/lib/last-seen";
 import { db } from "~/server/db";
 import { getOrgId } from "~/server/org";
 
@@ -138,7 +139,19 @@ export const authConfig = {
         orgId: string;
         permissions: bigint;
         isActive: boolean;
+        lastSeenAt: Date | null;
       };
+
+      // Somebody using the app, written down at most every quarter hour so a
+      // page of requests is one write, not one each. What the directory's
+      // "Active" and "Last seen" read. A failed write costs nothing but this
+      // visit's timestamp, so it never fails the request.
+      const now = new Date();
+      if (shouldRecordVisit(row.lastSeenAt, now)) {
+        await db.user
+          .update({ where: { id: row.id }, data: { lastSeenAt: now } })
+          .catch(() => undefined);
+      }
 
       // Roles are a separate table, so the adapter's user row cannot carry
       // them. With the database session strategy this runs per request against

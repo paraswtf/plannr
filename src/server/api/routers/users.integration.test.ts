@@ -204,6 +204,35 @@ describe("users.list status", () => {
 });
 
 describe("users.list order", () => {
+  it("lists the active most recently seen first, and says when", async () => {
+    const admin_ = (await admin.users.me()).id;
+    // Zed was in an hour ago and the admin yesterday; by name, the admin
+    // ("Admin") would come first.
+    await db.user.update({
+      where: { id: ids.active },
+      data: { lastSeenAt: new Date(Date.now() - 60 * 60_000) },
+    });
+    await db.user.update({
+      where: { id: admin_ },
+      data: { lastSeenAt: new Date(Date.now() - 24 * 60 * 60_000) },
+    });
+
+    const page = await admin.users.list({ status: "active", pageSize: 200 });
+    expect(page.rows.map((r) => r.id)).toEqual([ids.active, admin_]);
+    expect(page.rows[0]!.lastSeenAt).toBeInstanceOf(Date);
+  });
+
+  it("puts somebody signed in but never seen since after everybody seen", async () => {
+    const admin_ = (await admin.users.me()).id;
+    await db.user.update({
+      where: { id: admin_ },
+      data: { lastSeenAt: new Date() },
+    });
+    // Zed has signed in but has no recorded visit.
+    const rows = await listed("active");
+    expect(rows).toEqual([admin_, ids.active]);
+  });
+
   it("puts somebody with no name after everybody named", async () => {
     const rows = await listed("never-signed-in");
     expect(rows).toEqual([ids.never, ids.blank]);

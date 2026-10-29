@@ -745,6 +745,11 @@ never signed in are now `never-signed-in` only, and `never-signed-in` no longer
 returns disabled people. Ask for `active` and `never-signed-in` separately to get
 everybody enabled.
 
+Every row carries `lastSeenAt`: when the person last used Plannr in a browser,
+recorded at most every fifteen minutes, or `null` if no visit has been recorded
+since it began being kept. `status=active` lists the most recently seen first;
+every other list is by name.
+
 ### The two lists that answer whole
 
 `GET /approvals` and `GET /plans/reviewer-candidates` answer in the same
