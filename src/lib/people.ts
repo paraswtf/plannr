@@ -83,17 +83,26 @@ export const contactAddresses = (values: string[]): string[] =>
     .filter((value): value is string => value !== null)
     .map((value) => value.toLowerCase());
 
+/** How recently somebody must have used Plannr to count as active. */
+export const ACTIVE_WITHIN_DAYS = 7;
+
+/** The earliest last visit that still counts as active, at `now`. */
+export const activeSince = (now: Date) =>
+  new Date(now.getTime() - ACTIVE_WITHIN_DAYS * 24 * 60 * 60 * 1000);
+
 /**
  * Where somebody's account stands, as the directory names it.
  *
  * One definition shared by the badge on a row and the filter above the list,
- * so that picking "Active" can only ever return rows that say Active. The four
- * cover everybody exactly once: an account that is switched on has either
- * been signed in to or not, and one that is switched off is either waiting on
- * the college for an address or has been disabled by somebody here.
+ * so that picking "Active" can only ever return rows that say Active. The five
+ * cover everybody exactly once: an account that is switched on has been used
+ * in the last week, used before but not since, or never signed in to; one
+ * that is switched off is either waiting on the college for an address or
+ * has been disabled by somebody here.
  */
 export const ACCOUNT_STATUSES = [
   "active",
+  "not-seen-lately",
   "never-signed-in",
   "inactive",
   "waiting",
@@ -106,14 +115,21 @@ export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
  * screen was already handed, with the placeholder turned to null:
  * `contactAddress` reads both the same.
  */
-export function accountStatus(person: {
-  isActive: boolean;
-  email: string | null | undefined;
-  hasSignedIn: boolean;
-}): AccountStatus {
+export function accountStatus(
+  person: {
+    isActive: boolean;
+    email: string | null | undefined;
+    hasSignedIn: boolean;
+    lastSeenAt: Date | null | undefined;
+  },
+  now: Date = new Date(),
+): AccountStatus {
   if (!person.isActive)
     return contactAddress(person.email) === null ? "waiting" : "inactive";
-  return person.hasSignedIn ? "active" : "never-signed-in";
+  if (!person.hasSignedIn) return "never-signed-in";
+  return person.lastSeenAt && person.lastSeenAt >= activeSince(now)
+    ? "active"
+    : "not-seen-lately";
 }
 
 /**
@@ -123,10 +139,32 @@ export function accountStatus(person: {
  * database holds about it. A blank address, which `contactAddress` also reads
  * as none, is never written: every path that creates a person requires one.
  */
-export function accountStatusWhere(status: AccountStatus | "all") {
+export function accountStatusWhere(
+  status: AccountStatus | "all",
+  now: Date = new Date(),
+) {
   switch (status) {
     case "active":
-      return { isActive: true, accounts: { some: {} } };
+      return {
+        isActive: true,
+        accounts: { some: {} },
+        lastSeenAt: { gte: activeSince(now) },
+      };
+    case "not-seen-lately":
+      // Under AND rather than as a top-level OR, which the caller's search
+      // spreads its own OR into.
+      return {
+        isActive: true,
+        accounts: { some: {} },
+        AND: [
+          {
+            OR: [
+              { lastSeenAt: null },
+              { lastSeenAt: { lt: activeSince(now) } },
+            ],
+          },
+        ],
+      };
     case "never-signed-in":
       return { isActive: true, accounts: { none: {} } };
     case "inactive":

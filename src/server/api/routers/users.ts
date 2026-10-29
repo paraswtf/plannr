@@ -196,7 +196,14 @@ export const usersRouter = createTRPCRouter({
           query: z.string().trim().max(120).optional(),
           roleId: roleId.optional(),
           status: z
-            .enum(["all", "active", "never-signed-in", "inactive", "waiting"])
+            .enum([
+              "all",
+              "active",
+              "not-seen-lately",
+              "never-signed-in",
+              "inactive",
+              "waiting",
+            ])
             .default("all"),
           /**
            * A small default, which for a list of people is the exception
@@ -226,7 +233,7 @@ export const usersRouter = createTRPCRouter({
           // screen labels them by their address or PRN, so a blank at the top
           // of every list reads as noise.
           orderBy: [
-            ...(input.status === "active"
+            ...(input.status === "active" || input.status === "not-seen-lately"
               ? [
                   {
                     lastSeenAt: {
@@ -258,7 +265,14 @@ export const usersRouter = createTRPCRouter({
           query: z.string().trim().max(120).optional(),
           roleId: roleId.optional(),
           status: z
-            .enum(["all", "active", "never-signed-in", "inactive", "waiting"])
+            .enum([
+              "all",
+              "active",
+              "not-seen-lately",
+              "never-signed-in",
+              "inactive",
+              "waiting",
+            ])
             .default("all"),
         })
         .default({}),

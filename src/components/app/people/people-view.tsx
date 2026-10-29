@@ -32,6 +32,7 @@ import { UserDetailDialog } from "./user-detail-dialog";
 const STATUSES = [
   { value: "all" as const, label: "All" },
   { value: "active" as const, label: "Active" },
+  { value: "not-seen-lately" as const, label: "Not seen lately" },
   { value: "never-signed-in" as const, label: "Not signed in" },
   { value: "inactive" as const, label: "Disabled" },
   { value: "waiting" as const, label: "Waiting" },
@@ -324,7 +325,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
               </div>
 
               {/*
-               * Five statuses are wider than a phone, and the strip already
+               * Six statuses are wider than a phone, and the strip already
                * scrolls inside itself, so all it wants here is a line of its
                * own; a second scroll box around it would clip the active
                * pill's shadow, which the strip's own padding exists to save.
@@ -765,7 +766,12 @@ function lastSeen(at: Date | null) {
 function StatusBadge({
   user,
 }: {
-  user: { isActive: boolean; email: string | null; hasSignedIn: boolean };
+  user: {
+    isActive: boolean;
+    email: string | null;
+    hasSignedIn: boolean;
+    lastSeenAt: Date | null;
+  };
 }) {
   // The status filter above the list reads the same rule, so whichever one
   // is picked, every row under it says the same thing.
@@ -779,6 +785,9 @@ function StatusBadge({
       return <Badge tone="red">Disabled</Badge>;
     case "active":
       return <span className="text-muted text-sm">Active</span>;
+    case "not-seen-lately":
+      // Signed in before, but not in the last week: not using Plannr now.
+      return <Badge tone="neutral">Not seen lately</Badge>;
     case "never-signed-in":
       return <Badge tone="neutral">Not signed in</Badge>;
   }

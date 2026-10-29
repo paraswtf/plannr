@@ -92,89 +92,161 @@ describe("contactAddresses", () => {
 describe("accountStatus", () => {
   const REAL = "aanya@sicsr.ac.in";
   const PLACEHOLDER = "23030125004@unknown.invalid";
+  const now = new Date("2026-10-29T09:00:00Z");
+  const DAY = 24 * 60 * 60 * 1000;
+  const yesterday = new Date(now.getTime() - DAY);
+  const lastMonth = new Date(now.getTime() - 30 * DAY);
 
-  it("gives every combination of switch, address and sign-in exactly one status", () => {
-    const seen = new Map<string, AccountStatus>();
+  it("gives every kind of person exactly one status, and uses them all", () => {
+    const seen = new Set<AccountStatus>();
     for (const isActive of [true, false])
       for (const email of [REAL, PLACEHOLDER])
-        for (const hasSignedIn of [true, false]) {
-          const status = accountStatus({ isActive, email, hasSignedIn });
-          expect(ACCOUNT_STATUSES).toContain(status);
-          seen.set(`${isActive}/${email}/${hasSignedIn}`, status);
-        }
-    expect(seen.size).toBe(8);
-    expect(new Set(seen.values())).toEqual(new Set(ACCOUNT_STATUSES));
+        for (const hasSignedIn of [true, false])
+          for (const lastSeenAt of [null, yesterday, lastMonth]) {
+            const status = accountStatus(
+              { isActive, email, hasSignedIn, lastSeenAt },
+              now,
+            );
+            expect(ACCOUNT_STATUSES).toContain(status);
+            seen.add(status);
+          }
+    expect(seen).toEqual(new Set(ACCOUNT_STATUSES));
   });
 
-  it("calls somebody active only when the account is on and has been used", () => {
+  it("calls somebody active only when they used Plannr in the last week", () => {
+    const signedIn = { isActive: true, email: REAL, hasSignedIn: true };
+    expect(accountStatus({ ...signedIn, lastSeenAt: yesterday }, now)).toBe(
+      "active",
+    );
     expect(
-      accountStatus({ isActive: true, email: REAL, hasSignedIn: true }),
+      accountStatus(
+        { ...signedIn, lastSeenAt: new Date(now.getTime() - 7 * DAY) },
+        now,
+      ),
     ).toBe("active");
+    expect(accountStatus({ ...signedIn, lastSeenAt: lastMonth }, now)).toBe(
+      "not-seen-lately",
+    );
+    // Signed in, but no visit recorded since the column began being kept.
+    expect(accountStatus({ ...signedIn, lastSeenAt: null }, now)).toBe(
+      "not-seen-lately",
+    );
+  });
+
+  it("calls somebody who never signed in that, whatever else is true", () => {
     expect(
-      accountStatus({ isActive: true, email: REAL, hasSignedIn: false }),
+      accountStatus(
+        { isActive: true, email: REAL, hasSignedIn: false, lastSeenAt: null },
+        now,
+      ),
     ).toBe("never-signed-in");
     // Enabled with a placeholder cannot sign in, but nobody switched it off.
     expect(
-      accountStatus({
-        isActive: true,
-        email: PLACEHOLDER,
-        hasSignedIn: false,
-      }),
+      accountStatus(
+        {
+          isActive: true,
+          email: PLACEHOLDER,
+          hasSignedIn: false,
+          lastSeenAt: null,
+        },
+        now,
+      ),
     ).toBe("never-signed-in");
   });
 
   it("tells waiting on the college apart from disabled by somebody here", () => {
     expect(
-      accountStatus({ isActive: false, email: REAL, hasSignedIn: true }),
+      accountStatus(
+        {
+          isActive: false,
+          email: REAL,
+          hasSignedIn: true,
+          lastSeenAt: yesterday,
+        },
+        now,
+      ),
     ).toBe("inactive");
     expect(
-      accountStatus({
-        isActive: false,
-        email: PLACEHOLDER,
-        hasSignedIn: false,
-      }),
+      accountStatus(
+        {
+          isActive: false,
+          email: PLACEHOLDER,
+          hasSignedIn: false,
+          lastSeenAt: null,
+        },
+        now,
+      ),
     ).toBe("waiting");
   });
 
   it("reads an address a screen was handed the same as the raw column", () => {
     // users.list hands the screen null where the placeholder was.
     expect(
-      accountStatus({ isActive: false, email: null, hasSignedIn: false }),
+      accountStatus(
+        { isActive: false, email: null, hasSignedIn: false, lastSeenAt: null },
+        now,
+      ),
     ).toBe("waiting");
   });
 });
 
 describe("accountStatusWhere", () => {
+  const now = new Date("2026-10-29T09:00:00Z");
+  const since = new Date("2026-10-22T09:00:00Z");
+
   it("filters by the same rule the row's badge is drawn by", () => {
-    expect(accountStatusWhere("active")).toEqual({
+    expect(accountStatusWhere("active", now)).toEqual({
       isActive: true,
       accounts: { some: {} },
+      lastSeenAt: { gte: since },
     });
-    expect(accountStatusWhere("never-signed-in")).toEqual({
+    expect(accountStatusWhere("not-seen-lately", now)).toEqual({
+      isActive: true,
+      accounts: { some: {} },
+      AND: [{ OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: since } }] }],
+    });
+    expect(accountStatusWhere("never-signed-in", now)).toEqual({
       isActive: true,
       accounts: { none: {} },
     });
-    expect(accountStatusWhere("inactive")).toEqual({
+    expect(accountStatusWhere("inactive", now)).toEqual({
       isActive: false,
       NOT: { email: { endsWith: "@unknown.invalid", mode: "insensitive" } },
     });
-    expect(accountStatusWhere("waiting")).toEqual({
+    expect(accountStatusWhere("waiting", now)).toEqual({
       isActive: false,
       email: { endsWith: "@unknown.invalid", mode: "insensitive" },
     });
-    expect(accountStatusWhere("all")).toEqual({});
+    expect(accountStatusWhere("all", now)).toEqual({});
   });
 
-  it("matches each of the eight kinds of person under one status only", () => {
+  it("matches each kind of person under one status only", () => {
     // A small reading of the filters against a person, enough to show that
     // no two statuses claim the same row and that none is left out.
-    type Person = { isActive: boolean; email: string; hasSignedIn: boolean };
+    type Person = {
+      isActive: boolean;
+      email: string;
+      hasSignedIn: boolean;
+      lastSeenAt: Date | null;
+    };
+    type Seen = { lastSeenAt?: null | { gte?: Date; lt?: Date } };
+    const seenMatches = (clause: Seen, p: Person) => {
+      if (!("lastSeenAt" in clause)) return true;
+      const c = clause.lastSeenAt;
+      if (c === null) return p.lastSeenAt === null;
+      if (!p.lastSeenAt) return false;
+      if (c?.gte && p.lastSeenAt < c.gte) return false;
+      if (c?.lt && !(p.lastSeenAt < c.lt)) return false;
+      return true;
+    };
     const matches = (status: AccountStatus, p: Person) => {
-      const where = accountStatusWhere(status) as {
+      const where = accountStatusWhere(status, now) as {
         isActive?: boolean;
         accounts?: { some?: object; none?: object };
         email?: { endsWith: string };
         NOT?: { email: { endsWith: string } };
+        lastSeenAt?: { gte: Date };
+        AND?: Array<{ OR: Seen[] }>;
       };
       const ends = (suffix: string) => p.email.toLowerCase().endsWith(suffix);
       if (where.isActive !== undefined && where.isActive !== p.isActive)
@@ -183,15 +255,27 @@ describe("accountStatusWhere", () => {
       if (where.accounts?.none && p.hasSignedIn) return false;
       if (where.email && !ends(where.email.endsWith)) return false;
       if (where.NOT && ends(where.NOT.email.endsWith)) return false;
+      if (where.lastSeenAt && !seenMatches({ lastSeenAt: where.lastSeenAt }, p))
+        return false;
+      if (
+        where.AND &&
+        !where.AND.every((a) => a.OR.some((o) => seenMatches(o, p)))
+      )
+        return false;
       return true;
     };
 
     for (const isActive of [true, false])
       for (const email of ["a@sicsr.ac.in", "1@UNKNOWN.INVALID"])
-        for (const hasSignedIn of [true, false]) {
-          const person = { isActive, email, hasSignedIn };
-          const claimed = ACCOUNT_STATUSES.filter((s) => matches(s, person));
-          expect(claimed).toEqual([accountStatus(person)]);
-        }
+        for (const hasSignedIn of [true, false])
+          for (const lastSeenAt of [
+            null,
+            new Date("2026-10-28T09:00:00Z"),
+            new Date("2026-09-01T09:00:00Z"),
+          ]) {
+            const person = { isActive, email, hasSignedIn, lastSeenAt };
+            const claimed = ACCOUNT_STATUSES.filter((s) => matches(s, person));
+            expect(claimed).toEqual([accountStatus(person, now)]);
+          }
   });
 });

@@ -57,7 +57,7 @@ export const peopleRoutes: RouteDef[] = [
     procedure: "users.list",
     summary: "List people in the directory",
     description:
-      "Paged, and filterable by free text (`query`, matched against name, email and PRN), by `roleId`, and by `status`: `all`; `active`, enabled and signed in at least once; `never-signed-in`, enabled but never yet arrived; `inactive`, disabled while holding a real address; or `waiting`, shut out until the college sends an address. The four statuses other than `all` cover every person exactly once. Machine identities never appear; list those with `GET /api-keys`.",
+      "Paged, and filterable by free text (`query`, matched against name, email and PRN), by `roleId`, and by `status`: `all`; `active`, enabled and seen in Plannr in the last 7 days; `not-seen-lately`, enabled and signed in before, but not seen in the last 7 days; `never-signed-in`, enabled but never yet arrived; `inactive`, disabled while holding a real address; or `waiting`, shut out until the college sends an address. The five statuses other than `all` cover every person exactly once, and `active` and `not-seen-lately` list the most recently seen first. Machine identities never appear; list those with `GET /api-keys`.",
     tag: "People",
     scopes: ["ViewUsers"],
   },

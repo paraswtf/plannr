@@ -24,7 +24,10 @@ const createCaller = createCallerFactory(appRouter);
 let orgId: string;
 let admin: ReturnType<typeof callerFor>;
 /** One fixture person per status, by the status they should be listed under. */
-let ids: Record<"active" | "never" | "inactive" | "waiting" | "blank", string>;
+let ids: Record<
+  "active" | "lapsed" | "never" | "inactive" | "waiting" | "blank",
+  string
+>;
 
 function callerFor(user: {
   id: string;
@@ -112,6 +115,28 @@ beforeEach(async () => {
       providerAccountId: "people-itest-zed",
     },
   });
+  // Zed uses Plannr: signed in, and seen yesterday.
+  await db.user.update({
+    where: { id: active.id },
+    data: { lastSeenAt: new Date(Date.now() - 24 * 60 * 60_000) },
+  });
+  // Signed in once, a month ago, and not since.
+  const lapsed = await db.user.create({
+    data: {
+      orgId,
+      email: "people-itest-lapsed@plannr-demo.invalid",
+      name: "Lapsed Person",
+      lastSeenAt: new Date(Date.now() - 30 * 24 * 60 * 60_000),
+    },
+  });
+  await db.account.create({
+    data: {
+      userId: lapsed.id,
+      type: "oauth",
+      provider: "google",
+      providerAccountId: "people-itest-lapsed",
+    },
+  });
   const never = await db.user.create({
     data: {
       orgId,
@@ -145,6 +170,7 @@ beforeEach(async () => {
   });
   ids = {
     active: active.id,
+    lapsed: lapsed.id,
     never: never.id,
     inactive: inactive.id,
     waiting: waiting.id,
@@ -153,17 +179,31 @@ beforeEach(async () => {
 });
 
 const listed = async (
-  status: "all" | "active" | "never-signed-in" | "inactive" | "waiting",
+  status:
+    | "all"
+    | "active"
+    | "not-seen-lately"
+    | "never-signed-in"
+    | "inactive"
+    | "waiting",
 ) => (await admin.users.list({ status, pageSize: 200 })).rows.map((r) => r.id);
 
 describe("users.list status", () => {
-  it("lists under Active only the people who have signed in", async () => {
+  it("lists under Active only the people seen in the last week", async () => {
     const rows = await listed("active");
     expect(rows).toContain(ids.active);
+    expect(rows).not.toContain(ids.lapsed);
     expect(rows).not.toContain(ids.never);
     expect(rows).not.toContain(ids.blank);
     expect(rows).not.toContain(ids.inactive);
     expect(rows).not.toContain(ids.waiting);
+  });
+
+  it("lists under Not seen lately those signed in before but not this week", async () => {
+    const rows = await listed("not-seen-lately");
+    expect(rows).toContain(ids.lapsed);
+    expect(rows).not.toContain(ids.active);
+    expect(rows).not.toContain(ids.never);
   });
 
   it("lists under Not signed in only the enabled who never arrived", async () => {
@@ -181,6 +221,7 @@ describe("users.list status", () => {
     const all = await listed("all");
     const parts = [
       ...(await listed("active")),
+      ...(await listed("not-seen-lately")),
       ...(await listed("never-signed-in")),
       ...(await listed("inactive")),
       ...(await listed("waiting")),
@@ -192,6 +233,7 @@ describe("users.list status", () => {
   it("counts what it lists", async () => {
     for (const status of [
       "active",
+      "not-seen-lately",
       "never-signed-in",
       "inactive",
       "waiting",
@@ -222,15 +264,11 @@ describe("users.list order", () => {
     expect(page.rows[0]!.lastSeenAt).toBeInstanceOf(Date);
   });
 
-  it("puts somebody signed in but never seen since after everybody seen", async () => {
+  it("lists those not seen lately most recently seen first, the unrecorded last", async () => {
+    // The admin signed in but has no recorded visit at all.
     const admin_ = (await admin.users.me()).id;
-    await db.user.update({
-      where: { id: admin_ },
-      data: { lastSeenAt: new Date() },
-    });
-    // Zed has signed in but has no recorded visit.
-    const rows = await listed("active");
-    expect(rows).toEqual([admin_, ids.active]);
+    const rows = await listed("not-seen-lately");
+    expect(rows).toEqual([ids.lapsed, admin_]);
   });
 
   it("puts somebody with no name after everybody named", async () => {

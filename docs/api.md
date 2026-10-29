@@ -719,7 +719,7 @@ list in a single request, which for most of these endpoints is the default.
 | `GET /terms`                      | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
 | `GET /plans`                      | 1–100, default 20    | `query` (plan name, term or author), `scope` (`all`/`mine`/`shared`/`review`)                                                       |
 | `GET /plans/{id}/history`         | 1–500, default 200   | none                                                                                                                                |
-| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`never-signed-in`/`inactive`/`waiting`, see below)                                      |
+| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`not-seen-lately`/`never-signed-in`/`inactive`/`waiting`, see below)                                      |
 | `GET /roles`                      | 1–500, default 200   | none                                                                                                                                |
 | `GET /api-keys`                   | 1–500, default 200   | none                                                                                                                                |
 | `GET /notifications`              | 1–200, default 50    | `filter` (`all`/`unread`), newest first so page 1 is what is new                                                                    |
@@ -735,7 +735,8 @@ exactly once:
 
 | `status`          | Who it matches                                                        |
 | ----------------- | --------------------------------------------------------------------- |
-| `active`          | enabled, and has signed in at least once                              |
+| `active`          | enabled, and seen in Plannr in the last 7 days                        |
+| `not-seen-lately` | enabled and signed in before, but not seen in the last 7 days         |
 | `never-signed-in` | enabled, but has never signed in (imported and not yet arrived)       |
 | `inactive`        | disabled, and has a real address                                      |
 | `waiting`         | disabled because the college has not sent an address for them yet    |
@@ -747,8 +748,8 @@ everybody enabled.
 
 Every row carries `lastSeenAt`: when the person last used Plannr in a browser,
 recorded at most every fifteen minutes, or `null` if no visit has been recorded
-since it began being kept. `status=active` lists the most recently seen first;
-every other list is by name.
+since it began being kept. `status=active` and `status=not-seen-lately` list
+the most recently seen first; every other list is by name.
 
 ### The two lists that answer whole
 
