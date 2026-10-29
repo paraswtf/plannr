@@ -52,7 +52,7 @@ function Problem({ step }: { step: number }) {
       }
     >
       <div ref={visual} className="absolute inset-0 flex gap-14">
-        <div className="flex flex-1 flex-col justify-between pt-6">
+        <div className="flex flex-1 flex-col pt-6">
           <div className="grid grid-cols-2 gap-x-10 gap-y-12">
             {STATS.map((s, i) => (
               <div
@@ -70,10 +70,6 @@ function Problem({ step }: { step: number }) {
               </div>
             ))}
           </div>
-          <p className="text-muted text-[22px]">
-            15 students, 10 faculty and 4 coordinators interviewed, 11 students
-            surveyed
-          </p>
         </div>
         <Card className="mt-6 w-[640px] self-start p-9">
           <p className="font-display text-fg text-[34px] font-semibold">
@@ -108,7 +104,7 @@ export const slide: SlideDef = {
   title: "The problem",
   steps: 5,
   notes: [
-    "The college timetable is an MRBS install, PHP and MySQL, one desktop page for everyone. We asked 15 students, 10 faculty and 4 coordinators, and surveyed 11 more students. Here is what they told us.",
+    "The college timetable is an MRBS install, PHP and MySQL, one desktop page for everyone. We asked the people who use it, and here is what they told us.",
     "73 percent say it does not tell them when a class changes.",
     "82 percent say finding their own classes takes too many steps.",
     "82 percent cannot see their week at a glance.",
