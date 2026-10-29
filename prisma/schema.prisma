@@ -167,6 +167,7 @@ model Organization {
   apiKeys            ApiKey[]
   scheduleFavourites ScheduleFavourite[]
   notifications      Notification[]
+  assignments        Assignment[]
 }
 
 model OrgSettings {
@@ -195,6 +196,15 @@ model OrgSettings {
   maxStudentBookingMinutes       Int     @default(120)
 
   activeSemesterId String?
+
+  /// Printed at the top of every question paper, one line each; the first is
+  /// the institution's name. Empty means the organisation's name alone.
+  documentHeader   String?
+  /// One line along the foot of every page of a paper, beside its number.
+  documentFooter   String?
+  /// PNG or JPEG, at most 256 KB, printed beside the header.
+  documentLogo     Bytes?
+  documentLogoType String?
 
   updatedAt DateTime @updatedAt
 }
@@ -263,6 +273,13 @@ model User {
   notifications           Notification[]
   /// What they have chosen to hear about, and where.
   notificationPreferences NotificationPreference[]
+  /// Tests and presentations this person set.
+  assignmentsSet          Assignment[]             @relation("AssignmentCreator")
+  /// Question papers only this person can open.
+  papersOwned             QuestionPaper[]          @relation("PaperOwner")
+  /// Their half of every key their papers are sealed with.
+  paperKeyring            PaperKeyring?
+  submissionsMarked       Submission[]             @relation("SubmissionMarker")
 
   @@index([orgId, name])
   @@index([orgId, email])
@@ -406,6 +423,8 @@ model StudentProfile {
 
   memberships StudentGroupMembership[]
   attendance  AttendanceRecord[]
+  teams       PresentationTeamMember[]
+  submissions Submission[]
 
   @@unique([orgId, prn])
   @@index([prn])
@@ -495,6 +514,7 @@ model Semester {
   groups        Group[]
   events        Event[]
   schedulePlans SchedulePlan[]
+  assignments   Assignment[]
 
   @@unique([orgId, name])
 }
@@ -555,9 +575,10 @@ model Course {
   code  String?
   title String
 
-  faculty CourseFaculty[]
-  groups  GroupCourse[]
-  events  Event[]
+  faculty     CourseFaculty[]
+  groups      GroupCourse[]
+  events      Event[]
+  assignments Assignment[]
 
   @@unique([semesterId, programmeId, title])
   @@index([orgId])
@@ -662,6 +683,7 @@ model Group {
   planSessions       SchedulePlanSession[]
   eventGroups        EventGroup[]
   attendanceSessions AttendanceSession[]
+  assignments        Assignment[]
 
   @@unique([programmeId, semesterId, name])
   @@index([orgId])
@@ -774,7 +796,9 @@ model EventException {
   reason    String?
   createdAt DateTime @default(now())
 
-  occurrence EventOccurrence?
+  occurrence         EventOccurrence?
+  /// Tests and presentation slots pinned to this sitting.
+  assignmentSittings AssignmentSitting[]
 
   @@unique([eventId, originalStart])
 }
@@ -1275,6 +1299,254 @@ model CalendarSyncTask {
   @@index([status, nextAttemptAt])
 }
 
+// ─── Assignments ────────────────────────────────────────────────────────────
+
+/// What kind of assignment it is. The three tests differ in where the paper is
+/// read and answered; a presentation has teams and slots instead of a paper.
+enum AssignmentType {
+  PRESENTATION
+  /// Answered in Plannr, from anywhere, while the paper is open.
+  CLASS_TEST_ONLINE
+  /// Sat on paper in the room. The paper, if any, is printed by the teacher.
+  CLASS_TEST_OFFLINE
+  /// Sat in the room, but read and answered in Plannr.
+  CLASS_TEST_IN_APP_OFFLINE
+}
+
+enum QuestionPaperSource {
+  UPLOAD
+  AUTHORED
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+}
+
+/// A test or a presentation set for one group.
+model Assignment {
+  id    String       @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  type         AssignmentType
+  title        String
+  /// For the students, plain text.
+  instructions String?
+
+  /// NoAction: a group with tests or presentations cannot be deleted from under
+  /// them and take students' answers and marks with it. Checked at the end of
+  /// the statement, unlike Restrict, so deleting a whole organisation, which
+  /// removes its groups and assignments together, still works.
+  groupId    String
+  group      Group     @relation(fields: [groupId], references: [id], onDelete: NoAction)
+  courseId   String?
+  course     Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  semesterId String?
+  semester   Semester? @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+
+  /// Who set it. SetNull rather than Cascade: a teacher leaving must not take
+  /// every student's answers and marks with them.
+  createdById String?
+  createdBy   User?   @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Tests: how long students have to answer once the paper opens. Null means
+  /// until the sitting ends.
+  durationMinutes Int?
+
+  /// Presentations: the days teams present on, as calendar dates in the
+  /// institution's timezone, both included.
+  windowStart    DateTime? @db.Date
+  windowEnd      DateTime? @db.Date
+  minutesPerTeam Int?
+
+  /// Derived, for the Upcoming and Past lists: the first sitting's start and
+  /// the last sitting's end, or the window's bounds for a presentation with no
+  /// slots yet. Kept in step whenever a sitting changes or its class moves.
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  marksPublishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sittings    AssignmentSitting[]
+  teams       PresentationTeam[]
+  paper       QuestionPaper?
+  submissions Submission[]
+
+  @@index([orgId, endsAt])
+  @@index([createdById, endsAt])
+  @@index([groupId, endsAt])
+}
+
+/// One time an assignment happens: a test's sitting, or one team's slot.
+///
+/// Pinned to a class sitting through an `EventException` (MODIFIED, with no
+/// overrides, made when the sitting is chosen): exceptions are what a series
+/// split carries to the new half, and `EventOccurrence.exceptionId` is what the
+/// timetable joins on. If the exception goes, the link is set to null and the
+/// sitting says it has lost its class rather than pointing at the wrong one.
+model AssignmentSitting {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  exceptionId String?
+  exception   EventException? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
+
+  /// Where the rule put the sitting when it was chosen, for saying what was lost.
+  originalStart  DateTime
+  /// Effective times, copied from the occurrence and kept in step with it.
+  startsAt       DateTime
+  endsAt         DateTime
+  /// The class was scheduled for this assignment, so deleting the assignment
+  /// can offer to cancel it.
+  scheduledForIt Boolean  @default(false)
+
+  /// Presentations: the team presenting, and its place among the teams that
+  /// share the sitting.
+  teamId   String?
+  team     PresentationTeam? @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  position Int               @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([assignmentId])
+  @@index([exceptionId])
+  @@index([teamId])
+}
+
+model PresentationTeam {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  name         String
+  topic        String?
+  position     Int        @default(0)
+
+  members  PresentationTeamMember[]
+  sittings AssignmentSitting[]
+
+  @@index([assignmentId, position])
+}
+
+model PresentationTeamMember {
+  teamId       String
+  team         PresentationTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Copied from the team, so the database can hold a student to one team per
+  /// assignment.
+  assignmentId String
+
+  @@id([teamId, studentId])
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+}
+
+/// A teacher's own secret, half of every key their question papers are sealed
+/// with. Sealed in turn with QUESTION_PAPER_KEY, and used only for requests
+/// made by this person.
+model PaperKeyring {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sealedSecret String
+  createdAt    DateTime @default(now())
+}
+
+/// A test's question paper, encrypted so that only the account that set it
+/// can open it, and only with the password they chose.
+model QuestionPaper {
+  id           String              @id @default(cuid())
+  assignmentId String              @unique
+  assignment   Assignment          @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  /// The teacher who set the paper, the only person who can open it. Null once
+  /// their account is deleted: the sealed copies can then never be opened, but
+  /// a released paper's pages, questions and answer key stay with the
+  /// students' answers and marks.
+  ownerId      String?
+  owner        User?               @relation("PaperOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  source       QuestionPaperSource
+
+  kdfSalt Bytes
+  kdfN    Int
+  kdfR    Int
+  kdfP    Int
+
+  pdfNonce      Bytes
+  pdfCipher     Bytes
+  contentNonce  Bytes?
+  contentCipher Bytes?
+
+  fileName   String?
+  byteSize   Int
+  pageCount  Int
+  /// The answer sheet: question keys, labels, marks and option counts. No
+  /// question text and no answers, so it is stored as it is.
+  sheet      Json
+  totalMarks Float
+
+  failedUnlocks Int       @default(0)
+  lockedUntil   DateTime?
+
+  /// Online and in-app tests, once the teacher opens the paper to students.
+  releasedAt        DateTime?
+  releasedPdf       Bytes?
+  /// The questions without their answers, for the answer screen.
+  releasedQuestions Json?
+  /// The answers to choice questions, for marking. Never sent to a student.
+  answerKey         Json?
+  /// When answering ends, fixed as the paper is released, so moving the test
+  /// or changing its length afterwards can neither reopen nor cut short a
+  /// paper students are answering.
+  answersCloseAt    DateTime?
+  closedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pages QuestionPaperPage[]
+}
+
+/// One page of a released paper as an image, for phones that cannot show a PDF
+/// in the page. Fetched one at a time.
+model QuestionPaperPage {
+  paperId String
+  paper   QuestionPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  number  Int
+  svg     Bytes
+
+  @@id([paperId, number])
+}
+
+/// One student's answers to one test.
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status       SubmissionStatus @default(IN_PROGRESS)
+  /// { [questionKey]: { text?: string, choice?: number } }
+  answers      Json             @default("{}")
+  startedAt    DateTime         @default(now())
+  submittedAt  DateTime?
+  updatedAt    DateTime         @updatedAt
+
+  /// { [questionKey]: number }
+  marks      Json?
+  score      Float?
+  feedback   String?
+  markedById String?
+  markedBy   User?     @relation("SubmissionMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  markedAt   DateTime?
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+}
+
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 /// What a notification is about. Each one is a row on the settings tab, with a
@@ -1289,6 +1561,8 @@ enum NotificationCategory {
   APPROVALS
   /// A schedule plan wants your review, or a plan of yours was reviewed.
   PLAN_REVIEWS
+  /// A test or presentation is set for you, a paper opens, marks are out.
+  ASSIGNMENTS
 }
 
 /// One piece of news for one person: a row in their inbox, and the push it
