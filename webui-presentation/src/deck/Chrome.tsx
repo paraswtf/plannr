@@ -2,8 +2,6 @@
 
 import { forwardRef, useRef, type ReactNode } from "react";
 
-import { SpeakerChip } from "~/ui/people";
-
 import { gsap, useGSAP } from "./gsap";
 import type { DeckSlide, SectionId } from "./types";
 
@@ -16,9 +14,11 @@ export function sectionColor(_id: SectionId): string {
 }
 
 /**
- * The deck's frame: the mark and section top-left, the speaker top-right and
- * a progress line along the bottom. Nothing else: no slide numbers (the
- * audience does not need them; the presenter view has them) and no colour.
+ * The deck's frame: the mark and section top-left and a progress line along
+ * the bottom. Nothing else: no speaker (the cover and the thanks slide name
+ * the whole group, and every slide between is the group's work too), no
+ * slide numbers (the audience does not need them; the presenter view has
+ * them) and no colour.
  *
  * It sits on the canvas above the slides, so it scales with them. The mark
  * in the corner is not drawn here but by each slide (see SlideFrame), so that
@@ -53,12 +53,6 @@ export const Chrome = forwardRef<
             <span className="font-display text-muted text-[21px] font-medium tracking-[-0.01em]">
               {slide.section.title}
             </span>
-          </SwapIn>
-        </div>
-
-        <div className="absolute top-[42px] right-[64px] flex h-[44px] items-center">
-          <SwapIn swapKey={slide.speaker}>
-            <SpeakerChip person={slide.speaker} size={38} />
           </SwapIn>
         </div>
 
