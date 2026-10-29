@@ -109,27 +109,58 @@ presents it:
 | File | Section | Presenter |
 | --- | --- | --- |
 | `opening.tsx` | The project: the timetable today | Paras |
-| `approach.tsx` | Our approach, the Apple quote, hand-over | Paras |
+| `approach.tsx` | Our approach, who we heard from, the Apple quote, our scope, hand-over | Paras |
 | `students.tsx` | Students | Sonal |
-| `faculty.tsx` | Faculty (internal and external) | Ravya |
+| `faculty.tsx` | Faculty (internal and visiting) | Ravya |
 | `coordinators.tsx` | Coordinators | Tanisha |
-| `admins.tsx` | System admins and management | Paras |
-| `closing.tsx` | Findings, future scope, open source, credits | Paras |
+| `closing.tsx` | Findings, what we combined, the roadmap, open source, thank you | Paras |
+
+System admins are out of scope: we struck them off during the research, as
+they play little part in running the timetable and Moodle. `OUT_OF_SCOPE` in
+`src/content/team.ts` crosses them out on "Who we heard from" and every
+stakeholder map after it. Their section, `admins.tsx`, is kept but is not in
+the running order (`src/sections/index.ts`).
 
 Each stakeholder file starts with its research as plain data — `RESEARCH`,
-`PERSONAS`, `DAYS`, `PROBLEMS`, `FEATURES` — and the slides below only arrange
+`PERSONAS`, `DAYS`, `PROBLEMS`, `CHAPTERS` — and the slides below only arrange
 it. To fill in your findings, edit the data:
 
 - **Placeholders.** Anything wrapped in `<Ph>…</Ph>` is a stand-in (a number,
   a quote, a name). It shows with a dashed amber underline so it can never be
   presented by accident. Replace the text, then delete the `<Ph>` around it.
-- **The ranking re-sorts itself.** Each problem has `personas` (which kinds of
-  user run into it — its reach) and `severity` (1–5). The ranking slide
-  multiplies the two and animates into that order, and the solutions slide
-  takes the top few — so fixing the data fixes the animation.
+- **The research is a first round, shown as collected.** Tallies are kept as
+  collected, `{ count, of }` (8 of the 11 students surveyed, say), and the
+  slides show them as they are. Shares ("73%") are real and plain. Show a count
+  with `<Projected n={…} />` or `<Of t={tally} />`, never as a typed number.
+  `PROJECTION` in `src/content/research.tsx` is 1; set it higher to preview the
+  slides with a bigger sample, and every head count is multiplied and marked as
+  a placeholder (the speaker notes don't follow it). When the second round is
+  in, put its tallies in the section files. A tally with no research behind
+  it is `placeholder: true`: never projected, always marked.
+- **The ranking re-sorts itself.** Each problem has a `reach` (how many raised
+  it), a `severity` (1–5: faculty and coordinators rated theirs themselves, high
+  5, medium 3, low 1; for students it is our estimate) and a `scope`:
+  `core` (the timetable, attendance, scheduling and tracking classes, tests and
+  assignments) or `future` (file uploads, course material and everything else,
+  a far stretch). The score is reach × severity/5 × scope/5, with scope weighing
+  5 or 1, out of 100. The ranking slide sorts by reach × severity first, then
+  brings in scope and sorts again, so the room sees what scope changes. Fixing
+  the data fixes the animation.
+- **Features, one at a time.** After the ranking, `chapterSlides`
+  (`src/sections/_chapters.tsx`) walks the problems in `CHAPTERS`, one or two at
+  a time: back to the list (`ProblemTrack`) with the numbers behind them, then
+  the feature that answers them, shown working in Plannr, then back to the list
+  with those problems ticked, and a recap at the end. Problems outside our scope
+  are marked Later. Every feature is presented as Plannr today, as a product
+  mock-up. (`Feature` still accepts `status: "planned"` and `planned` points,
+  which draw a Planned chip and outlined rings, but the deck uses neither.)
 - **Speaker notes** are the `notes` of each slide: one paragraph per build, so
   the presenter view follows along. `[Square brackets]` in a script mark
-  something to fill in.
+  something to fill in or do: "[read the quote]".
+- **Days are schedules.** `DAYS` draws a day hour by hour, one lane per kind
+  of person: what they do and when, and how they keep track of it. It is not
+  where problems go. Leave its events without a `tone`; the problems come
+  after, on their own slides.
 - **Photos.** Put files in `public/images/` (see `public/images/CREDITS.md` for
   what is there and its licence). Team photos: add `photo:
   "/images/team/sonal.jpg"` to your entry in `src/content/team.ts` and every
@@ -142,10 +173,10 @@ it. To fill in your findings, edit the data:
 ```
 src/
   sections/   the talk: slide order, data and speaker notes (edit these)
-  templates/  slide layouts shared by every section (problems, ranking, …)
-  visuals/    the bespoke animated pictures (the old site, phone demos, …)
+  templates/  slide layouts shared by every section (problems, charts, ranking, …)
+  visuals/    the bespoke animated pictures (the old site, phone demos, product demos, …)
   ui/         icons (Phosphor), mark, device frames, Bezel, Card, Chip, mock-up pieces
-  content/    the team, the stakeholders and the data shapes
+  content/    the team, the stakeholders, the data shapes, scoring and the projection
   deck/       the engine: canvas, navigation, morphs, builds, presenter view
 ```
 
@@ -160,8 +191,8 @@ content box in between.
 {
   id: "students-ranking",          // the URL: /#students-ranking
   title: "What hurts most",        // for the overview and presenter view
-  steps: 4,                        // builds before the next slide
-  notes: ["…", "…", "…", "…"],     // the script, one per build
+  steps: 6,                        // builds before the next slide
+  notes: ["…", "…", "…", "…", "…", "…"], // the script, one per build
   render: ({ step, active }) => (
     <ProblemRanking stakeholder="students" problems={PROBLEMS} step={step} … />
   ),
@@ -199,9 +230,8 @@ everything else dissolves. The deck uses this on purpose throughout:
 | Old timetable site | Its window among the three apps | `app-timetable` |
 | Stakeholder card | Section opener | `stake-<id>-card`, `-title`, `-icon`, `-owner` |
 | Day timeline lane | Persona card | `<section>-persona-<id>` |
-| Sticky note → ranking row → solution | | `<section>-problem-<id>` |
-| Solution's feature | Feature slide title | `<section>-feature-<id>` |
-| Phone or browser on one feature slide | The next | `<section>-device` |
+| Sticky note → chart row → ranking row → list row → feature chip → list row | | `<section>-problem-<id>` |
+| Ranking's rank number | The list's rank number | `<section>-rank-<i>` |
 
 Rules: an id is unique within a slide; put it on a box (block or
 inline-block); animate the element's children, never the element itself. The

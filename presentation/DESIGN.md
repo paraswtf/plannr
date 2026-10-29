@@ -125,6 +125,32 @@ figures). Utilities in `globals.css`: `t-hero` 168, `t-display` 112,
 - Product UIs are real component previews in a `PhoneFrame` or
   `BrowserFrame`, never loose rectangles pretending to be screenshots.
 
+## Features and scope
+
+Every feature is presented as Plannr today: a real component preview in a
+`PhoneFrame` or `BrowserFrame`, in Plannr's own colours. No feature is marked
+planned, next or coming soon, on a slide or inside a mock-up. A problem outside
+what we set out to automate is marked **Later**: that is scope, not a promise.
+The words for where a problem stands are **Built** (a check) and **Later**.
+
+## Charts
+
+Charts follow the dataviz method: pick the form, then colour, and validate it.
+
+- Bars are horizontal, 24px thick, square at the baseline and rounded 4px at
+  the end, growing from a hairline baseline. No gridlines, no axis labels:
+  every bar carries its value at the tip.
+- Emphasis, not a palette: bars are a neutral `#7c8596`; the bars the speaker
+  is talking about take the accent on a build and the rest recede.
+- Ratings stack in the bar: high in the accent, medium `#7c8596`, low
+  `#b9c0cc`, a 2px gap in the ground colour between them, and a legend.
+- A share is real and shown plain ("73%"); a head count is shown through
+  `Projected` / `Of`, so it follows the projection switch and is marked when
+  it is projected or a placeholder. Small samples lead with the count ("2 of
+  10"), large ones with the share.
+- Every chart has a source line under it (who, how many, how), a `title` on
+  each bar for hover, and an sr-only table.
+
 ## Icons
 
 `Icon` from `src/ui/icon.tsx`, which is Phosphor (light at slide sizes,
@@ -152,6 +178,8 @@ with fades (the person presenting rejects motion that only hints).
 ## Before a slide is done
 
 - [ ] Light ground, tokens only; no hard-coded dark-theme colours left
+- [ ] Features shown working in the product; Later only for out-of-scope problems
+- [ ] Head counts through `Projected` / `Of`, never typed; shares plain
 - [ ] One accent, used for one thing; no stakeholder colours
 - [ ] No label above the title, no numbering labels, no decorative dots
 - [ ] No em or en dash in visible text; `·` at most once per line

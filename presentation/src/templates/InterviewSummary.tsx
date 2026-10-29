@@ -171,7 +171,7 @@ export function InterviewSummary({
           </div>
           <div className="mt-14 flex flex-wrap gap-3">
             {research.methods.map((m, i) => (
-              <Chip key={i} size={24} className="is-chip">
+              <Chip key={i} size={28} className="is-chip">
                 {m}
               </Chip>
             ))}

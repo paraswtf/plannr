@@ -31,7 +31,7 @@ export interface EditOnceNotifyProps {
 
 /*
  * BCA-A's week. Data Mining moves from Wednesday 10:00 to Friday 13:00; its
- * students and its teacher hear about it, nobody else does.
+ * students' and its teacher's timetables follow, nobody else's do.
  */
 const G = makeGrid({ x: 15, y: 78, w: 900, gutter: 60, rowH: 72 });
 
@@ -119,10 +119,8 @@ interface Person {
   x: number;
   pill?: boolean;
   teacher?: boolean;
-  /** Notified on save. */
+  /** Their timetable updates on save. */
   hit: boolean;
-  /** Has opened it by the tally (build 2). */
-  seen?: boolean;
 }
 
 interface Group {
@@ -143,7 +141,6 @@ function buildPeople() {
     initials: string[],
     more: string,
     hit: boolean,
-    seen: number,
   ) => {
     const start = x;
     initials.forEach((ini, i) => {
@@ -152,7 +149,6 @@ function buildPeople() {
         initials: ini,
         x,
         hit,
-        seen: hit && i < seen,
       });
       x += i < initials.length - 1 ? STEP_X : AV + 8;
     });
@@ -162,7 +158,6 @@ function buildPeople() {
       x,
       pill: true,
       hit,
-      seen: hit,
     });
     x += PILL_W;
     groups.push({ label, x: start, w: x - start, hit });
@@ -176,35 +171,36 @@ function buildPeople() {
       x: x + (w - AV) / 2,
       teacher: true,
       hit,
-      seen: hit,
     });
     groups.push({ label, x, w, hit });
     x += w + gap;
   };
-  crowd("BCA-A", ["AK", "RS", "NP", "VJ"], "+59", true, 3);
+  crowd("BCA-A", ["AK", "RS", "NP", "VJ"], "+59", true);
   teacher("Dr. Mehta", "M", true);
-  crowd("BCA-B", ["TR", "HD", "KP"], "+60", false, 0);
+  crowd("BCA-B", ["TR", "HD", "KP"], "+60", false);
   teacher("Prof. Iyer", "I", false);
   return { people, groups };
 }
 
 const { people: PEOPLE, groups: GROUPS } = buildPeople();
 const widthOf = (p: Person) => (p.pill ? PILL_W : AV);
-/** A notification's badge: the top-right corner of its person. */
+/** An update's badge: the top-right corner of its person. */
 const badgeAt = (p: Person) => ({ x: p.x + widthOf(p) - 14, y: ROW_Y + 4 });
 const HIT = PEOPLE.filter((p) => p.hit);
 
-/** Where the notifications leave from: the moved class, in box coordinates. */
+/** Where the updates leave from: the moved class, in box coordinates. */
 const SOURCE = toBox({ x: TO.x + TO.w / 2, y: TO.y + TO.h / 2 });
 
 /**
- * Edit the timetable once; everyone it affects hears about it, without a
+ * Edit the timetable once; every timetable it touches updates, without a
  * mail.
  *
  * Builds (steps = 3):
  *   0 — the coordinator drags a class to a new slot on the grid.
- *   1 — save: notifications fan out to exactly the students and teacher affected.
- *   2 — the tally: N people told, 0 emails written, N have seen it (placeholder N).
+ *   1 — save: the change fans out to exactly the students' and teacher's
+ *       timetables affected, and "N timetables updated" appears.
+ *   2 — the tally: N people told, 0 emails written, and 1 notice,
+ *       sent for you (placeholder N). The update badges stay as they are.
  *
  * The browser window carries `flipId`, at the same size and place as the
  * other two coordinator demos, so it holds still between them.
@@ -296,7 +292,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
   });
 
   useSteps(ref, step, (tl, mark) => {
-    // ── Build 1: Save. Then the change goes out, to exactly these people.
+    // ── Build 1: Save. Then the change lands in exactly these timetables.
     tl.to(".cur-b", { scale: 0.84, duration: 0.1, ease: "power2.out" });
     tl.to(".cur-b", { scale: 1, duration: 0.18, ease: "power2.out" });
     tl.to(".save-done-bg", { opacity: 1, duration: 0.3 }, "<");
@@ -360,27 +356,33 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
       );
     });
     tl.to(".glabel-hit", { color: "#10141b", duration: 0.4 }, ">-0.3");
+    tl.fromTo(
+      ".upd-pill",
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" },
+      "fly+=0.5",
+    );
+    tl.from(
+      ".n-upd",
+      {
+        textContent: 0,
+        snap: { textContent: 1 },
+        duration: 1,
+        ease: "power2.out",
+      },
+      "fly+=0.55",
+    );
     mark();
 
-    // ── Build 2: who has seen it, and the tally.
-    tl.addLabel("seen");
-    HIT.filter((p) => p.seen).forEach((p, i) => {
-      const at = `seen+=${0.15 + i * 0.12}`;
-      tl.to(`.bell-${p.key}`, { opacity: 0, duration: 0.2 }, at);
-      tl.fromTo(
-        `.seen-${p.key}`,
-        { opacity: 0, scale: 0.4 },
-        { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.6)" },
-        at,
-      );
-    });
-    tl.to(".scrim", { opacity: 1, duration: 0.5 }, "seen");
-    tl.to(".cur-a", { opacity: 0, duration: 0.3 }, "seen");
+    // ── Build 2: the notice that tells them, as a tally.
+    tl.addLabel("tally");
+    tl.to(".scrim", { opacity: 1, duration: 0.5 }, "tally");
+    tl.to(".cur-a", { opacity: 0, duration: 0.3 }, "tally");
     tl.fromTo(
       ".tally",
       { opacity: 0, y: 48 },
       { opacity: 1, y: 0, duration: 0.8, ease: "expo.out" },
-      "seen+=0.1",
+      "tally+=0.1",
     );
     tl.from(
       ".n-sent",
@@ -390,17 +392,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
         duration: 1,
         ease: "power2.out",
       },
-      "seen+=0.3",
-    );
-    tl.from(
-      ".n-seen",
-      {
-        textContent: 0,
-        snap: { textContent: 1 },
-        duration: 1.2,
-        ease: "power2.out",
-      },
-      "seen+=0.4",
+      "tally+=0.3",
     );
     mark();
   });
@@ -430,21 +422,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
                     "0 0 0 3px var(--bg), 0 6px 14px -4px rgba(16,24,40,0.3)",
                 }}
               >
-                <span
-                  className={`bell-${p.key} absolute inset-0 flex items-center justify-center`}
-                >
-                  <Icon name="bell" size={15} stroke={2.4} />
-                </span>
-                <span
-                  className={`seen-${p.key} absolute inset-0 flex items-center justify-center rounded-full`}
-                  style={{
-                    opacity: 0,
-                    background: "var(--good)",
-                    color: "#ffffff",
-                  }}
-                >
-                  <Icon name="check" size={15} stroke={3} />
-                </span>
+                <Icon name="refresh" size={15} stroke={2.4} />
               </span>
             );
           })}
@@ -454,6 +432,7 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
     >
       <AppBar title="Timetable" chip="BCA-A" sub="Week of 5 Oct" />
       <SaveButton />
+      <UpdatedPill />
       <WeekGrid g={G} today={0} />
       {WEEK.map((c) => (
         <Block key={c.id} g={G} c={c} />
@@ -505,8 +484,8 @@ export function EditOnceNotify({ step, active, flipId }: EditOnceNotifyProps) {
         className="scrim pointer-events-none absolute inset-0 z-20"
         style={{
           opacity: 0,
-          background: "rgba(242,243,246,0.72)",
-          backdropFilter: "blur(3px)",
+          // No backdrop blur: it mirrors the grid's edges on scaled displays.
+          background: "rgba(242,243,246,0.86)",
         }}
       />
 
@@ -552,6 +531,37 @@ function SaveButton() {
       >
         <Icon name="check" size={18} stroke={2.6} />
         Saved
+      </span>
+    </div>
+  );
+}
+
+/** Build 1's result, left of Save: how many timetables just changed. */
+function UpdatedPill() {
+  return (
+    <div
+      className="upd-pill absolute flex items-center gap-2.5 rounded-full py-1.5 pr-4 pl-2 text-[17px] font-semibold whitespace-nowrap"
+      style={{
+        right: PAGE.w - SAVE.x + 16,
+        top: SAVE.y,
+        height: SAVE.h,
+        opacity: 0,
+        background: "#e9f4e3",
+        color: "#2f5f1f",
+        boxShadow: "inset 0 0 0 1px rgba(78,125,58,0.35)",
+      }}
+    >
+      <span
+        className="flex h-6 w-6 items-center justify-center rounded-full text-white"
+        style={{ background: "#4e7d3a" }}
+      >
+        <Icon name="refresh" size={14} stroke={2.6} />
+      </span>
+      <span>
+        <Ph>
+          <span className="n-upd">64</span>
+        </Ph>{" "}
+        timetables updated
       </span>
     </div>
   );
@@ -641,17 +651,9 @@ function Tally() {
       accent: false,
     },
     { n: <span>0</span>, label: "emails written", accent: true },
-    {
-      n: (
-        <Ph>
-          <span className="n-seen">58</span>
-        </Ph>
-      ),
-      label: "have seen it",
-      accent: false,
-    },
+    { n: <span>1</span>, label: "notice, sent for you", accent: false },
   ];
-  const w = 780;
+  const w = 840;
   return (
     <Card
       className="tally flex items-stretch"

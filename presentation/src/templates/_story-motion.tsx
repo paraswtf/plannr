@@ -59,7 +59,7 @@ export function useEntrance(
  * the leaving slide mounted beside the new one while they morph, so its id is
  * there to compare against the deck's running order.
  */
-function arrivedBackwards(el: Element | null): boolean {
+export function arrivedBackwards(el: Element | null): boolean {
   const own = el?.closest<HTMLElement>("[data-slide]");
   const order =
     typeof window === "undefined" ? undefined : window.__deck?.slides;

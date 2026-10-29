@@ -59,7 +59,9 @@ const TONE: Record<NonNullable<DayEvent["tone"]>, string> = {
 
 /**
  * A day, hour by hour, one lane per kind of person: what they do and when,
- * and where it goes wrong.
+ * and how they keep track of it. A schedule, not a list of problems: the
+ * deck's days give their events no tone, and the problems come after, on
+ * their own slides.
  *
  * Each lane's label carries flip id `${stakeholder}-persona-${personaId}`, the
  * same as the persona's name on PersonaCards, so the two slides morph.
@@ -434,7 +436,9 @@ function Event({
           style={{
             fontSize: TIME_FONT,
             marginRight: TIME_GAP,
-            color: tone === "neutral" ? "var(--fg-faint)" : c,
+            // A schedule is read by its times: muted, not faint, so they
+            // carry on a projector.
+            color: tone === "neutral" ? "var(--fg-muted)" : c,
           }}
         >
           {event.at}

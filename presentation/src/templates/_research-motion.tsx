@@ -5,6 +5,8 @@ import { useRef, type RefObject } from "react";
 import { CustomEase, gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
 
+import { arrivedBackwards } from "./_story-motion";
+
 /**
  * The curve a playhead crosses a day on: it leaves its start gently, runs
  * through the middle of the day and takes a long settle into the evening.
@@ -34,8 +36,9 @@ export function sweepTimeAt(p: number) {
  * What a slide does on arrival, before any build: numbers counting up, the
  * first lane of a day being swept. One paused timeline that plays once the
  * slide is active, or lands on its end state at once when the deck is in
- * instant mode (presenter preview, snapshots) or when the slide is reached on
- * a later build (stepping back into it from the next slide).
+ * instant mode (presenter preview, snapshots), when the slide is reached on
+ * a later build, or when it is arrived at backwards (stepping back into it
+ * from the next slide, even a one-build slide).
  *
  * Call it before `useSteps` in the same component, so that when both settle
  * at once the arrival is already in place for the builds to start from.
@@ -56,8 +59,12 @@ export function useArrival(
       const tl = gsap.timeline({ paused: true });
       const cleanup = build(tl);
       timeline.current = tl;
-      if (instant || landed.current) tl.progress(1);
-      else if (active) tl.play();
+      // Arriving backwards (stepping back from the slide after) lands on the
+      // end state too: builds are never replayed on a backward move.
+      if (instant || landed.current || arrivedBackwards(scope.current)) {
+        landed.current = true;
+        tl.progress(1);
+      } else if (active) tl.play();
       return () => {
         cleanup?.();
         tl.kill();

@@ -37,8 +37,9 @@ export interface RequestLectureProps {
  *   1 — the pointer travels to one and clicks: it becomes a confirmed class,
  *       "Booked · Room 304", and a note says no sign-off was needed (the
  *       request panel shows the sign-off switch the college can turn on).
- *   2 — the fan-out: notifications fly from the class to every student in
- *       BCA-A and to the coordinator; "0 mails written".
+ *   2 — the fan-out (the card and the toast arrive with this build):
+ *       notices fly from the class to every student in BCA-A and to the
+ *       coordinator; "0 mails written".
  *
  * The browser frame carries `flipId`, shared with TeachingWeek and
  * LectureLog, so the window holds still across the three feature slides.
@@ -288,6 +289,11 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
     // 2 — the fan-out: every student and the coordinator are told.
     tl.to("[data-cursor]", { opacity: 0, duration: 0.25 });
     tl.addLabel("fan", "<0.1");
+    tl.to(
+      "[data-told-card]",
+      { opacity: 1, duration: 0.4, ease: "power2.out" },
+      "fan",
+    );
     TARGETS.forEach((t, i) => {
       const chip = `[data-chip="${i}"]`;
       const dx = t.x - PICKED.x;
@@ -480,6 +486,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
           className="absolute"
           style={{
             ...CARD,
+            opacity: 0,
             left: TOLD.x,
             top: TOLD.y,
             width: TOLD.w,
@@ -490,7 +497,7 @@ export function RequestLecture({ step, active, flipId }: RequestLectureProps) {
             className="absolute text-[13.5px] leading-[17px] font-semibold"
             style={{ left: 16, top: 15, color: INK.muted }}
           >
-            Will be told
+            Told for you
           </div>
           <div
             data-told-count

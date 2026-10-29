@@ -8,6 +8,7 @@
 | stakeholders/coordinators.jpg | Desk with notepad, keyboard, tablet | Sparsh Paliwal | Unsplash License | https://unsplash.com/photos/2PLFgAKVpe0 |
 | stakeholders/admins.jpg | Server racks | Kevin Ache | Unsplash License | https://unsplash.com/photos/2JJ3wBHu4_0 |
 | rivant-logo.svg | Rivant "R" mark, vector path taken from the rivant.in header, filled white for dark backgrounds | Rivant Media | Rivant's own mark (the project's sponsor) | https://rivant.in |
+| research/coordinator-add-entry.jpg | A coordinator's screen: the timetable site's "Add Entry" form, photographed at their desk in September 2026, cropped to leave out the browser tabs (which showed an inbox name) and the taskbar | The team (coordinator research, Tanisha) | Our own research photo | College TT Research.pdf, page 4 |
 
 Credit lines:
 - Photo: Matthew Yohe, CC BY-SA 3.0, via Wikimedia Commons

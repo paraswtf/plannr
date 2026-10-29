@@ -1,236 +1,376 @@
+import { Of, Projected } from "~/content/research";
+import { OUT_OF_SCOPE } from "~/content/team";
 import {
-  rankProblems,
+  byReach,
   type DayLane,
-  type Feature,
-  type Persona,
   type Problem,
   type Research,
 } from "~/content/types";
 import type { SectionDef } from "~/deck/types";
+import { BarChart, type BarDatum } from "~/templates/BarChart";
 import { DayTimeline } from "~/templates/DayTimeline";
-import { FeatureShowcase } from "~/templates/FeatureShowcase";
 import { FlowDiagram } from "~/templates/FlowDiagram";
 import { InterviewSummary } from "~/templates/InterviewSummary";
 import { ProblemBoard } from "~/templates/ProblemBoard";
 import { ProblemRanking } from "~/templates/ProblemRanking";
 import { SectionOpener } from "~/templates/SectionOpener";
-import { SolutionMap } from "~/templates/SolutionMap";
 import { StakeholderMap } from "~/templates/StakeholderMap";
 import { Statement } from "~/templates/Statement";
+import { VisualSlide } from "~/templates/VisualSlide";
+import { Bezel } from "~/ui/frames";
 import { Grad } from "~/ui/layout";
-import { Ph } from "~/ui/placeholder";
+import { ImageSlot, Ph } from "~/ui/placeholder";
+import { Chip } from "~/ui/surfaces";
 import { ApprovalsInbox } from "~/visuals/coordinators/ApprovalsInbox";
-import { ClashGuard } from "~/visuals/coordinators/ClashGuard";
 import { EditOnceNotify } from "~/visuals/coordinators/EditOnceNotify";
+import { DayReport } from "~/visuals/coordinators/DayReport";
+import { PhoneMyDay } from "~/visuals/students/PhoneMyDay";
+
+import { chapterSlides, type Chapter } from "./_chapters";
 
 /*
- * Section 04 — COORDINATORS, presented by Tanisha.
+ * Section 04: COORDINATORS, presented by Tanisha.
  *
- * Tanisha: the two kinds of coordinator below are placeholders — rename or
- * replace them with the roles you actually met. Everything in <Ph> needs your
- * numbers or quotes; the ranking re-sorts itself from the data.
+ * The first round: 4 coordinators at SICSR (Persons A to D), interviewed in
+ * person at their desks. Every tally below is as collected, and the slides
+ * and the speaker notes give the same numbers.
+ *
+ * Severity is their own rating (high 5, medium 3, low 1): for each person the
+ * highest among the items merged into a problem, then the mean of the people
+ * who raised it, rounded. Every coordinator problem is core (the timetable,
+ * and keeping track of classes), so scope changes nothing in their ranking.
+ *
+ * Tanisha: we have no verbatim coordinator quotes yet. Everything in <Ph> is
+ * a paraphrase of the notes; swap in what they actually said.
  */
+
+/** The coordinators we interviewed. */
+const SAMPLE = 4;
+const of = (count: number) => ({ count, of: SAMPLE });
+
+const INTERVIEWS = (
+  <>
+    Interviews with <Projected n={SAMPLE} /> coordinators at SICSR
+  </>
+);
 
 const RESEARCH: Research = {
   stats: [
-    { value: <Ph>3</Ph>, label: "coordinators shadowed" },
-    { value: <Ph>40+</Ph>, label: "change requests logged" },
-    { value: "7", label: "days with them" },
+    {
+      value: <Projected n={SAMPLE} />,
+      label: "coordinators, at their desks",
+    },
+    { value: "4", label: "tools in their day" },
+    { value: "3", label: "places each change is written" },
   ],
   methods: [
-    "Shadowing a coordinator's desk",
-    "Logging every request for a week",
-    "Interviews about the start of term",
+    "Interviews at their desks",
+    "Photos of the screens they use",
+    "Their day, start to finish",
   ],
   quotes: [
     {
-      text: "I change the event, then I still have to mail everyone about it.",
-      who: <Ph>Programme coordinator</Ph>,
+      text: <Ph>The same change goes out by mail, then again on WhatsApp.</Ph>,
+      who: <Ph>Coordinator, SICSR</Ph>,
     },
     {
-      text: (
-        <Ph>
-          I find out about a clash when someone calls me from the corridor.
-        </Ph>
-      ),
-      who: <Ph>Coordinator</Ph>,
+      text: <Ph>I check Moodle for how many lectures are left.</Ph>,
+      who: <Ph>Coordinator, SICSR</Ph>,
     },
     {
-      text: <Ph>Half my day is answering “is it still on?”</Ph>,
-      who: <Ph>Class coordinator</Ph>,
+      text: <Ph>An automatic mail to all the students would help.</Ph>,
+      who: <Ph>Coordinator, SICSR</Ph>,
     },
   ],
 };
 
-const PERSONAS: Persona[] = [
-  {
-    id: "programme",
-    name: "Programme coordinator",
-    tagline: "Owns a programme's whole timetable for the term.",
-    icon: "layers",
-    traits: [
-      "Builds the term's timetable from faculty availability",
-      "Fields every change request",
-      "Writes the change mails",
-    ],
-  },
-  {
-    id: "class",
-    name: "Class coordinator",
-    tagline: "Looks after one division, day to day.",
-    icon: "users",
-    traits: [
-      "First stop for students' questions",
-      "Relays changes to the class group",
-      "Chases rooms and attendance",
-    ],
-  },
-];
-
+/*
+ * Two kinds of day, composites of the four: the relayer passes changes on
+ * (Persons A and C), the record keeper also keeps the day's record (B and D).
+ */
 const DAYS: DayLane[] = [
   {
-    personaId: "programme",
-    label: "Programme coordinator",
+    personaId: "relayer",
+    label: "The relayer",
+    sublabel: "Passes changes on",
     events: [
-      { at: "09:00", label: "Inbox: 14 requests", icon: "inbox", tone: "warn" },
-      {
-        at: "10:30",
-        label: "Checks clashes by hand",
-        icon: "search",
-        tone: "warn",
-      },
-      { at: "12:00", label: "Edits the timetable", icon: "edit" },
-      {
-        at: "12:30",
-        label: "Writes the same change as a mail",
-        icon: "mail",
-        tone: "bad",
-      },
-      {
-        at: "15:00",
-        label: "“Is it still on?”, again",
-        icon: "message",
-        tone: "bad",
-      },
-      { at: "18:00", label: "Plans next week", icon: "calendar" },
-    ],
-  },
-  {
-    personaId: "class",
-    label: "Class coordinator",
-    events: [
-      { at: "08:45", label: "Students ask what's on", icon: "message" },
+      { at: "08:30", label: "Opens the day's timetable", icon: "monitor" },
+      { at: "10:00", label: "A teacher calls with a change", icon: "phone" },
       {
         at: "11:00",
-        label: "Forwards the mail to the class group",
-        icon: "send",
-        tone: "warn",
+        label: "Edits the timetable, mails the batch",
+        icon: "edit",
       },
-      {
-        at: "14:00",
-        label: "Hunts for a free room",
-        icon: "door",
-        tone: "warn",
-      },
-      {
-        at: "17:00",
-        label: "Updates attendance on Moodle",
-        icon: "checkCircle",
-      },
+      { at: "12:00", label: "Posts it on WhatsApp", icon: "whatsapp" },
+      { at: "15:30", label: "Looks ahead to tomorrow", icon: "calendar" },
+    ],
+  },
+  {
+    personaId: "keeper",
+    label: "The record keeper",
+    sublabel: "Keeps the day's record",
+    events: [
+      { at: "09:00", label: "Checks the batches' classes", icon: "calendar" },
+      { at: "12:00", label: "Moves a class, tells everyone", icon: "mail" },
+      { at: "17:00", label: "Records which classes were held", icon: "sheet" },
+      { at: "17:30", label: "Checks lectures left on Moodle", icon: "search" },
     ],
   },
 ];
 
+/* In the order we heard them. Who: Persons A to D. */
 const PROBLEMS: Problem[] = [
   {
-    id: "twice",
-    text: "Every change done twice: timetable, then mail",
-    personas: ["programme", "class"],
-    severity: 5,
-  },
-  {
-    id: "clash",
-    text: "Clashes found by a phone call, after saving",
-    personas: ["programme"],
-    severity: 5,
-  },
-  {
-    id: "requests",
-    text: "Requests arrive by call, chat and mail",
-    personas: ["programme", "class"],
-    severity: 3,
-  },
-  {
-    id: "seen",
-    text: "No way to know who saw a change",
-    personas: ["programme", "class"],
+    // A (high), B (high), D (medium)
+    id: "announce",
+    text: "Every change announced by hand, three times",
+    personas: ["relayer", "keeper"],
+    reach: of(3),
+    ratings: { high: 2, medium: 1, low: 0 },
     severity: 4,
+    scope: "core",
   },
   {
-    id: "rooms",
-    text: "Finding a free room means asking around",
-    personas: ["programme", "class"],
+    // A (medium), C (high)
+    id: "missed",
+    text: "Students still miss changes",
+    personas: ["relayer"],
+    reach: of(2),
+    ratings: { high: 1, medium: 1, low: 0 },
+    severity: 4,
+    scope: "core",
+  },
+  {
+    // A (low), B (medium), C (medium), D (low)
+    id: "nextday",
+    text: "Getting to the next day takes extra clicks",
+    personas: ["relayer", "keeper"],
+    reach: of(4),
+    ratings: { high: 0, medium: 2, low: 2 },
     severity: 2,
+    scope: "core",
   },
   {
-    id: "questions",
-    text: "Answering the same question all day",
-    personas: ["class"],
+    // B (high), D (high)
+    id: "report",
+    text: "The day's report of classes held is typed up by hand",
+    personas: ["keeper"],
+    reach: of(2),
+    ratings: { high: 2, medium: 0, low: 0 },
+    severity: 5,
+    scope: "core",
+  },
+  {
+    // C (medium)
+    id: "late",
+    text: "Changes reach them late, by phone",
+    personas: ["relayer"],
+    reach: of(1),
+    ratings: { high: 0, medium: 1, low: 0 },
     severity: 3,
-  },
-  {
-    id: "term",
-    text: "Building a term's timetable by hand",
-    personas: ["programme"],
-    severity: 4,
+    scope: "core",
   },
 ];
 
-const FEATURES: Feature[] = [
+/** Each problem as a bar, split by how the people who raised it rated it. */
+const RAISED: BarDatum[] = PROBLEMS.map((p) => ({
+  id: p.id,
+  label: p.text,
+  tally: p.reach,
+  ratings: p.ratings,
+  flipId: `coordinators-problem-${p.id}`,
+}));
+
+const CHAPTERS: Chapter[] = [
   {
     id: "edit-once",
-    name: "Edit once. Everyone knows.",
-    tagline:
-      "Save a change, and the students and teachers it affects are told. By Plannr, not by you.",
-    points: [
-      "Drag a class to its new slot, and save",
-      "Exactly the people affected are notified",
-      "See who's seen it, without a reply-all",
+    problems: ["announce", "missed"],
+    title: "Every change, written three times.",
+    label: "Every change, three times",
+    evidence: [
+      {
+        problem: "announce",
+        value: <Of t={of(3)} />,
+        label: "announce every change by hand, by mail and on WhatsApp",
+        source: INTERVIEWS,
+      },
+      {
+        problem: "missed",
+        value: <Of t={of(2)} />,
+        label: "say students still miss changes",
+        source: INTERVIEWS,
+      },
     ],
-    solves: ["twice", "seen", "questions"],
-    icon: "send",
+    feature: {
+      id: "edit-follow",
+      name: "Edit once, timetables follow",
+      tagline: "Save a change, and every timetable it touches moves with it.",
+      points: [
+        "Drag the class to its new slot, and save",
+        "Every affected timetable follows, and synced calendars too",
+        "A notice to everyone affected",
+      ],
+      solves: ["announce", "missed"],
+      icon: "send",
+    },
+    visual: ({ step, active, flipId }) => (
+      <EditOnceNotify step={step} active={active} flipId={flipId} />
+    ),
+    notes: {
+      track: [
+        "So, the ranking, one problem at a time. At the top, two that go together: every change announced by hand, and students still missing changes.",
+        "3 of 4 write every change out by hand: a mail to the batch, then the same message again on the class WhatsApp group, so nobody misses it. And still, 2 of 4 say students miss changes: the mail gets buried, or it isn't forwarded.",
+      ],
+      feature: [
+        "Here's what we built. Edit once, and the timetables follow. The coordinator drags the class to its new slot, and saves.",
+        "Every timetable that class touches updates on its own: every student in the group and the teacher, and the Google Calendars of anyone who turned sync on.",
+        "And the notice goes out for them: a mail and a push to exactly the people affected, and nobody else. No mail to write, no WhatsApp message to post again. The timetable is already right by the time anyone opens it, so students stop missing changes.",
+      ],
+    },
   },
   {
-    id: "clash-guard",
-    name: "Clashes caught before you save",
-    tagline: "Rooms, teachers and groups are checked as you place a class.",
-    points: [
-      "Rooms, teachers and groups checked as you drag",
-      "A warning before a clash is saved, not a call after",
-      "Clash-free alternatives, offered on the spot",
+    id: "report",
+    problems: ["report"],
+    title: "The day, typed up by hand.",
+    label: "The day's report, by hand",
+    evidence: [
+      {
+        problem: "report",
+        value: <Of t={of(2)} />,
+        label: "type up which classes were held, every evening",
+        source: INTERVIEWS,
+      },
     ],
-    solves: ["clash", "rooms"],
-    icon: "shield",
+    quote: {
+      text: <Ph>Every evening I type up which classes were held.</Ph>,
+      who: <Ph>Coordinator, SICSR</Ph>,
+    },
+    feature: {
+      id: "day-report",
+      name: "The day's report, written for you",
+      tagline: "What ran, moved or was called off, ready by five.",
+      points: [
+        "Held from the registers; moves and cancellations from the timetable",
+        "Lectures held and left for every course, in one report",
+        "Ready at five, to send or download",
+      ],
+      solves: ["report"],
+      icon: "file",
+    },
+    visual: ({ step, active, flipId }) => (
+      <DayReport step={step} active={active} flipId={flipId} />
+    ),
+    notes: {
+      track: [
+        "Next, the day's report. 2 of 4 type up, every evening, which classes were actually held, and both of them rated it high.",
+        "They put it together from faculty messages and their own notes, into a sheet, for the records. And to see how many lectures a course has left, they go and check Moodle. [The quote is our paraphrase; swap in their words.]",
+      ],
+      feature: [
+        "The day's report, written for you. Which classes were held comes from the registers teachers already mark in Plannr; moves and cancellations come from the timetable itself.",
+        "For every course, lectures held and lectures left, in one report. Nobody has to check Moodle for how many are left.",
+        "And it's ready at five, to send on or to download. Nothing to type up in the evening.",
+      ],
+    },
+  },
+  {
+    id: "swipe",
+    problems: ["nextday"],
+    title: "Tomorrow takes extra clicks.",
+    label: "Tomorrow takes extra clicks",
+    evidence: [
+      {
+        problem: "nextday",
+        value: <Of t={of(4)} />,
+        label: "say getting to the next day takes extra clicks",
+        source: INTERVIEWS,
+      },
+    ],
+    feature: {
+      id: "any-day",
+      name: "Every day, a swipe away",
+      tagline: "Any group's day, on a phone or at the desk.",
+      points: [
+        "Any group's day, wherever you are",
+        "Swipe, and tomorrow slides in",
+        "Opens on what's next",
+      ],
+      solves: ["nextday"],
+      icon: "phone",
+    },
+    visual: ({ step, active, flipId }) => (
+      // The phone's own "Viewing BCA-A" pill is product-sized; the chip beside
+      // it says the same thing at a size the room can read.
+      <div className="relative flex h-[844px] w-[960px] items-center justify-center">
+        <PhoneMyDay
+          step={step}
+          active={active}
+          flipId={flipId}
+          viewing="BCA-A"
+        />
+        <Chip
+          icon="users"
+          size={24}
+          className="absolute"
+          style={{ left: 8, top: 112 }}
+        >
+          Viewing BCA-A
+        </Chip>
+      </div>
+    ),
+    notes: {
+      track: [
+        "Then the one every coordinator raised: all 4 of 4. Getting to the next day takes extra clicks, or a reload.",
+        "They rated it low to medium, a small cost. But they pay it every afternoon, when they check tomorrow's classes, and on a phone it's worse: the site only really works on the desktop.",
+      ],
+      feature: [
+        "Every day, a swipe away. A coordinator can open any group's day, here BCA-A, on a phone in the corridor or at the desk.",
+        "Swipe, and tomorrow slides in. No reload, no date links at the foot of the page.",
+        "And it opens on what's next, so the first thing you see is the class coming up.",
+      ],
+    },
   },
   {
     id: "inbox",
-    name: "Every request, one inbox",
-    tagline:
-      "Faculty requests arrive in one queue, not in calls, chats and mails.",
-    points: [
-      "Extra lectures, room changes, cancellations: one queue",
-      "Approve, and it's on the timetable",
-      "Everyone affected is told as you approve",
+    problems: ["late"],
+    title: "Changes arrive late, by phone.",
+    label: "Changes arrive late",
+    evidence: [
+      {
+        problem: "late",
+        value: <Of t={of(1)} />,
+        label: "hear about changes late, by call or message",
+        source: INTERVIEWS,
+      },
     ],
-    solves: ["requests"],
-    icon: "inbox",
+    feature: {
+      id: "one-inbox",
+      name: "Every request, one inbox",
+      tagline:
+        "Faculty requests arrive in one queue, not in calls, chats and mails.",
+      points: [
+        "Extra lectures, room changes and cancellations, in one queue",
+        "Approve, and it's on the timetable, clash-checked",
+        "Every affected timetable updates as you approve",
+      ],
+      solves: ["late"],
+      icon: "inbox",
+    },
+    visual: ({ step, active, flipId }) => (
+      <ApprovalsInbox step={step} active={active} flipId={flipId} />
+    ),
+    notes: {
+      track: [
+        "And last: changes reach them late. 1 of 4 told us they hear of a change late, by a call or a message, so they pass it on late.",
+        "There's no single place where a change lands. It comes from a teacher, from the admin office, sometimes from the corridor.",
+      ],
+      feature: [
+        "Every request, in one inbox. Extra lectures, room changes and cancellations from faculty arrive in one queue, not in calls, chats and mails.",
+        "Approve one, and it's on the timetable, already checked for clashes: the room, the teacher, the group and the room's capacity.",
+        "And every timetable it touches updates as you approve. The coordinator hears first, because the request comes to them, not around them.",
+      ],
+    },
   },
 ];
-
-const RANKED = rankProblems(PROBLEMS);
-const TOP = RANKED.slice(0, 4);
-const solvesOf = (f: Feature) =>
-  PROBLEMS.filter((p) => f.solves.includes(p.id));
 
 export const coordinators: SectionDef = {
   id: "coordinators",
@@ -240,7 +380,7 @@ export const coordinators: SectionDef = {
     {
       id: "coordinators",
       title: "Coordinators",
-      notes: "Thanks, Ravya. I spent my week with the coordinators.",
+      notes: "Thanks, Ravya. I spent my time with the coordinators.",
       render: ({ step }) => (
         <SectionOpener
           stakeholder="coordinators"
@@ -251,7 +391,7 @@ export const coordinators: SectionDef = {
             position: "50% 55%",
           }}
           number="03"
-          lede="The people who make the timetable, and remake it every time something changes."
+          lede="Every change to the timetable passes through their desk, by hand."
           step={step}
         />
       ),
@@ -285,47 +425,75 @@ export const coordinators: SectionDef = {
       title: "Who we talked to",
       steps: 2,
       notes: [
-        "I shadowed [three] coordinators at their desks, logged every change request that reached them for a week — [forty-plus] of them — and interviewed them about the start of term, which is when it all piles up.",
-        "[Read one quote.] That first line is the whole problem in one sentence.",
+        "I interviewed four coordinators at SICSR, in person, at their desks: their day from start to finish, with photos of the screens they use. Four tools came up: the timetable site, Gmail, WhatsApp, and Excel for the records. And every change gets written in three places: the timetable, a mail, and the WhatsApp group.",
+        "This is the kind of thing they told me. [These three are our paraphrases of the notes; swap in their words.]",
       ],
       render: ({ step, active }) => (
         <InterviewSummary
           active={active}
           stakeholder="coordinators"
-          title="A week at the coordinator's desk."
+          title="At the coordinator's desk."
           research={RESEARCH}
           step={step}
         />
       ),
     },
     {
+      id: "coordinators-screen",
+      title: "The screen they schedule with",
+      notes:
+        "This is the screen a coordinator schedules lectures with. It's the timetable site's booking form, 'Add Entry'. One entry per lecture, by hand. The rooms are a list you Ctrl-click through, and the course goes in as free text in the description. Every lecture in the timetable went in through this form, one at a time.",
+      render: ({ step }) => (
+        <VisualSlide
+          title="A booking form, not a timetable."
+          lede="One entry per lecture, by hand: rooms picked with Ctrl-click, the course typed in as free text."
+          visual={
+            <div className="flex h-full w-full items-center justify-center">
+              <Bezel className="h-[844px] w-[764px] shrink-0">
+                <ImageSlot
+                  src="/images/research/coordinator-add-entry.jpg"
+                  alt="The timetable site's Add Entry form: description boxes, start and end times, a room list with a note to Ctrl-click for more than one room, the group, and repeat options"
+                  label="The coordinator's Add Entry screen"
+                  position="50% 0%"
+                  radius={22}
+                  className="h-full w-full"
+                />
+              </Bezel>
+            </div>
+          }
+          step={step}
+        />
+      ),
+    },
+    {
       id: "coordinators-today",
-      title: "One change, done four times",
+      title: "One change, four steps by hand",
       steps: 5,
       notes: [
-        "This is one change, from the coordinator's side. It starts with a request — a call, a WhatsApp message, or a mail.",
-        "Then they check clashes and rooms by hand: other classes, other teachers, which rooms are free.",
-        "Then they edit the timetable.",
-        "And then they write the same change again as a mail — and spend the rest of the afternoon answering replies.",
-        "And after all of that, there's still no way to know who actually saw it.",
+        "Here's one change, from the coordinator's side. It starts with a teacher calling or messaging.",
+        "Then they check which rooms are free, by hand.",
+        "Then they edit the timetable, in that booking form.",
+        "And then it's mailed to the students, and posted again on WhatsApp so nobody misses it. Then come the questions.",
+        "And at five, the day's report of classes held is typed up by hand.",
       ],
       render: ({ step }) => (
         <FlowDiagram
-          title="One change, done four times."
+          title="One change, four steps by hand."
           accent="var(--coordinators)"
           nodes={[
             {
               id: "request",
               actor: "Request",
-              action: "A teacher calls, messages or mails",
+              action: "A teacher calls or messages",
               icon: "message",
             },
             {
               id: "check",
               actor: "Check",
-              action: "Clashes and rooms checked by hand",
+              action: "Free rooms are checked",
               icon: "search",
-              wait: "~20 min",
+              wait: "by hand",
+              waitIcon: "hand",
               tone: "warn",
             },
             {
@@ -337,13 +505,12 @@ export const coordinators: SectionDef = {
             {
               id: "mail",
               actor: "Announce",
-              action: "The same change written again, as a mail",
+              action: "Mailed to students, then again on WhatsApp",
               icon: "mail",
-              wait: "then the replies",
-              tone: "bad",
+              tone: "warn",
             },
           ]}
-          outcome="And still no way to know who actually saw it."
+          outcome="And at five, the day's report is typed up by hand."
           step={step}
         />
       ),
@@ -353,14 +520,14 @@ export const coordinators: SectionDef = {
       title: "A coordinator's day",
       steps: 2,
       notes: [
-        "Here's a programme coordinator's day. Fourteen requests waiting at nine. Clash-checking by hand. The edit, then the same change again as a mail. And by three, the same question over and over: is it still on?",
-        "The class coordinator sits closer to the students — forwarding mails to the class group, hunting for free rooms, and updating attendance in Moodle, a different app again.",
+        "Two kinds of day, each a composite of the people I met. The relayer opens the day's timetable on the desktop at half past eight. At ten, a teacher calls with a change. At eleven they edit the timetable and mail the batch, and at noon it goes on the class WhatsApp group. At half past three, they look ahead to tomorrow.",
+        "The record keeper starts with the batches' classes at nine. At noon a class moves, and they let the students and the teacher know. At five they record which classes were held, and at half past five they check Moodle for how many lectures each course has left.",
       ],
       render: ({ step, active }) => (
         <DayTimeline
           active={active}
           stakeholder="coordinators"
-          title="A day spent repeating itself."
+          title="A coordinator's day, hour by hour."
           lanes={DAYS}
           from={8}
           to={19}
@@ -372,7 +539,7 @@ export const coordinators: SectionDef = {
       id: "coordinators-problems",
       title: "Everything they told us",
       notes:
-        "Everything the coordinators told us. Doing every change twice. Clashes found by a phone call, after they're saved. Requests arriving through three different channels. And never knowing who saw the change.",
+        "Everything the coordinators told us, in the order we heard it. Every change announced by hand, three times: the timetable, a mail and the WhatsApp group. Students still missing changes. Extra clicks to get to the next day. The day's report, typed up by hand. And changes reaching them late, by phone, so they pass them on late.",
       render: ({ step }) => (
         <ProblemBoard
           stakeholder="coordinators"
@@ -383,141 +550,67 @@ export const coordinators: SectionDef = {
       ),
     },
     {
+      id: "coordinators-chart",
+      title: "Who raised what",
+      notes:
+        "Here's how many raised each one, and how they rated it themselves. Getting to the next day: every one of them, 4 of 4, but rated low to medium. Announcing changes by hand: 3 of 4, mostly high. Students missing changes and the day's report: 2 of 4 each, and the report rated high by both.",
+      render: ({ step, active }) => (
+        <BarChart
+          title="Who raised what, and how much it hurts."
+          panels={[{ data: RAISED }]}
+          stacked
+          primary="count"
+          source={<>{INTERVIEWS} · split by their own rating</>}
+          step={step}
+          active={active}
+        />
+      ),
+    },
+    {
       id: "coordinators-ranking",
       title: "What hurts most",
-      steps: 4,
+      steps: 6,
       notes: [
-        "Ranked the same way.",
-        "Reach: programme coordinators, class coordinators, or both.",
-        "Severity: what it costs.",
-        "At the top: every change done twice, not knowing who saw it, requests from everywhere, and clashes found too late. [Placeholder ranking — swap in the logged requests.]",
+        "Now we rank them, the same way. They start in the chart's order, by how many raised them.",
+        "Reach: the share of the coordinators who raised it. Getting to the next day leads, all 4 of 4; announcing changes by hand is 3 of 4.",
+        "Severity, from their own ratings: high is five, medium three, low one. The highest rating per person, averaged. The day's report is a five; the next day is a two.",
+        "Reach times severity, and they sort: announcing by hand first, then the day's report, then the next day and missed changes, tied.",
+        "Then scope. Every problem the coordinators raised is core: the timetable, and keeping track of classes. So scope changes nothing here.",
+        "Times scope, out of a hundred: the same order. At the top: every change announced by hand, the day's report typed up by hand, and getting to the next day. It ties with missed changes at forty, and goes ahead because more of them raised it, all 4 of 4. Missed changes is answered in the first chapter anyway.",
       ],
       render: ({ step }) => (
         <ProblemRanking
           stakeholder="coordinators"
           title="What hurts most."
-          problems={PROBLEMS}
-          personas={PERSONAS}
-          top={4}
+          problems={byReach(PROBLEMS)}
+          top={3}
+          footnote="Severity: their own ratings (high 5, medium 3, low 1), highest per person, averaged."
           step={step}
         />
       ),
     },
-    {
-      id: "coordinators-solutions",
-      title: "What fixes each problem",
-      steps: 2,
-      notes: [
-        "The top four.",
-        "And three features that take the repetition out of the job.",
-      ],
-      render: ({ step }) => (
-        <SolutionMap
-          stakeholder="coordinators"
-          title="One answer for each."
-          problems={TOP}
-          features={FEATURES}
-          step={step}
-        />
-      ),
-    },
-    {
-      id: "coordinators-feature-edit",
-      title: "Edit once. Everyone knows.",
-      steps: 3,
-      notes: [
-        "First: edit once, and everyone knows. The coordinator drags the class to its new slot, and saves.",
-        "Plannr tells exactly the students and the teacher it affects — nobody else, and nobody left out.",
-        "And they can see who's seen it. No mail written, no reply-all, no 'is it still on?'.",
-      ],
-      render: ({ step, active }) => {
-        const f = FEATURES[0]!;
-        return (
-          <FeatureShowcase
-            stakeholder="coordinators"
-            feature={f}
-            number={1}
-            solves={solvesOf(f)}
-            visual={
-              <EditOnceNotify
-                step={step}
-                active={active}
-                flipId="coordinators-device"
-              />
-            }
-            step={step}
-          />
-        );
+    ...chapterSlides({
+      stakeholder: "coordinators",
+      problems: PROBLEMS,
+      chapters: CHAPTERS,
+      recap: {
+        title: "Where that leaves coordinators.",
+        label: "Where that leaves coordinators",
+        notes:
+          "So, where that leaves coordinators. Every change is edited once, and the notice goes out on its own, so no more mail and WhatsApp message, and students stop missing changes. The day's report is written for them. Tomorrow is a swipe away, and every request lands in one inbox. Everything they raised is core, and all of it is built.",
       },
-    },
-    {
-      id: "coordinators-feature-clash",
-      title: "Clashes caught before you save",
-      steps: 3,
-      notes: [
-        "Second: clashes are caught before they're saved. As you place a class, Plannr checks the room, the teacher and the group.",
-        "If there's a clash, you get the warning now — not a phone call from the corridor later.",
-        "And it offers you three slots that do work, with free rooms that fit the session.",
-      ],
-      render: ({ step, active }) => {
-        const f = FEATURES[1]!;
-        return (
-          <FeatureShowcase
-            stakeholder="coordinators"
-            feature={f}
-            number={2}
-            solves={solvesOf(f)}
-            visual={
-              <ClashGuard
-                step={step}
-                active={active}
-                flipId="coordinators-device"
-              />
-            }
-            step={step}
-          />
-        );
-      },
-    },
-    {
-      id: "coordinators-feature-inbox",
-      title: "Every request, one inbox",
-      steps: 3,
-      notes: [
-        "Third: every request in one inbox. Extra lectures, room changes, cancellations — all in one queue instead of calls, chats and mails.",
-        "Approve one, and it's on the timetable.",
-        "And everyone it affects is told, as you approve it.",
-      ],
-      render: ({ step, active }) => {
-        const f = FEATURES[2]!;
-        return (
-          <FeatureShowcase
-            stakeholder="coordinators"
-            feature={f}
-            number={3}
-            solves={solvesOf(f)}
-            visual={
-              <ApprovalsInbox
-                step={step}
-                active={active}
-                flipId="coordinators-device"
-              />
-            }
-            step={step}
-          />
-        );
-      },
-    },
+    }),
     {
       id: "coordinators-handoff",
       title: "Over to Paras",
       notes:
-        "That's coordinators. And behind every one of us are the people who keep the system itself running. Over to Paras.",
+        "That's coordinators, and that's all three groups. Over to Paras, to bring it together.",
       render: ({ step }) => (
         <StakeholderMap
           title="That's coordinators."
-          highlight="admins"
-          caption="Over to Paras, for system admins."
+          struck={OUT_OF_SCOPE}
+          presenter="paras"
+          caption="Over to Paras, to bring it together."
           step={step}
         />
       ),

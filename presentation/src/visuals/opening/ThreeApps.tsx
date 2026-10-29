@@ -402,6 +402,16 @@ function TimetableSite() {
       <MrbsStatic
         style={{ transform: `scale(${SCALE})`, transformOrigin: "0 0" }}
       />
+      {/* The page's foot, washed white edge to edge, so the fact sits on a
+          clear band as the other two do, with no booking showing round it. */}
+      <div
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          height: FACT.height + FACT.inset * 2 + 12,
+          background:
+            "linear-gradient(to bottom, rgba(255,255,255,0), #ffffff 12px)",
+        }}
+      />
       <Fact
         label={
           <>

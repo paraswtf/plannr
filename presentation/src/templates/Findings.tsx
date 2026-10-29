@@ -30,9 +30,9 @@ export interface FindingsProps {
   step: number;
 }
 
-/* Canvas geometry. The four findings sit under the title as columns on a
- * shared rule, then rise into the title's place on the last build to make
- * room for the conclusion. */
+/* Canvas geometry. The findings (three, one per group in scope) sit under
+ * the title as columns on a shared rule, then rise into the title's place on
+ * the last build to make room for the conclusion. */
 const CANVAS_W = 1920;
 const CONTENT_W = CANVAS_W - SAFE.x * 2;
 const GAP = 56;
@@ -46,7 +46,7 @@ const CONCLUSION_TOP = JOIN_Y + 48;
 /**
  * What the research added up to, stakeholder by stakeholder.
  *
- * Four columns hang from one hairline, so the row reads as four from the
+ * The columns hang from one hairline, so the row reads as a set from the
  * first build. Each finding rises into its column as its rule fills in ink.
  * On the last build the title steps out, the row travels up into its place,
  * a line runs from every column into one point (the accent: the thing that

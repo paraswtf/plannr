@@ -49,10 +49,11 @@ const TIME = "8:12";
  * A change finds the student, instead of the student finding the change.
  *
  * Builds (steps = 3):
- *   0: lock screen, a Plannr notification: "Class moved. Design Thinking is now in Room 304".
- *   1: open it: on the schedule, the class block moves from its old slot to the new one,
- *      and the change is already in their Google Calendar.
- *   2: an extra class appears too, marked new, sent only to the division it is for.
+ *   0: lock screen, a Plannr notification: "Class moved. Design Thinking is now at 10am in Room 304".
+ *   1: open it: on the schedule, the class block moves from its old slot to the new one.
+ *   2: the synced Google Calendar follows ("Updated in Google Calendar"), then an
+ *      extra class appears, marked new, and is added to the calendar too. Its
+ *      banner is sent only to the division it is for.
  *
  * The notification drops in by itself once the slide is on screen (at once in
  * the presenter's preview). The lock screen is a layer over the app: opening
@@ -192,16 +193,13 @@ export function PhoneChangeAlert({
       { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(2)" },
       "move+=1.2",
     );
-    tl.to(
-      ".ca-toast",
-      { y: 0, opacity: 1, duration: 0.6, ease: "deck.enter" },
-      "move+=1.3",
-    );
     mark();
 
-    // 2 — an extra lecture, only for this division: the banner drops, the
-    // class appears at 4pm, and the calendar has it too.
-    tl.to(".ca-banner", { y: 0, duration: 0.7, ease: "power3.out" });
+    // 2 — the synced calendar follows the move; then an extra lecture, only
+    // for this division: the banner drops, the class appears at 4pm, and the
+    // calendar has it too.
+    tl.to(".ca-toast", { y: 0, opacity: 1, duration: 0.6, ease: "deck.enter" });
+    tl.to(".ca-banner", { y: 0, duration: 0.7, ease: "power3.out" }, "+=0.5");
     tl.addLabel("extra", "-=0.2");
     tl.to(
       ".ca-extra",
@@ -260,7 +258,7 @@ export function PhoneChangeAlert({
                 }}
               >
                 <Icon name="users" size={14} stroke={2} />
-                BCA-B
+                BCA-A
               </span>
             </div>
 
@@ -386,7 +384,7 @@ export function PhoneChangeAlert({
                 body={
                   <>
                     Data Mining, 4pm today in Lab 2. Sent to{" "}
-                    <b className="whitespace-nowrap">BCA-B</b> only.
+                    <b className="whitespace-nowrap">BCA-A</b> only.
                   </>
                 }
                 style={{
@@ -457,8 +455,8 @@ export function PhoneChangeAlert({
                 time="now"
                 body={
                   <>
-                    Design Thinking is now in <b>Room 304</b>, and up to{" "}
-                    <b>10am</b> today.
+                    Design Thinking is now at <b>10am</b> in <b>Room 304</b>,
+                    not 12:30.
                   </>
                 }
               />

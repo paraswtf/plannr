@@ -58,8 +58,10 @@ export interface OldTimetableProps {
  *      every name now cut to a few letters, the first callout riding along.
  *      Then: desktop-sized text on a phone (a booking cut short).
  *   3: on the phone: it loads everything (the colour key of every division).
- *   4: back to the desktop window, the callouts travelling with it, and the
- *      last one: plain HTTP (the "Not secure" label in the address bar).
+ *   4: back to the desktop window, the callouts travelling with it (the
+ *      phone's "desktop-sized text" saying "names cut off mid-word" by the
+ *      time it lands), and the last one: plain HTTP (the "Not secure" label
+ *      in the address bar).
  * Each ring opens a clear window in the wash, so what it points at keeps its
  * colour.
  */
@@ -206,6 +208,11 @@ const CHIPS: Record<
     /** A second, quieter line under the text. */
     detail?: string;
     icon: IconName;
+    /**
+     * Its wording beside the desktop window, when the first is true only on
+     * the phone: the chip says it as it travels back.
+     */
+    desktop?: { text: string; icon: IconName };
     w: number;
     h: number;
     at: Partial<Record<Device, Point>>;
@@ -228,6 +235,7 @@ const CHIPS: Record<
   "tiny-type": {
     text: "Desktop-sized text, on a phone",
     icon: "phone",
+    desktop: { text: "Names cut off mid-word", icon: "eye" },
     w: 470,
     h: 60,
     at: { desktop: { x: 176, y: 535 }, phone: { x: RIGHT - 470, y: 262 } },
@@ -596,6 +604,23 @@ export function OldTimetable({ step, active, flipId }: OldTimetableProps) {
           { ...offset(id, to), ...travel },
           at,
         );
+        // A chip with a wording for each device changes it on the way.
+        if (CHIPS[id].desktop) {
+          const out = `.ot-say-${id}-${from}`;
+          const into = `.ot-say-${id}-${to}`;
+          tl.fromTo(
+            out,
+            { opacity: 1 },
+            { opacity: 0, duration: 0.3, ease: "power1.in", ...later },
+            at + 0.2,
+          );
+          tl.fromTo(
+            into,
+            { opacity: 0 },
+            { opacity: 1, duration: 0.4, ease: "power1.out", ...later },
+            at + 0.5,
+          );
+        }
       }
     };
 
@@ -742,17 +767,41 @@ export function OldTimetable({ step, active, flipId }: OldTimetableProps) {
               opacity: 0,
             }}
           >
-            <Icon name={c.icon} size={28} className="text-accent" />
-            <span className="flex flex-col">
-              <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
-                {c.text}
+            {c.desktop ? (
+              <span className="grid">
+                {(
+                  [
+                    ["phone", { text: c.text, icon: c.icon }],
+                    ["desktop", c.desktop],
+                  ] as const
+                ).map(([device, say]) => (
+                  <span
+                    key={device}
+                    className={`ot-say-${id}-${device} flex items-center justify-center gap-3.5 [grid-area:1/1]`}
+                    style={{ opacity: device === c.first ? 1 : 0 }}
+                  >
+                    <Icon name={say.icon} size={28} className="text-accent" />
+                    <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
+                      {say.text}
+                    </span>
+                  </span>
+                ))}
               </span>
-              {c.detail && (
-                <span className="font-body text-muted text-[22px] leading-snug">
-                  {c.detail}
+            ) : (
+              <>
+                <Icon name={c.icon} size={28} className="text-accent" />
+                <span className="flex flex-col">
+                  <span className="font-body text-[26px] font-semibold tracking-[-0.01em]">
+                    {c.text}
+                  </span>
+                  {c.detail && (
+                    <span className="font-body text-muted text-[22px] leading-snug">
+                      {c.detail}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
+              </>
+            )}
           </div>
         );
       })}

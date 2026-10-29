@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { gsap, useGSAP } from "~/deck/gsap";
 import { useDeckRuntime } from "~/deck/runtime";
@@ -12,6 +12,11 @@ import { Card } from "~/ui/surfaces";
 export interface WeekPatternProps {
   step: number;
   active: boolean;
+  /**
+   * The number that lands with the last build, beside the week that broke:
+   * a big value and what it counts. Defaults to the placeholder.
+   */
+  stat?: { value: ReactNode; label: ReactNode };
 }
 
 /*
@@ -100,7 +105,14 @@ const EXTRA_X = EXTRA.week * (WEEK_W + WEEK_GAP) + extraBox.left + DAY_W / 2;
  *   2: it is missed: the block turns to the accent, with the share of
  *      students who missed one (a placeholder number).
  */
-export function WeekPattern({ step, active }: WeekPatternProps) {
+export function WeekPattern({
+  step,
+  active,
+  stat = {
+    value: <Ph>9 of 14</Ph>,
+    label: "students missed an extra class this term",
+  },
+}: WeekPatternProps) {
   const root = useRef<HTMLDivElement>(null);
   const { instant } = useDeckRuntime();
   const introduced = useRef(false);
@@ -347,10 +359,10 @@ export function WeekPattern({ step, active }: WeekPatternProps) {
 
       <div className="wk-stat mt-6 flex items-center gap-7">
         <span className="font-display text-accent tabular text-[88px] leading-none font-semibold tracking-[-0.04em] whitespace-nowrap">
-          <Ph>9 of 14</Ph>
+          {stat.value}
         </span>
         <span className="t-body text-body max-w-[19ch] leading-snug">
-          students missed an extra class this term
+          {stat.label}
         </span>
       </div>
     </div>

@@ -31,11 +31,12 @@ export interface TeachingWeekProps {
  * Builds (steps = 3), following the speaker's notes:
  *   0 — the week, coloured by group, with a legend. The elective that BCA-A
  *       and BCA-B take together is one block with a stacked group badge.
- *   1 — a change reaches the teacher first: the coordinator moves that
- *       combined lecture, a banner says so, and the block travels to its new
- *       day, hour and room.
+ *   1 — when a lecture moves, it moves in your week too: the coordinator
+ *       moves that combined lecture and the block travels to its new day,
+ *       hour and room, and a banner says so.
  *   2 — cancel once: the pointer opens a class and cancels it; it greys out
- *       and a toast says "62 students told": they were told for you.
+ *       and a toast says "62 timetables updated": every student's timetable
+ *       follows.
  *
  * The browser frame carries `flipId`, shared with RequestLecture and
  * LectureLog, so the window holds still across the three feature slides.
@@ -219,7 +220,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
   const start = { x: 720, y: 540 };
 
   useSteps(scope, step, (tl, mark) => {
-    // 1 — the coordinator moves the combined lecture; it reaches you first.
+    // 1 — the coordinator moves the combined lecture; it moves in your week.
     tl.fromTo(
       "[data-banner]",
       { y: -90 },
@@ -276,7 +277,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
     );
     mark();
 
-    // 2 — cancel once; the students are told for you.
+    // 2 — cancel once; every student's timetable updates.
     tl.to("[data-banner]", { y: -90, duration: 0.5, ease: "power3.in" });
     tl.to("[data-cursor]", { opacity: 1, duration: 0.2 }, "<0.1");
     tl.to(
@@ -581,7 +582,7 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
             className="ml-auto text-[13.5px] whitespace-nowrap"
             style={{ color: INK.muted }}
           >
-            Dr. Mehta · now
+            now
           </span>
         </div>
 
@@ -622,7 +623,10 @@ export function TeachingWeek({ step, flipId }: TeachingWeekProps) {
           </div>
         </div>
 
-        <Toast>Cancelled · 62 students told</Toast>
+        {/* Bottom right, over the empty end of the week, not over a class. */}
+        <Toast style={{ left: "auto", right: 16, translate: "none" }}>
+          Cancelled · 62 timetables updated
+        </Toast>
 
         <Cursor x={start.x} y={start.y} />
       </FacultyBrowser>

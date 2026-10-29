@@ -92,7 +92,7 @@ export const STAKEHOLDERS: Record<StakeholderId, Stakeholder> = {
   faculty: {
     id: "faculty",
     title: "Faculty",
-    subtitle: "Internal and external",
+    subtitle: "Internal and visiting",
     owner: "ravya",
     color: "var(--faculty)",
     token: "faculty",
@@ -127,6 +127,14 @@ export const STAKEHOLDER_ORDER: StakeholderId[] = [
   "coordinators",
   "admins",
 ];
+
+/**
+ * Struck off during the research. System admins play little part in running
+ * the timetable and Moodle, so we did not study them: from "Who we heard
+ * from" on, their card is crossed out and their section is not presented
+ * (src/sections/admins.tsx stays, out of the running order).
+ */
+export const OUT_OF_SCOPE: StakeholderId[] = ["admins"];
 
 export const COLLEGE = {
   name: "Symbiosis Institute of Computer Studies and Research",

@@ -22,23 +22,30 @@ export interface RoadmapProps {
   eyebrow?: ReactNode;
   title: ReactNode;
   phases: RoadmapPhase[];
+  /**
+   * The word at the start of the line. Default "Today"; pass null when the
+   * first phase is already done (its own label says where we are).
+   */
+  startLabel?: ReactNode;
   /** Phase i appears on step i (the first from the start). Steps = phases.length. */
   step: number;
 }
 
 const STATUS: Record<RoadmapPhase["status"], { text: string; icon: IconName }> =
   {
-    done: { text: "Shipped", icon: "checkCircle" },
-    now: { text: "In progress", icon: "zap" },
-    next: { text: "Planned", icon: "calendarCheck" },
-    later: { text: "Exploring", icon: "sparkles" },
+    // The deck's three words for where a thing stands (see DESIGN.md).
+    done: { text: "Built", icon: "checkCircle" },
+    now: { text: "Planned", icon: "hourglass" },
+    next: { text: "Planned", icon: "hourglass" },
+    later: { text: "Later", icon: "clock" },
   };
 
 /* Canvas geometry. */
 const CONTENT_W = 1920 - SAFE.x * 2;
 const LINE_Y = 404;
 const CARD_TOP = 470;
-const CARD_H = 440;
+/** Tall enough for three two-line items under a one-line title; ends above y 976. */
+const CARD_H = 500;
 const GAP = 40;
 
 /** The line's colours: the accent up to the current phase, quiet after it. */
@@ -54,7 +61,12 @@ const LINE_QUIET = "#b4bac5";
  * phases after it stand on the ground. On the last phase the line carries on
  * past it and fades out, because there is more after.
  */
-export function Roadmap({ title, phases, step }: RoadmapProps) {
+export function Roadmap({
+  title,
+  phases,
+  startLabel = "Today",
+  step,
+}: RoadmapProps) {
   const root = useRef<HTMLDivElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const n = Math.max(1, phases.length);
@@ -95,11 +107,13 @@ export function Roadmap({ title, phases, step }: RoadmapProps) {
       ease: "deck.enter",
       stagger: 0.08,
     });
-    tl.from(
-      ".rm-today",
-      { opacity: 0, x: -20, duration: 0.6, ease: "deck.enter" },
-      0.3,
-    );
+    if (startLabel !== null) {
+      tl.from(
+        ".rm-today",
+        { opacity: 0, x: -20, duration: 0.6, ease: "deck.enter" },
+        0.3,
+      );
+    }
     tl.from(
       ".rm-seg-0",
       { drawSVG: "0% 0%", duration: 0.8, ease: "power3.out" },
@@ -258,9 +272,12 @@ export function Roadmap({ title, phases, step }: RoadmapProps) {
             />
           ))}
 
-          <g className="rm-today">
-            <circle cx={SAFE.x} cy={LINE_Y} r="7" fill={INK.fg} />
-          </g>
+          {/* The start dot marks "Today"; without the word it means nothing. */}
+          {startLabel !== null && (
+            <g className="rm-today">
+              <circle cx={SAFE.x} cy={LINE_Y} r="7" fill={INK.fg} />
+            </g>
+          )}
 
           {nodeX.map((x, i) => {
             const now = i === nowIndex;
@@ -297,12 +314,14 @@ export function Roadmap({ title, phases, step }: RoadmapProps) {
           })}
         </svg>
 
-        <span
-          className="rm-today text-muted absolute text-[24px] font-medium"
-          style={{ left: SAFE.x, top: LINE_Y - 60 }}
-        >
-          Today
-        </span>
+        {startLabel !== null && (
+          <span
+            className="rm-today text-muted absolute text-[24px] font-medium"
+            style={{ left: SAFE.x, top: LINE_Y - 60 }}
+          >
+            {startLabel}
+          </span>
+        )}
 
         {phases.map((p, i) => (
           <span
@@ -325,11 +344,7 @@ export function Roadmap({ title, phases, step }: RoadmapProps) {
               height: CARD_H,
             }}
           >
-            <PhaseCard
-              phase={p}
-              current={i === nowIndex}
-              repeatStatus={i > 0 && phases[i - 1]?.status === p.status}
-            />
+            <PhaseCard phase={p} current={i === nowIndex} />
           </div>
         ))}
       </div>
@@ -340,28 +355,22 @@ export function Roadmap({ title, phases, step }: RoadmapProps) {
 /**
  * One phase: its state, its name, what it holds. The current phase is raised
  * on a card; the others are plain columns under a hairline, so elevation marks
- * only the phase that matters. A status that repeats the previous phase's
- * keeps its space (so titles line up) but is not drawn twice.
+ * only the phase that matters. Every phase says where it stands, even when
+ * it is the same as the phase before.
  */
 function PhaseCard({
   phase,
   current,
-  repeatStatus,
 }: {
   phase: RoadmapPhase;
   current: boolean;
-  repeatStatus: boolean;
 }) {
   const status = STATUS[phase.status];
   const body = (
     <div
       className={`flex h-full flex-col pt-9 pb-10 ${current ? "px-10" : ""}`}
     >
-      <Chip
-        icon={status.icon}
-        size={22}
-        className={`self-start ${repeatStatus ? "invisible" : ""}`}
-      >
+      <Chip icon={status.icon} size={22} className="self-start">
         {status.text}
       </Chip>
       <h2 className="font-display text-fg mt-6 text-[44px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance">

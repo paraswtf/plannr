@@ -44,9 +44,12 @@ const NOTE_LARGE = { w: 488, h: 262, gap: 76 } as const;
 /**
  * Everything people told us, as notes on a wall, unsorted on purpose.
  *
- * Each note carries flip id `${stakeholder}-problem-${id}`: the next slide,
- * ProblemRanking, turns the same notes into ranked rows. The note's tilt is
- * a plain style transform, so Flip straightens it as the note travels.
+ * Each note carries flip id `${stakeholder}-problem-${id}`: the next slide
+ * (a chart or the ranking) turns the same notes into rows. The note's tilt is
+ * a plain style transform, so Flip straightens it as the note travels. The
+ * note carries its own type size, so the text shrinks with the box in
+ * flight, and it is pinned inside a slot of its own size, so its in-flight
+ * size never moves the wall.
  */
 export function ProblemBoard({
   stakeholder,
@@ -70,39 +73,47 @@ export function ProblemBoard({
           }}
         >
           {problems.map((p, i) => (
+            // A slot of the note's size holds its place in the wall, so a
+            // note flying at a row's size never reflows the notes around it.
             <div
               key={p.id}
-              data-flip-id={`${stakeholder}-problem-${p.id}`}
-              className="relative flex shrink-0 flex-col justify-center"
+              className="relative shrink-0"
               style={{
                 width: note.w,
                 height: note.h,
                 marginTop: DROP[i % DROP.length],
-                padding: "34px 34px 30px",
-                borderRadius: 4,
-                background: PAPER[i % PAPER.length],
-                color: PAPER_INK,
-                boxShadow: PAPER_SHADOW,
-                transform: `rotate(${TILT[i % TILT.length]}deg)`,
               }}
             >
-              {/* A strip of tape holding it to the wall. */}
-              <span
-                data-enter
-                aria-hidden
-                className="absolute -top-[15px] left-1/2 h-[34px] w-[124px]"
+              <div
+                data-flip-id={`${stakeholder}-problem-${p.id}`}
+                className="font-body absolute top-0 left-0 flex flex-col justify-center text-[30px] leading-[1.24] font-medium tracking-[-0.005em]"
                 style={{
-                  marginLeft: -62,
-                  transform: `rotate(${TAPE_TILT[i % TAPE_TILT.length]}deg)`,
-                  background: "rgba(255, 255, 255, 0.58)",
-                  boxShadow:
-                    "inset 0 0 0 1px rgba(16, 24, 40, 0.05), 0 1px 2px rgba(16, 24, 40, 0.08)",
-                  backdropFilter: "blur(1px)",
+                  width: note.w,
+                  height: note.h,
+                  padding: "34px 34px 30px",
+                  borderRadius: 4,
+                  background: PAPER[i % PAPER.length],
+                  color: PAPER_INK,
+                  boxShadow: PAPER_SHADOW,
+                  transform: `rotate(${TILT[i % TILT.length]}deg)`,
                 }}
-              />
-              <span className="font-body text-[30px] leading-[1.24] font-medium tracking-[-0.005em] text-balance">
-                {p.text}
-              </span>
+              >
+                {/* A strip of tape holding it to the wall. */}
+                <span
+                  data-enter
+                  aria-hidden
+                  className="absolute -top-[15px] left-1/2 h-[34px] w-[124px]"
+                  style={{
+                    marginLeft: -62,
+                    transform: `rotate(${TAPE_TILT[i % TAPE_TILT.length]}deg)`,
+                    background: "rgba(255, 255, 255, 0.58)",
+                    boxShadow:
+                      "inset 0 0 0 1px rgba(16, 24, 40, 0.05), 0 1px 2px rgba(16, 24, 40, 0.08)",
+                    backdropFilter: "blur(1px)",
+                  }}
+                />
+                <span className="text-balance">{p.text}</span>
+              </div>
             </div>
           ))}
         </div>

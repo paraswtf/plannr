@@ -68,22 +68,20 @@ const APPLY_AT = {
 } as const;
 const CURSOR_FROM = { x: 640, y: 470 } as const;
 
-const FILE_NAME = "timetable-monsoon-26.xlsx";
+const FILE_NAME = "students-monsoon-26.csv";
 
 /* ── Data ───────────────────────────────────────────────────────────────── */
 
 type Status = "same" | "added" | "changed" | "removed";
-type Col = "course" | "div" | "who" | "day" | "time" | "room";
+type Col = "name" | "prn" | "email" | "group";
 
 interface Row {
   id: string;
   status: Status;
-  course: string;
-  div: string;
-  who: string;
-  day: string;
-  time: string;
-  room: string;
+  name: string;
+  prn: string;
+  email: string;
+  group: string;
   /** For a changed row: the column that changed and what it was. */
   was?: { col: Col; value: string };
 }
@@ -92,114 +90,92 @@ const ROWS: Row[] = [
   {
     id: "r1",
     status: "same",
-    course: "Design Thinking",
-    div: "BCA-A",
-    who: "Prof. Kulkarni",
-    day: "Mon",
-    time: "09:00",
-    room: "301",
+    name: "Aarav Kulkarni",
+    prn: "25030142001",
+    email: "aarav.kulkarni@sicsr.ac.in",
+    group: "BCA-A",
   },
   {
     id: "r2",
     status: "changed",
-    course: "Cloud Computing",
-    div: "BCA-B",
-    who: "Dr. Mehta",
-    day: "Mon",
-    time: "10:00",
-    room: "304",
-    was: { col: "room", value: "301" },
+    name: "Diya Menon",
+    prn: "25030142014",
+    email: "diya.menon@sicsr.ac.in",
+    group: "BCA-B",
+    was: { col: "group", value: "BCA-A" },
   },
   {
     id: "r3",
     status: "removed",
-    course: "Data Mining",
-    div: "BBA(IT)-A",
-    who: "Prof. Iyer",
-    day: "Tue",
-    time: "11:00",
-    room: "Lab 2",
+    name: "Rohan Patil",
+    prn: "25030143027",
+    email: "rohan.patil@sicsr.ac.in",
+    group: "BBA(IT)-A",
   },
   {
     id: "r4",
     status: "added",
-    course: "Web Technologies",
-    div: "BCA-A",
-    who: "Dr. Fernandes",
-    day: "Tue",
-    time: "14:00",
-    room: "Lab 2",
+    name: "Ishaan Nair",
+    prn: "26030142031",
+    email: "ishaan.nair@sicsr.ac.in",
+    group: "BCA-A",
   },
   {
     id: "r5",
     status: "same",
-    course: "Cyber Security",
-    div: "BCA-B",
-    who: "Prof. Kulkarni",
-    day: "Wed",
-    time: "09:00",
-    room: "304",
+    name: "Meera Joshi",
+    prn: "25030142022",
+    email: "meera.joshi@sicsr.ac.in",
+    group: "BCA-B",
   },
   {
     id: "r6",
     status: "added",
-    course: "Business Analytics",
-    div: "BBA(IT)-A",
-    who: "Dr. Mehta",
-    day: "Wed",
-    time: "11:00",
-    room: "301",
+    name: "Kabir Shah",
+    prn: "26030143008",
+    email: "kabir.shah@sicsr.ac.in",
+    group: "BBA(IT)-A",
   },
   {
     id: "r7",
     status: "changed",
-    course: "Software Testing",
-    div: "BCA-A",
-    who: "Prof. Iyer",
-    day: "Thu",
-    time: "12:00",
-    room: "Lab 2",
-    was: { col: "time", value: "10:00" },
+    name: "Ananya Rao",
+    prn: "25030143016",
+    email: "ananya.rao@sicsr.ac.in",
+    group: "BBA(IT)-A",
+    was: { col: "group", value: "BCA-B" },
   },
   {
     id: "r8",
     status: "added",
-    course: "Design Thinking",
-    div: "BCA-B",
-    who: "Dr. Fernandes",
-    day: "Thu",
-    time: "13:00",
-    room: "301",
+    name: "Zoya Khan",
+    prn: "26030142040",
+    email: "zoya.khan@sicsr.ac.in",
+    group: "BCA-B",
   },
   {
     id: "r9",
     status: "same",
-    course: "Cloud Computing",
-    div: "BBA(IT)-A",
-    who: "Dr. Mehta",
-    day: "Fri",
-    time: "09:00",
-    room: "304",
+    name: "Vihaan Desai",
+    prn: "25030143005",
+    email: "vihaan.desai@sicsr.ac.in",
+    group: "BBA(IT)-A",
   },
   {
     id: "r10",
     status: "same",
-    course: "Data Mining",
-    div: "BCA-B",
-    who: "Prof. Iyer",
-    day: "Fri",
-    time: "11:00",
-    room: "Lab 2",
+    name: "Sana Iyer",
+    prn: "25030142033",
+    email: "sana.iyer@sicsr.ac.in",
+    group: "BCA-B",
   },
 ];
 
 const COLS: { key: Col; label: string; w: number; mono?: boolean }[] = [
-  { key: "course", label: "Course", w: 214 },
-  { key: "div", label: "Division", w: 122 },
-  { key: "who", label: "Faculty", w: 170 },
-  { key: "day", label: "Day", w: 70 },
-  { key: "time", label: "Time", w: 160, mono: true },
-  { key: "room", label: "Room", w: 120, mono: true },
+  { key: "name", label: "Name", w: 200 },
+  { key: "prn", label: "PRN", w: 150, mono: true },
+  { key: "email", label: "Email", w: 290, mono: true },
+  { key: "group", label: "Group", w: 190 },
 ];
 
 const TONE: Record<
@@ -212,15 +188,16 @@ const TONE: Record<
 };
 
 /**
- * A term's worth of changes in one import, instead of one row at a time.
+ * A term's worth of students in one import, instead of one record at a time.
  *
  * Builds (steps = 3):
- *   0 — a spreadsheet dropped in; rows parse.
- *   1 — a preview of the difference: added, changed and removed rows, a few highlighted.
- *   2 — apply: one click, and the table updates.
+ *   0 — a CSV of students dropped in; rows parse.
+ *   1 — a preview of the difference: students added, moved to another group
+ *       (old value shown) and removed.
+ *   2 — apply: one click, and the table updates. (No undo: not built.)
  *
  * The browser window carries `flipId`, at the same size and place as
- * AdminDashboard's, so it holds still between the two.
+ * PlannerGenerate's, so it holds still between the two.
  */
 export function BulkImport({ step, active, flipId }: BulkImportProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -514,14 +491,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
 
   return (
     <Stage stageRef={ref} flipId={flipId} overlay={<DraggedFile />}>
-      <AdminBar
-        title="Import"
-        right={
-          <span className="font-mono text-[13.5px] font-semibold text-[rgba(44,49,53,0.55)]">
-            History
-          </span>
-        }
-      />
+      <AdminBar title="Import people" />
 
       {/* The drop zone, which folds into the file's bar */}
       <div
@@ -560,10 +530,10 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
           style={{ top: 230, opacity: 0 }}
         >
           <span className="text-[24px] font-semibold text-[#0d1117]">
-            Drop the college&apos;s spreadsheet here
+            Drop a list of students here
           </span>
           <span className="mt-2 font-mono text-[16px] text-[rgba(44,49,53,0.55)]">
-            .xlsx or .csv · exactly as it is
+            .csv with a name, PRN, email and group
           </span>
         </div>
         <div
@@ -597,11 +567,10 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
               {FILE_NAME}
             </span>
             <span className="mt-0.5 font-mono text-[14px] text-[rgba(44,49,53,0.55)]">
-              Sheet 1 ·{" "}
               <Ph>
                 <span className="row-count">412</span>
               </Ph>{" "}
-              rows
+              students, 4 columns
             </span>
           </span>
           <div
@@ -612,7 +581,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4e7d3a] text-white">
                 <Icon name="check" size={14} stroke={2.8} />
               </span>
-              All 6 columns matched
+              All 4 columns matched
             </div>
             <div
               className="r-diff absolute inset-y-0 right-3.5 flex items-center gap-2.5"
@@ -645,7 +614,7 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4e7d3a] text-white">
                 <Icon name="check" size={14} stroke={2.8} />
               </span>
-              <span>Timetable updated</span>
+              <span>Students updated</span>
               <span className="font-mono text-[13px] font-medium text-[rgba(44,49,53,0.55)]">
                 · just now
               </span>
@@ -715,15 +684,8 @@ export function BulkImport({ step, active, flipId }: BulkImportProps) {
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4e9a3a]">
             <Icon name="check" size={14} stroke={2.8} />
           </span>
-          <span>Applied</span>
-          <span className="-mx-1 text-white/45">·</span>
           <span>
-            <Ph>137</Ph> changes
-          </span>
-          <span className="h-4 w-px bg-white/25" />
-          <span className="flex items-center gap-1.5 text-[#b8c5da]">
-            <Icon name="rotate" size={15} stroke={2.2} />
-            Undo
+            Applied · <Ph>137</Ph> changes
           </span>
         </div>
       </div>
@@ -785,7 +747,7 @@ function TableRow({ row }: { row: Row }) {
             return (
               <span
                 key={c.key}
-                className={`relative truncate ${c.mono ? "font-mono text-[15.5px]" : "text-[16.5px]"} ${c.key === "course" ? "font-semibold" : ""}`}
+                className={`relative truncate ${c.mono ? "font-mono text-[15.5px]" : "text-[16.5px]"} ${c.key === "name" ? "font-semibold" : ""}`}
                 style={{
                   width: c.w,
                   color: removed ? "rgba(163,32,46,0.75)" : "#0d1117",

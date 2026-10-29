@@ -215,7 +215,9 @@ function Column({ persona, stakeholder }: ItemProps) {
       <div className="mt-9 flex">
         <Name persona={persona} stakeholder={stakeholder} size={56} />
       </div>
-      <p className="pc-in t-lede text-muted mt-4 max-w-[30ch] text-pretty">
+      {/* Two lines tall whatever it says, so the chips and the trait lists
+          start at one height in every column. */}
+      <p className="pc-in t-lede text-muted mt-4 min-h-[2lh] max-w-[30ch] text-pretty">
         {persona.tagline}
       </p>
       <div className="mt-7 flex">

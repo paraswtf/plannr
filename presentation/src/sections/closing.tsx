@@ -1,62 +1,65 @@
+import { Of, pct } from "~/content/research";
 import { PROJECT } from "~/content/team";
 import type { SectionDef } from "~/deck/types";
-import { Credits } from "~/templates/Credits";
 import { Findings } from "~/templates/Findings";
 import { MergeApps } from "~/templates/MergeApps";
 import { OpenSource } from "~/templates/OpenSource";
 import { Roadmap } from "~/templates/Roadmap";
 import { Thanks } from "~/templates/Thanks";
 import { Grad } from "~/ui/layout";
-import { Ph } from "~/ui/placeholder";
 
 /*
- * Section 06 — Paras closes: what we found, what we combined, what comes
- * next, an invitation to build it with us, and the credits.
+ * Section 05 — Paras closes: what we found (from the data, for the three
+ * groups in scope), the four apps Plannr replaces, the roadmap in four phases
+ * (three built, one later), and an invitation to build it with us.
  */
 
 export const closing: SectionDef = {
   id: "closing",
-  title: "What's next",
+  title: "What’s next",
   speaker: "paras",
   slides: [
     {
       id: "findings",
       title: "What we found",
-      steps: 5,
+      steps: 4,
       notes: [
-        "So, what did four weeks with four kinds of people add up to? From students: they don't need more information. They need the right information, in time.",
-        "From faculty: they want to act, not ask. Scheduling, rooms, even getting paid — today it all goes through someone else.",
-        "From coordinators: every change is done twice — once in the timetable, once in a mail — and they still can't tell who saw it.",
-        "And from the admins: the data is kept right by hand, one row at a time, with no way to see the whole picture.",
-        "Put together, it's one finding. The college doesn't need a better notice board. It needs one source of truth — that tells people when it changes.",
+        "So, what did all of this add up to? From students: changes reach them last. 73% say the timetable doesn't tell them when a class changes. They hear it from WhatsApp, from a friend, or not at all.",
+        "From faculty: lecture time goes on admin. Attendance set up by hand after every lecture, marks merged in Excel, and every change going through someone else. And more than one asked for a single place where changes reach them.",
+        "From coordinators: every change is written three times. 3 of 4 announce each change by hand, by mail and then on WhatsApp, and 2 of 4 type up the day's report by hand every evening.",
+        "Put together, it's one finding. Notices are the strongest need across every group: students at 73%, coordinators at 3 of 4, faculty asking for one place. The college doesn't need a better notice board. It needs one source of truth — that tells people when it changes.",
       ],
       render: ({ step }) => (
         <Findings
-          title="Four weeks, four kinds of people, one finding."
+          title="Three groups, one finding."
           findings={[
             {
               stakeholder: "students",
               icon: "bell",
-              title: "Students need the right information, in time.",
-              body: "Most of it exists. It just reaches them by mail, late, or not at all.",
+              title: "Students hear about changes last.",
+              body: (
+                <>
+                  {pct({ count: 8, of: 11 })} say the timetable doesn’t tell
+                  them when a class changes.
+                </>
+              ),
             },
             {
               stakeholder: "faculty",
-              icon: "calendar",
-              title: "Faculty want to act, not ask.",
-              body: "Scheduling, rooms and payment all go through someone else today.",
+              icon: "clipboard",
+              title: "Faculty lose lecture time to paperwork.",
+              body: "Attendance by hand, marks in Excel, every change through someone else.",
             },
             {
               stakeholder: "coordinators",
               icon: "refresh",
-              title: "Coordinators do every change twice.",
-              body: "Once in the timetable, once in a mail, and they can't tell who saw it.",
-            },
-            {
-              stakeholder: "admins",
-              icon: "database",
-              title: "Admins fix data a row at a time.",
-              body: "No bulk tools, no dashboard, and slow pages for everyone.",
+              title: "Coordinators retype every change.",
+              body: (
+                <>
+                  <Of t={{ count: 3, of: 4 }} /> announce each change by hand;{" "}
+                  <Of t={{ count: 2, of: 4 }} /> type up the day’s report.
+                </>
+              ),
             },
           ]}
           conclusion={
@@ -74,8 +77,8 @@ export const closing: SectionDef = {
       title: "What we combined",
       steps: 2,
       notes: [
-        "So that's what we built. Today there's the timetable for classes, the class WhatsApp group for the news, Moodle for assignments, material and attendance, and Gmail for every change — four apps that don't talk to each other.",
-        "Plannr is all four, in one place. One source of truth: change it once, and everyone who needs to know, knows.",
+        "Today, one college day runs through four apps that don't talk to each other: the timetable site for classes and rooms, the class WhatsApp group for the news, second-hand, Moodle for assignments, tests and attendance, and Gmail for every change, written by hand.",
+        "Plannr is all four, in one place. Classes and rooms, notices to exactly the people a change affects, attendance, tests and deadlines, all from one source of truth: change it once, and everyone who needs to know, knows. Course material uploads stay future scope.",
       ],
       render: ({ step }) => (
         <MergeApps
@@ -89,7 +92,7 @@ export const closing: SectionDef = {
             },
             {
               name: "Moodle",
-              does: "Assignments, material, attendance",
+              does: "Assignments, tests, attendance",
               icon: "cap",
             },
             { name: "Gmail", does: "Every change, by hand", icon: "mail" },
@@ -105,44 +108,56 @@ export const closing: SectionDef = {
     },
     {
       id: "future",
-      title: "Future scope",
-      steps: 3,
+      title: "What's built, and what's next",
+      steps: 4,
       notes: [
-        "Where does it go from here? Next, we bring in what Moodle does today: assignments and deadlines on your day, course material beside each class, and attendance in the same place.",
-        "Then we put it wherever you are: an installable app that works offline, push notifications, and a daily digest for the people who never open an app.",
-        "And later — any college. Plannr is open source and built so another institution can run it, import its own timetable, and give its management real numbers. [Adjust the phases to the actual plan.]",
+        "Here's where that leaves us. Built, and running today: everyone's own timetable, always current; attendance registers straight from the timetable; and requests, approvals and the planner that generates a term's week.",
+        "Built too: the changes. Notices of each change, to exactly the people it affects. The day's report, written for coordinators. Availability entered once by visiting faculty, and students checking themselves in with a code.",
+        "And coursework, the other half of a college day: test dates and marks, entered against the college's own assessment plan, and every deadline sitting right beside your classes. Faculty stop merging marks in Excel.",
+        "What comes later is everything else: course material and file uploads, one login for every college system, and taking Plannr beyond our college. Students asked for these, but they're a far stretch from what we set out to automate.",
       ],
       render: ({ step }) => (
         <Roadmap
-          title="What we're building next."
+          title="What’s built, and what’s next."
+          startLabel={null}
           phases={[
             {
-              label: "Next",
-              title: "Everything Moodle does",
+              label: "Timetable",
+              title: "Your day, your teaching",
               items: [
-                "Assignments and deadlines on your day",
-                "Course material beside each class",
-                <Ph key="att">Attendance in the same place</Ph>,
+                "Your own timetable, always current",
+                "Attendance straight from the timetable",
+                "Requests, approvals and the planner",
               ],
-              status: "next",
+              status: "done",
             },
             {
-              label: "Then",
-              title: "Wherever you are",
+              label: "Changes",
+              title: "Notices and reports",
               items: [
-                "An installable app that works offline",
-                "Push notifications",
-                <Ph key="dig">A daily digest by mail or WhatsApp</Ph>,
+                "Notices to exactly who’s affected",
+                "The day’s report, written for you",
+                "Availability once; check-in codes",
               ],
-              status: "next",
+              status: "done",
+            },
+            {
+              label: "Coursework",
+              title: "Tests and assignments",
+              items: [
+                "Test dates and marks",
+                "Deadlines beside your classes",
+                "The college’s assessment plan",
+              ],
+              status: "done",
             },
             {
               label: "Later",
-              title: "Any college",
+              title: "Everything else",
               items: [
-                "Self-hostable, open source",
-                "Import from any timetable system",
-                <Ph key="ana">Analytics for management</Ph>,
+                "Course material and file uploads",
+                "One login for every college system",
+                "Any college, not just ours",
               ],
               status: "later",
             },
@@ -166,7 +181,7 @@ export const closing: SectionDef = {
               Build it <Grad>with us.</Grad>
             </>
           }
-          lede="Plannr is open source. If you design, code or test, or just have opinions about the timetable, there's a place for you."
+          lede="Plannr is open source. If you design, code or test, or just have opinions about the timetable, there’s a place for you."
           repoUrl={PROJECT.repoUrl}
           repoLabel={PROJECT.repo}
           asks={[
@@ -191,25 +206,6 @@ export const closing: SectionDef = {
               body: "Bring your class, your coordinator, your college",
             },
           ]}
-          step={step}
-        />
-      ),
-    },
-    {
-      id: "credits",
-      title: "Credits",
-      notes:
-        "Before we finish: this project is funded by Rivant, as part of its contribution to the open-source community. At Rivant we build things that are used by people — and every one of them starts the way this one did: by watching how people actually work. And of course — Sonal, Ravya, Tanisha: thank you.",
-      render: ({ step }) => (
-        <Credits
-          title="Built by students. Backed by Rivant."
-          sponsor={{
-            name: "Rivant",
-            line: "Plannr is funded by Rivant, as part of its contribution to the open-source community.",
-            about:
-              "We build things that are used by people, and every one starts by watching how they work.",
-          }}
-          team={["paras", "sonal", "ravya", "tanisha"]}
           step={step}
         />
       ),

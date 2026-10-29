@@ -27,6 +27,19 @@ export interface PhoneMyDayProps {
   active: boolean;
   /** Put on the device frame, so it can travel between feature slides. */
   flipId?: string;
+  /**
+   * The things Plannr does not do yet: the offline toast, tomorrow's test tag
+   * and its deadline chip. Default true; pass false where the slide claims
+   * only what is built.
+   */
+  extras?: boolean;
+  /**
+   * Whose day this is, when it is not the signed-in student's own (a
+   * coordinator looking at a group): a pill on the header's date line,
+   * "Viewing BCA-A" with the group icon, at the date's size or larger so it
+   * reads from the back of the room. Unset, the header is as it was.
+   */
+  viewing?: string;
 }
 
 /** The day, inside each pane of the rail: 9am to 5pm. */
@@ -64,7 +77,12 @@ const TODAY_BTN = { x: 336, y: 92 };
  * Today and tomorrow are two panes on one rail, header and timeline both: a
  * swipe translates the rail, so the whole day travels under the finger.
  */
-export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
+export function PhoneMyDay({
+  step,
+  flipId,
+  extras = true,
+  viewing,
+}: PhoneMyDayProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useSteps(ref, step, (tl, mark) => {
@@ -206,8 +224,8 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
             style={{ top: 54, height: 68 }}
           >
             <div className="md-rail flex" style={{ width: SCREEN_W * 2 }}>
-              <DayTitle date="Tue 11 Aug" title="Today" />
-              <DayTitle date="Wed 12 Aug" title="Tomorrow" />
+              <DayTitle date="Tue 11 Aug" title="Today" viewing={viewing} />
+              <DayTitle date="Wed 12 Aug" title="Tomorrow" viewing={viewing} />
             </div>
           </div>
           <span
@@ -352,17 +370,28 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                   room="304"
                   detail="Prof. Iyer"
                 />
-                <DayBlock
-                  frame={DAY}
-                  start={11}
-                  end={12}
-                  title="Data Mining: unit test"
-                  course="Data Mining"
-                  room="Lab 2"
-                  detail="Units 1-3 · bring your ID"
-                >
-                  <BlockTag bg="var(--red)">Test</BlockTag>
-                </DayBlock>
+                {extras ? (
+                  <DayBlock
+                    frame={DAY}
+                    start={11}
+                    end={12}
+                    title="Data Mining: unit test"
+                    course="Data Mining"
+                    room="Lab 2"
+                    detail="Units 1-3 · bring your ID"
+                  >
+                    <BlockTag bg="var(--red)">Test</BlockTag>
+                  </DayBlock>
+                ) : (
+                  <DayBlock
+                    frame={DAY}
+                    start={11}
+                    end={12}
+                    title="Data Mining"
+                    room="Lab 2"
+                    detail="Prof. Iyer"
+                  />
+                )}
                 <DayBlock
                   frame={DAY}
                   start={12.25}
@@ -382,7 +411,11 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
                 {/* A deadline, on the same day as the classes. */}
                 <div
                   className="absolute right-[10px] flex items-center"
-                  style={{ top: yOf(DAY, 15.5) - 15, left: 54 }}
+                  style={{
+                    top: yOf(DAY, 15.5) - 15,
+                    left: 54,
+                    display: extras ? undefined : "none",
+                  }}
                 >
                   <span
                     className="flex items-center gap-1.5 rounded-full py-[6px] pr-3 pl-2.5 text-[12.5px] font-semibold"
@@ -405,7 +438,10 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
           </div>
 
           {/* Offline, and it does not matter. */}
-          <Toast className="md-offline" style={{ top: 714 }}>
+          <Toast
+            className="md-offline"
+            style={{ top: 714, display: extras ? undefined : "none" }}
+          >
             <Icon name="wifiOff" size={17} stroke={2} />
             <Meta text="Offline · your week is saved" />
           </Toast>
@@ -465,11 +501,34 @@ export function PhoneMyDay({ step, flipId }: PhoneMyDayProps) {
   );
 }
 
-function DayTitle({ date, title }: { date: string; title: string }) {
+function DayTitle({
+  date,
+  title,
+  viewing,
+}: {
+  date: string;
+  title: string;
+  viewing?: string;
+}) {
   return (
     <div className="shrink-0 px-5 pt-2" style={{ width: SCREEN_W }}>
-      <div className="text-[13.5px] font-medium text-[rgba(44,49,53,0.58)]">
+      <div className="flex h-[22px] items-center gap-2.5 text-[13.5px] leading-[20px] font-medium text-[rgba(44,49,53,0.58)]">
         {date}
+        {/* Someone else's day: the pill travels with it. */}
+        {viewing && (
+          <span
+            className="md-viewing flex items-center gap-1.5 rounded-full bg-white px-2.5 py-[2px] text-[15px] leading-[18px] font-semibold"
+            style={{
+              color: "var(--slate)",
+              boxShadow: "inset 0 0 0 1px rgba(68,88,121,0.32)",
+            }}
+          >
+            <Icon name="users" size={16} stroke={2.2} />
+            <span>
+              Viewing <span className="font-mono">{viewing}</span>
+            </span>
+          </span>
+        )}
       </div>
       <div className="font-display text-[30px] leading-tight font-bold tracking-[-0.02em] text-[#0d1117]">
         {title}

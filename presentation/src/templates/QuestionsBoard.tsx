@@ -210,7 +210,7 @@ export function QuestionsBoard({
 
           <section className="flex w-160 shrink-0 flex-col">
             <p className="qb-skip-label t-small text-muted mb-6 font-medium">
-              We didn&apos;t ask
+              We didn’t ask
             </p>
             <ul className="flex flex-col items-start gap-4">
               {notAsked.map((q, i) => (

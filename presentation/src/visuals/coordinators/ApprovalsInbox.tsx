@@ -139,11 +139,6 @@ const approveAt = (y: number) => ({
   x: CARD.x + CARD.w - 14 - APPROVE.w / 2,
   y: y + CARD.h - 14 - APPROVE.h / 2,
 });
-const ALL = { w: 116, h: 30 };
-const ALL_AT = {
-  x: QUEUE.x + QUEUE.w - 12 - ALL.w / 2,
-  y: QUEUE.y + QUEUE.header / 2,
-};
 const CURSOR_START = { x: 560, y: 520 };
 const TIP = { x: 16, y: 5 };
 const tip = (p: { x: number; y: number }) => ({
@@ -170,8 +165,9 @@ function flight(r: Request, fromY: number) {
  *
  * Builds (steps = 3):
  *   0 — the queue: an extra lecture, a room change, a cancellation.
- *   1 — approve one: it lands on the timetable.
- *   2 — the queue is clear and everyone affected has been told.
+ *   1 — approve one: it lands on the timetable, and the next slides up.
+ *   2 — approve the other two, one at a time: the queue is clear and every
+ *       affected timetable is updated.
  *
  * The browser window carries `flipId`, at the same size and place as the
  * other two coordinator demos, so it holds still between them.
@@ -263,60 +259,50 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
       { y: y1, duration: 0.55, ease: "deck.morph", immediateRender: false },
       "fly1+=0.38",
     );
-    tl.fromTo(
-      ".cur-a",
-      tip(approveAt(y0)),
-      {
-        ...tip(ALL_AT),
-        duration: 0.6,
-        ease: "deck.morph",
-        immediateRender: false,
-      },
-      "fly1+=0.7",
-    );
-    tl.fromTo(
-      ".approve-all",
-      { opacity: 0, scale: 0.9 },
-      { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" },
-      "fly1+=0.5",
-    );
+    // The next request slides up under the pointer, its own Approve ready.
     mark();
 
-    // ── Build 2: approve the rest. Each lands, and everyone it touches is told.
-    tl.to(".cur-svg", { scale: 0.84, duration: 0.1, ease: "power2.out" });
-    tl.to(".cur-svg", { scale: 1, duration: 0.18 });
-    tl.to(".card-r2 .ok, .card-r3 .ok", { opacity: 1, duration: 0.2 }, "<");
-    tl.to(".count", { textContent: 0, duration: 0 }, "<");
-    tl.to(".count", { opacity: 0, scale: 0.5, duration: 0.3 }, "<");
-    tl.to(".approve-all", { opacity: 0, y: -6, duration: 0.3 }, "<0.15");
-    tl.addLabel("fly2", ">0.05");
-    [
-      { r: REQUESTS[1]!, sel: ".card-r2", from: y0, at: 0 },
-      { r: REQUESTS[2]!, sel: ".card-r3", from: y1, at: 0.18 },
-    ].forEach(({ r, sel, from, at }) => {
-      const t = `fly2+=${at}`;
-      const after = (d: number) => `fly2+=${at + d}`;
+    // ── Build 2: approve the other two, one at a time, from the top.
+    /** Click the top card's Approve, then send that card onto its class. */
+    const approveTop = (r: Request, sel: string, count: number) => {
+      tl.to(".cur-svg", { scale: 0.84, duration: 0.1, ease: "power2.out" });
+      tl.to(".cur-svg", { scale: 1, duration: 0.18 });
+      tl.to(`${sel} .ok`, { opacity: 1, duration: 0.2 }, "<");
+      tl.to(".count", { textContent: count, duration: 0 }, "<");
+      const at = `fly-${r.key}`;
+      tl.addLabel(at, ">0.1");
       tl.to(
         sel,
         { boxShadow: "0 24px 44px rgba(16,24,40,0.24)", duration: 0.2 },
-        t,
+        at,
       );
-      tl.to(sel, { ...flight(r, from), duration: 1, ease: "deck.morph" }, t);
-      tl.to(`${sel} .face-card`, { opacity: 0, duration: 0.35 }, after(0.1));
-      tl.to(`${sel} .face-block`, { opacity: 1, duration: 0.4 }, after(0.45));
+      tl.to(sel, { ...flight(r, y0), duration: 1, ease: "deck.morph" }, at);
+      tl.to(`${sel} .face-card`, { opacity: 0, duration: 0.35 }, `${at}+=0.1`);
+      tl.to(`${sel} .face-block`, { opacity: 1, duration: 0.4 }, `${at}+=0.45`);
       tl.to(
         sel,
         { boxShadow: "0 0 0 rgba(16,24,40,0)", duration: 0.3 },
-        after(0.8),
+        `${at}+=0.8`,
       );
-    });
-    tl.to(".cur-a", { opacity: 0, duration: 0.3 }, "fly2+=0.4");
+      return at;
+    };
+    const fly2 = approveTop(REQUESTS[1]!, ".card-r2", 1);
+    // The last one closes up under the pointer, and is approved in turn.
+    tl.fromTo(
+      ".card-r3",
+      { y: y1 },
+      { y: y0, duration: 0.55, ease: "deck.morph", immediateRender: false },
+      `${fly2}+=0.3`,
+    );
+    const fly3 = approveTop(REQUESTS[2]!, ".card-r3", 0);
+    tl.to(".count", { opacity: 0, scale: 0.5, duration: 0.3 }, `${fly3}-=0.1`);
+    tl.to(".cur-a", { opacity: 0, duration: 0.3 }, `${fly3}+=0.4`);
     tl.from(
       ".done",
       { opacity: 0, y: 16, scale: 0.96, duration: 0.6, ease: "deck.enter" },
-      "fly2+=0.75",
+      `${fly3}+=0.75`,
     );
-    // Told: a ring goes out from each class that changed.
+    // Updated: a ring goes out from each class that changed.
     tl.fromTo(
       ".told",
       { scale: 1, opacity: 0.95 },
@@ -328,12 +314,12 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
         ease: "power2.out",
         immediateRender: false,
       },
-      "fly2+=1.1",
+      `${fly3}+=1.1`,
     );
     tl.from(
       ".toast",
       { opacity: 0, y: 24, duration: 0.55, ease: "deck.enter" },
-      "fly2+=1.2",
+      `${fly3}+=1.2`,
     );
     mark();
   });
@@ -344,8 +330,8 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
       flipId={flipId}
       strip={
         <div className="flex justify-center">
-          <StatusPill icon="bell" tone="accent" className="toast">
-            Everyone affected has been told
+          <StatusPill icon="calendarCheck" tone="accent" className="toast">
+            Every affected timetable updated
           </StatusPill>
         </div>
       }
@@ -385,22 +371,6 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
           </span>
         </div>
         <div
-          className="approve-all absolute flex items-center justify-center gap-1.5 rounded-lg text-[13.5px] font-semibold"
-          style={{
-            left: ALL_AT.x - QUEUE.x - ALL.w / 2,
-            top: ALL_AT.y - QUEUE.y - ALL.h / 2,
-            width: ALL.w,
-            height: ALL.h,
-            opacity: 0,
-            color: "var(--slate)",
-            background: "rgba(68,88,121,0.1)",
-            boxShadow: "inset 0 0 0 1px rgba(68,88,121,0.25)",
-          }}
-        >
-          <Icon name="check" size={15} stroke={2.4} />
-          Approve all
-        </div>
-        <div
           className="done absolute inset-x-0 flex flex-col items-center text-center"
           style={{ top: 150 }}
         >
@@ -433,7 +403,7 @@ export function ApprovalsInbox({ step, active, flipId }: ApprovalsInboxProps) {
         <RequestCard key={r.key} r={r} />
       ))}
 
-      {/* A ring per class that changed, for "everyone affected has been told". */}
+      {/* A ring per class that changed: every affected timetable updated. */}
       {REQUESTS.map((r) => {
         const c = cell(G, r.lands.col, r.lands.hour);
         return (

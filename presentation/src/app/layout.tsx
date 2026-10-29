@@ -12,7 +12,7 @@ import localFont from "next/font/local";
 export const metadata: Metadata = {
   title: "Presenting Plannr — a design thinking study",
   description:
-    "How four students researched the people who use, run and maintain a college timetable — and the system we designed from it.",
+    "How four students researched the people who use and run a college timetable — and the system we designed from it.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "48x48" },

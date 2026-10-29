@@ -139,12 +139,13 @@ const TOOLTIP: CSSProperties = {
   whiteSpace: "pre-wrap",
 };
 
-/** Under the pointer, kept inside the window's right edge. */
+/** Under the pointer, kept inside the window's left and right edges. */
 function tooltipAt(b: Booking, view: View) {
   const tip = tipOf(b);
+  const left = view.x + 8;
   const right = view.x + VIEWPORT.width / view.k - 8;
   return {
-    left: Math.min(tip.x - 3, right - TIP.width),
+    left: Math.max(left, Math.min(tip.x - 3, right - TIP.width)),
     top: tip.y + TIP.below,
   };
 }
@@ -224,7 +225,7 @@ export function FacultyHunt({ step, active }: FacultyHuntProps) {
   const root = useRef<HTMLDivElement>(null);
   const { instant } = useDeckRuntime();
 
-  useSteps(root, step, (tl, mark) => {
+  const builds = useSteps(root, step, (tl, mark) => {
     const scope = root.current;
     const target = hoverTargets(scope?.querySelector(".fh-page"));
 
@@ -411,7 +412,12 @@ export function FacultyHunt({ step, active }: FacultyHuntProps) {
       const target = hoverTargets(scope?.querySelector(".fh-page"));
       const tooltip = scope?.querySelector<HTMLElement>(".fh-tip-live");
       const waited = { s: 0 };
-      const loop = gsap.timeline({ delay: SETTLE });
+      // It starts once the window has stepped back to the whole day: if build
+      // 1 is still playing (stepped through quickly), after the rest of it
+      // too, so no tooltip shows for a class the window does not show yet.
+      const tl = builds.current;
+      const behind = tl ? Math.max(0, (tl.labels.s1 ?? 0) - tl.time()) : 0;
+      const loop = gsap.timeline({ delay: SETTLE + behind });
       ALL.forEach((b, i) => {
         const t = target(b);
         if (i) {
