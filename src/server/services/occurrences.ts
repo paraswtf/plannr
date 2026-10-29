@@ -6,8 +6,12 @@
  * depends on: readers (the grid, conflict checks, availability) then never have
  * to think about recurrence rules or exceptions at all.
  *
- * Regeneration deletes and rebuilds rather than diffing. A series is capped at
- * 500 occurrences, so correctness is worth more than the saved writes.
+ * Regeneration reconciles rather than rebuilding: each sitting is the row for
+ * one natural start (its `originalStart`), and keeps that row, and its id,
+ * across every edit that leaves the natural start where it was. That is not an
+ * optimisation. Registers hang off occurrence ids (`AttendanceSession` cascades
+ * from `EventOccurrence`), so a rebuild that deleted and recreated the rows
+ * deleted every register ever taken for the class, on any edit at all.
  */
 
 import type {
@@ -32,13 +36,20 @@ export interface RegenerateResult {
 }
 
 /**
- * Rebuilds every occurrence row for one event.
+ * Brings every occurrence row for one event into line with its rule and its
+ * exceptions.
  *
  * Exceptions are matched to natural occurrences by `originalStart`. Cancelled
  * occurrences are still written (with CANCELLED status) so the UI can show a
  * ghost and offer to restore them; scheduling queries filter them out.
- * Exceptions whose anchor no longer exists — because the series was retimed —
+ * Exceptions whose anchor no longer exists (because the series was retimed)
  * are deleted, otherwise they would silently suppress the wrong dates.
+ *
+ * Rows are matched to the sittings they stand for by natural start: a row that
+ * still has its sitting is updated where it differs, a sitting with no row gets
+ * one, and a row whose sitting no longer exists is deleted, unless a register
+ * has been taken on it. Then it is history, kept as it was rather than erased
+ * along with the attendance it carries.
  */
 export async function regenerateOccurrences(
   db: Db,
@@ -63,9 +74,12 @@ export async function regenerateOccurrences(
   );
 
   const rows: Prisma.EventOccurrenceCreateManyInput[] = [];
+  /** The natural start each row in `rows` stands for, by index. */
+  const keys: number[] = [];
   const matchedExceptionIds = new Set<string>();
 
   for (const { start, end } of natural) {
+    keys.push(start.getTime());
     const exception = byOriginalStart.get(start.getTime());
     if (exception) matchedExceptionIds.add(exception.id);
 
@@ -103,26 +117,86 @@ export async function regenerateOccurrences(
     .filter((e) => !matchedExceptionIds.has(e.id))
     .map((e) => e.id);
 
-  // Read before the delete: once the rows are gone there is nothing to compare
-  // the new ones with, and "what changed" is the whole of a class-change
-  // notification.
-  const sittingsBefore: Sitting[] = await db.eventOccurrence.findMany({
+  // Read before anything changes: this is what the sittings were, which is
+  // both what the rows are matched against and, for a class-change
+  // notification, the "before" of what changed.
+  const existing = await db.eventOccurrence.findMany({
     where: { eventId },
     select: {
+      id: true,
       start: true,
       end: true,
       roomId: true,
+      groupId: true,
       facultyId: true,
+      kind: true,
       status: true,
+      exceptionId: true,
+      exception: { select: { originalStart: true } },
+      _count: { select: { attendance: true } },
     },
   });
+  const sittingsBefore: Sitting[] = existing.map((row) => ({
+    start: row.start,
+    end: row.end,
+    roomId: row.roomId,
+    facultyId: row.facultyId,
+    status: row.status,
+  }));
 
-  await db.eventOccurrence.deleteMany({ where: { eventId } });
+  // A row's sitting is its exception's original start, or its own start when
+  // it has no exception (an unmodified sitting sits where the rule put it).
+  const byKey = new Map<number, (typeof existing)[number]>();
+  for (const row of existing) {
+    const key = (row.exception?.originalStart ?? row.start).getTime();
+    if (!byKey.has(key)) byKey.set(key, row);
+  }
+
+  const creates: Prisma.EventOccurrenceCreateManyInput[] = [];
+  const kept = new Set<string>();
+  // Updates grouped by what they change, so a series-wide edit (a new room for
+  // every sitting) is one statement rather than one per sitting.
+  const updates = new Map<string, { data: OccurrenceFields; ids: string[] }>();
+  rows.forEach((row, index) => {
+    const current = byKey.get(keys[index]!);
+    if (!current || kept.has(current.id)) {
+      creates.push(row);
+      return;
+    }
+    kept.add(current.id);
+    const data = changedFields(current, row);
+    if (!data) return;
+    const signature = JSON.stringify(data);
+    const group = updates.get(signature) ?? { data, ids: [] };
+    group.ids.push(current.id);
+    updates.set(signature, group);
+  });
+
+  const leftOver = existing.filter((row) => !kept.has(row.id));
+  const history = leftOver.filter((row) => row._count.attendance > 0);
+  const gone = leftOver.filter((row) => row._count.attendance === 0);
+
+  if (gone.length) {
+    await db.eventOccurrence.deleteMany({
+      where: { id: { in: gone.map((row) => row.id) } },
+    });
+  }
+  if (history.length) {
+    // Detached from the rule's exceptions: the sitting they stood for is gone,
+    // and an exception id is unique to the one row that does stand for it.
+    await db.eventOccurrence.updateMany({
+      where: { id: { in: history.map((row) => row.id) } },
+      data: { exceptionId: null },
+    });
+  }
   if (orphanIds.length) {
     await db.eventException.deleteMany({ where: { id: { in: orphanIds } } });
   }
-  if (rows.length) {
-    await db.eventOccurrence.createMany({ data: rows });
+  for (const { data, ids } of updates.values()) {
+    await db.eventOccurrence.updateMany({ where: { id: { in: ids } }, data });
+  }
+  if (creates.length) {
+    await db.eventOccurrence.createMany({ data: creates });
   }
 
   // Everyone whose Google Calendar mirrors this event is now out of date.
@@ -141,6 +215,50 @@ export async function regenerateOccurrences(
   }
 
   return { written: rows.length, prunedExceptions: orphanIds.length };
+}
+
+/** What a regeneration may change on a row that keeps standing for its sitting. */
+type OccurrenceFields = Pick<
+  Prisma.EventOccurrenceUncheckedUpdateManyInput,
+  | "start"
+  | "end"
+  | "roomId"
+  | "groupId"
+  | "facultyId"
+  | "kind"
+  | "status"
+  | "exceptionId"
+>;
+
+/** The fields of `wanted` that differ from `current`, or null when none do. */
+function changedFields(
+  current: {
+    start: Date;
+    end: Date;
+    roomId: string;
+    groupId: string | null;
+    facultyId: string | null;
+    kind: string;
+    status: string;
+    exceptionId: string | null;
+  },
+  wanted: Prisma.EventOccurrenceCreateManyInput,
+): OccurrenceFields | null {
+  const data: OccurrenceFields = {};
+  const start = new Date(wanted.start);
+  const end = new Date(wanted.end);
+  if (current.start.getTime() !== start.getTime()) data.start = start;
+  if (current.end.getTime() !== end.getTime()) data.end = end;
+  if (current.roomId !== wanted.roomId) data.roomId = wanted.roomId;
+  if (current.groupId !== (wanted.groupId ?? null))
+    data.groupId = wanted.groupId ?? null;
+  if (current.facultyId !== (wanted.facultyId ?? null))
+    data.facultyId = wanted.facultyId ?? null;
+  if (current.kind !== wanted.kind) data.kind = wanted.kind;
+  if (current.status !== wanted.status) data.status = wanted.status;
+  if (current.exceptionId !== (wanted.exceptionId ?? null))
+    data.exceptionId = wanted.exceptionId ?? null;
+  return Object.keys(data).length ? data : null;
 }
 
 /** The fields a series edit may change. Deliberately narrower than Prisma's
@@ -232,6 +350,20 @@ export async function splitSeriesAt(
       data: { eventId: created.id },
     });
   }
+  // The sittings from the pivot on go with them, so that a register taken on
+  // one stays on it: regenerating the new series then finds these rows and
+  // updates them, rather than deleting them from the old series and making new
+  // ones without their registers.
+  await db.eventOccurrence.updateMany({
+    where: {
+      eventId,
+      OR: [
+        ...(movingIds.length ? [{ exceptionId: { in: movingIds } }] : []),
+        { exceptionId: null, start: { gte: pivotStart } },
+      ],
+    },
+    data: { eventId: created.id },
+  });
 
   await regenerateOccurrences(db, eventId);
   await regenerateOccurrences(db, created.id);

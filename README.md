@@ -109,6 +109,12 @@ Two consequences worth knowing:
   is why one is not needed.
 - Any write to an `Event` must call `regenerateOccurrences` in the _same_
   transaction. That invariant is what lets every reader stay simple.
+- Regeneration reconciles rather than rebuilds. Each row stands for one natural
+  start and is updated in place while that sitting exists, because registers
+  hang off occurrence ids: a rebuild erased every register taken for a class on
+  any edit to it. A row whose sitting is gone is deleted unless it has a
+  register, in which case it is kept as it was, and a "this and following"
+  split carries the rows from the pivot on to the new series.
 
 Occurrences are expanded in **local wall time**, not UTC: "Tuesdays at 09:00"
 means 09:00 in the institution's timezone. The `rrule` library does its
@@ -180,10 +186,10 @@ Three details carry most of the weight:
 
 - **Tasks are per (person, event), not per occurrence.** One edit to a
   semester-long class with sixty students is sixty rows, not 2,400.
-- **Mirrors are keyed on `(eventId, originalStart)`, never the occurrence id** —
-  regeneration reissues those ids on every write. `originalStart` survives, which
-  is what makes a reschedule a _patch_ to the same Google event, preserving the
-  reminder someone set on it.
+- **Mirrors are keyed on `(eventId, originalStart)`, never the occurrence id.**
+  A sitting keeps its row through ordinary edits, but not through a series being
+  retimed or split. `originalStart` survives, which is what makes a reschedule a
+  _patch_ to the same Google event, preserving the reminder someone set on it.
 - **A digest of the rendered body decides whether to call Google at all.** An
   unchanged class costs one database read and no API call, which is what makes
   the nightly full resync affordable.

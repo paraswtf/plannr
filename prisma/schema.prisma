@@ -1204,8 +1204,9 @@ model CalendarConnection {
 /// One occurrence, as it currently stands in one person's Google Calendar.
 ///
 /// Keyed on `(eventId, originalStart)` rather than on the occurrence id, and
-/// that is not a detail: `regenerateOccurrences` deletes and recreates every
-/// row for an event on any write, so occurrence ids do not survive an edit.
+/// that is not a detail: `regenerateOccurrences` keeps a sitting's row through
+/// ordinary edits, but a series that is retimed or split gets new rows, so an
+/// occurrence id is not a name that lasts.
 /// `originalStart` — the slot the recurrence rule produced, before any
 /// exception moved it — does survive, and is what lets a reschedule become a
 /// patch of the same Google event rather than a delete and a re-create that
