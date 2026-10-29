@@ -5,7 +5,7 @@ import {
   PermissionFlags as F,
   SYSTEM_ROLES,
 } from "./permissions";
-import { canOpen, homeFor, navFor } from "./role-nav";
+import { APP_PREFIXES, canOpen, homeFor, isAppRoute, navFor } from "./role-nav";
 
 const permsFor = (...keys: string[]) =>
   PermissionBitField.fromRoles(
@@ -163,5 +163,26 @@ describe("canOpen", () => {
   it("grants the timetable through an implied permission", () => {
     // A coordinator holds ManageAllEvents, never ViewAllEvents directly.
     expect(canOpen(permsFor("coordinator"), "/timetable")).toBe(true);
+  });
+});
+
+describe("the notifications inbox", () => {
+  it("needs a session, so the middleware sends a signed-out visitor to sign in", () => {
+    expect(APP_PREFIXES).toContain("/notifications");
+    expect(isAppRoute("/notifications")).toBe(true);
+    expect(isAppRoute("/notifications/anything")).toBe(true);
+    expect(isAppRoute("/notificationsish")).toBe(false);
+  });
+
+  it("opens for anybody signed in, whatever they hold", () => {
+    // It lives in the sidebar's footer, not in the nav, and carries no rule:
+    // everybody has an inbox, a freshly imported account with no roles too.
+    expect(canOpen(0n, "/notifications")).toBe(true);
+    expect(canOpen(permsFor("student"), "/notifications")).toBe(true);
+    expect(canOpen(F.ViewRooms, "/notifications")).toBe(true);
+  });
+
+  it("is not a nav item", () => {
+    expect(hrefs(permsFor("admin"))).not.toContain("/notifications");
   });
 });

@@ -123,9 +123,9 @@ export function PushSettings() {
         <EmptyState
           compact
           icon="alert"
-          title="Notifications are not switched on for this institution."
+          title="Push notifications are not set up on this server."
         >
-          Nothing here needs your attention.
+          Your inbox in Plannr still gets everything you choose below.
         </EmptyState>
       </Card>
     );
@@ -160,10 +160,9 @@ export function PushSettings() {
       </div>
 
       <p className="text-ink mt-4 max-w-[62ch] text-sm leading-relaxed">
-        When a class of yours moves, is cancelled, comes back or is added, your
-        phone tells you straight away, even with Plannr closed. You only hear
-        about classes in your own groups, or the ones you teach, in the next two
-        weeks.
+        With this on, this device tells you straight away when there is news for
+        you, even with Plannr closed: a class of yours that moves, is cancelled,
+        comes back or is added, and whatever else you choose below.
       </p>
 
       {support === "install-first" && (

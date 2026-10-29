@@ -166,6 +166,7 @@ model Organization {
   calendarLinks      CalendarConnection[]
   apiKeys            ApiKey[]
   scheduleFavourites ScheduleFavourite[]
+  notifications      Notification[]
 }
 
 model OrgSettings {
@@ -225,33 +226,37 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles              UserRole[]
-  accounts           Account[]
-  sessions           Session[]
-  studentProfile     StudentProfile?
-  facultyProfile     FacultyProfile?
-  createdEvents      Event[]                @relation("EventCreator")
-  decidedEvents      Event[]                @relation("EventDecider")
-  changeRequests     EventChangeRequest[]   @relation("ChangeRequester")
-  decidedChanges     EventChangeRequest[]   @relation("ChangeDecider")
-  importBatches      ImportBatch[]
-  outboxEntries      EmailOutbox[]
-  schedulePlans      SchedulePlan[]         @relation("PlanCreator")
-  planReviews        SchedulePlanReviewer[]
-  planComments       SchedulePlanComment[]  @relation("PlanCommenter")
-  attendanceTaken    AttendanceSession[]    @relation("AttendanceMarker")
-  calendar           CalendarConnection?
+  roles                   UserRole[]
+  accounts                Account[]
+  sessions                Session[]
+  studentProfile          StudentProfile?
+  facultyProfile          FacultyProfile?
+  createdEvents           Event[]                  @relation("EventCreator")
+  decidedEvents           Event[]                  @relation("EventDecider")
+  changeRequests          EventChangeRequest[]     @relation("ChangeRequester")
+  decidedChanges          EventChangeRequest[]     @relation("ChangeDecider")
+  importBatches           ImportBatch[]
+  outboxEntries           EmailOutbox[]
+  schedulePlans           SchedulePlan[]           @relation("PlanCreator")
+  planReviews             SchedulePlanReviewer[]
+  planComments            SchedulePlanComment[]    @relation("PlanCommenter")
+  attendanceTaken         AttendanceSession[]      @relation("AttendanceMarker")
+  calendar                CalendarConnection?
   /// The key this row is the machine identity for, if it is one.
-  apiKey             ApiKey?                @relation("ApiKeyPrincipal")
-  apiKeysOwned       ApiKey[]               @relation("ApiKeyOwner")
-  apiKeysCreated     ApiKey[]               @relation("ApiKeyCreator")
-  apiKeysRevoked     ApiKey[]               @relation("ApiKeyRevoker")
+  apiKey                  ApiKey?                  @relation("ApiKeyPrincipal")
+  apiKeysOwned            ApiKey[]                 @relation("ApiKeyOwner")
+  apiKeysCreated          ApiKey[]                 @relation("ApiKeyCreator")
+  apiKeysRevoked          ApiKey[]                 @relation("ApiKeyRevoker")
   /// Whose schedules this person keeps one tap away.
-  scheduleFavourites ScheduleFavourite[]    @relation("FavouriteHolder")
+  scheduleFavourites      ScheduleFavourite[]      @relation("FavouriteHolder")
   /// The people who keep *this* person one tap away.
-  favouritedBy       ScheduleFavourite[]    @relation("FavouritePerson")
+  favouritedBy            ScheduleFavourite[]      @relation("FavouritePerson")
   /// The devices this person has said yes to notifications on.
-  pushSubscriptions  PushSubscription[]
+  pushSubscriptions       PushSubscription[]
+  /// Their inbox, and what each item still owes their devices.
+  notifications           Notification[]
+  /// What they have chosen to hear about, and where.
+  notificationPreferences NotificationPreference[]
 
   @@index([orgId, name])
   @@index([orgId, email])
@@ -1261,6 +1266,82 @@ model CalendarSyncTask {
 
   @@unique([connectionId, eventId])
   @@index([status, nextAttemptAt])
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+/// What a notification is about. Each one is a row on the settings tab, with a
+/// switch for the inbox and a switch for push, so somebody can keep hearing
+/// about their classes on their phone and read everything else in Plannr.
+enum NotificationCategory {
+  /// A class you attend or teach moved, was called off, was added or is back.
+  CLASS_CHANGES
+  /// A booking or a change you asked for was approved or declined.
+  REQUESTS
+  /// A booking or a change is waiting for you to approve it.
+  APPROVALS
+  /// A schedule plan wants your review, or a plan of yours was reviewed.
+  PLAN_REVIEWS
+}
+
+/// One piece of news for one person: a row in their inbox, and the push it
+/// owes their devices.
+///
+/// A row per person rather than per audience, because "read" is per person. A
+/// class change reaching sixty students is sixty rows, which is the price of
+/// sixty people each being able to clear it.
+model Notification {
+  id     String       @id @default(cuid())
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  category  NotificationCategory
+  title     String
+  body      String
+  /// Where opening it takes you, as a path inside the app.
+  url       String
+  /// What it is news of, for example "class-change:<notice id>". Unique per
+  /// person, so the same news written twice (a retried dispatch, two clicks on
+  /// Approve) reaches them once.
+  sourceKey String?
+
+  /// False when the person has the inbox off for this category but still wants
+  /// it pushed: the row exists to carry the push and is never listed.
+  inInbox Boolean   @default(true)
+  readAt  DateTime?
+
+  /// A push is owed to this person's devices and has not been sent yet. Cleared
+  /// when it is sent, when it can never be, and when it is given up on.
+  pushPending   Boolean   @default(false)
+  /// A lease on the push, so two dispatchers never send the same one and a
+  /// dispatcher that dies mid-send only delays it.
+  pushClaimedAt DateTime?
+  pushAttempts  Int       @default(0)
+  pushedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sourceKey])
+  @@index([userId, inInbox, createdAt])
+  @@index([userId, readAt])
+  @@index([pushPending, createdAt])
+}
+
+/// Somebody's own choice for one category. No row means the category's
+/// default, which is everything on: a person who never opens the settings tab
+/// still hears about their classes.
+model NotificationPreference {
+  userId   String
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category NotificationCategory
+  inApp    Boolean              @default(true)
+  push     Boolean              @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
 }
 
 // ─── Push notifications ─────────────────────────────────────────────────────

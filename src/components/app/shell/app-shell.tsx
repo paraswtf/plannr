@@ -10,6 +10,7 @@ import { IconButton, iconButtonClass } from "~/components/ui/button";
 import { Icon, type IconName } from "~/components/ui/icon";
 import { contactAddress, personName } from "~/lib/people";
 import { navFor } from "~/lib/role-nav";
+import { api } from "~/trpc/react";
 
 /**
  * The frame every screen sits in.
@@ -55,6 +56,16 @@ export function AppShell({
   // Someone who teaches and coordinates sees the union of both, so the nav is
   // derived from what they can do rather than from a single role.
   const items = navFor(BigInt(permissions));
+
+  // Read once, here, and handed to every place that shows it: the sidebar, the
+  // phone's overlay and the phone's top bar would otherwise each poll for the
+  // same number. A minute is soon enough for news that is also pushed, and
+  // coming back to the tab asks again at once.
+  const { data: unreadData } = api.notifications.unreadCount.useQuery(
+    undefined,
+    { refetchInterval: 60_000, refetchOnWindowFocus: true },
+  );
+  const unread = unreadData?.count ?? 0;
 
   const [folded, setFolded] = useState(defaultFolded);
   const [open, setOpen] = useState(false);
@@ -116,6 +127,28 @@ export function AppShell({
         <Link href="/" className="flex min-w-0 items-center">
           <PlannrLogo height={24} wordmarkSize={17} />
         </Link>
+        {/*
+         * The bell is out here as well as in the menu, so news is seen
+         * without opening anything: on a phone the sidebar is out of sight
+         * until it is asked for.
+         */}
+        <Link
+          href="/notifications"
+          aria-label={notificationsLabel(unread)}
+          title={notificationsLabel(unread)}
+          aria-current={isNotifications(pathname) ? "page" : undefined}
+          className={iconButtonClass("ghost", "md", "relative ml-auto")}
+        >
+          <Icon name="bell" size={18} stroke={1.85} />
+          {unread > 0 && (
+            <span
+              aria-hidden
+              className="bg-slate text-2xs absolute -top-0.5 -right-0.5 min-w-[18px] rounded-full px-1 text-center leading-[18px] font-semibold text-white tabular-nums"
+            >
+              {countLabel(unread)}
+            </span>
+          )}
+        </Link>
       </header>
 
       {/* The sidebar proper, from the breakpoint where it fits. */}
@@ -134,6 +167,7 @@ export function AppShell({
           roleNames={roleNames}
           user={user}
           folded={folded}
+          unread={unread}
           onFold={() => fold(!folded)}
         />
       </aside>
@@ -179,6 +213,7 @@ export function AppShell({
               roleNames={roleNames}
               user={user}
               folded={false}
+              unread={unread}
             />
           </div>
         </>
@@ -201,6 +236,7 @@ function SidebarBody({
   roleNames,
   user,
   folded,
+  unread,
   onFold,
 }: {
   items: ReturnType<typeof navFor>;
@@ -209,6 +245,8 @@ function SidebarBody({
   roleNames: string[];
   user: { name: string | null; email: string };
   folded: boolean;
+  /** Notifications not yet opened, for the count beside the inbox link. */
+  unread: number;
   /** Absent in the overlay, which has nothing to fold. */
   onFold?: () => void;
 }) {
@@ -280,28 +318,9 @@ function SidebarBody({
                 aria-label={folded ? item.label : undefined}
                 aria-current={active ? "page" : undefined}
                 title={folded ? item.label : undefined}
-                className={`plr-clip group flex min-h-10 items-center gap-2.5 rounded-[10px] text-base font-semibold active:scale-[0.98] ${
-                  folded ? "justify-center px-0" : "px-3"
-                } ${
-                  // The current screen is a wash of slate with slate ink, not a
-                  // slate fill: filled slate is the primary button's colour, and
-                  // a nav that wore it on every screen out-shouted the one
-                  // action each screen is for.
-                  active
-                    ? "bg-tint-selected text-slate-ink shadow-[inset_0_0_0_1px_var(--hair-soft)]"
-                    : "text-muted hover:bg-tint-hover hover:text-title"
-                }`}
+                className={navLinkClass(active, folded)}
               >
-                <Icon
-                  name={item.icon as IconName}
-                  size={18}
-                  stroke={active ? 2.1 : 1.85}
-                  className={
-                    active
-                      ? "text-slate"
-                      : "text-faint group-hover:text-muted transition-colors duration-150"
-                  }
-                />
+                <NavIcon name={item.icon as IconName} active={active} />
                 {!folded && <span className="truncate">{item.label}</span>}
               </Link>
             </div>
@@ -309,8 +328,21 @@ function SidebarBody({
         })}
       </nav>
 
+      {/*
+       * The inbox sits at the foot, just above whoever is signed in, rather
+       * than among the screens: it is not somewhere you go to do a job, it is
+       * what has happened to you, and it is the same for every role.
+       */}
+      <div className="mt-auto pt-4">
+        <NotificationsLink
+          pathname={pathname}
+          folded={folded}
+          unread={unread}
+        />
+      </div>
+
       <div
-        className={`mt-auto flex items-center gap-2.5 pt-4 ${folded ? "flex-col" : "px-1"}`}
+        className={`mt-2 flex items-center gap-2.5 pt-4 ${folded ? "flex-col" : "px-1"}`}
         style={{ boxShadow: "inset 0 1px 0 var(--hair-soft)" }}
       >
         <span title={folded ? personName(user) : undefined} className="mt-4">
@@ -336,5 +368,99 @@ function SidebarBody({
         </Link>
       </div>
     </>
+  );
+}
+
+/** Under /notifications, the inbox and anything beneath it. */
+function isNotifications(pathname: string) {
+  return (
+    pathname === "/notifications" || pathname.startsWith("/notifications/")
+  );
+}
+
+/** What a badge can fit: the number, until it stops being worth counting. */
+function countLabel(count: number) {
+  return count > 99 ? "99+" : String(count);
+}
+
+function notificationsLabel(unread: number) {
+  return unread > 0 ? `Notifications, ${unread} unread` : "Notifications";
+}
+
+function navLinkClass(active: boolean, folded: boolean) {
+  return `plr-clip group flex min-h-10 items-center gap-2.5 rounded-[10px] text-base font-semibold active:scale-[0.98] ${
+    folded ? "justify-center px-0" : "px-3"
+  } ${
+    // The current screen is a wash of slate with slate ink, not a slate fill:
+    // filled slate is the primary button's colour, and a nav that wore it on
+    // every screen out-shouted the one action each screen is for.
+    active
+      ? "bg-tint-selected text-slate-ink shadow-[inset_0_0_0_1px_var(--hair-soft)]"
+      : "text-muted hover:bg-tint-hover hover:text-title"
+  }`;
+}
+
+function NavIcon({ name, active }: { name: IconName; active: boolean }) {
+  return (
+    <Icon
+      name={name}
+      size={18}
+      stroke={active ? 2.1 : 1.85}
+      className={
+        active
+          ? "text-slate"
+          : "text-faint group-hover:text-muted transition-colors duration-150"
+      }
+    />
+  );
+}
+
+/**
+ * The inbox, drawn as one more nav link with the count after its label. The
+ * folded rail has no room for a number, so it shows a dot on the bell and
+ * leaves the number to the link's name.
+ */
+function NotificationsLink({
+  pathname,
+  folded,
+  unread,
+}: {
+  pathname: string;
+  folded: boolean;
+  unread: number;
+}) {
+  const active = isNotifications(pathname);
+  const label = notificationsLabel(unread);
+  return (
+    <Link
+      href="/notifications"
+      aria-label={folded || unread > 0 ? label : undefined}
+      aria-current={active ? "page" : undefined}
+      title={folded ? label : undefined}
+      className={navLinkClass(active, folded)}
+    >
+      <span className="relative flex">
+        <NavIcon name="bell" active={active} />
+        {folded && unread > 0 && (
+          <span
+            aria-hidden
+            className="bg-slate absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full shadow-[0_0_0_2px_var(--surface)]"
+          />
+        )}
+      </span>
+      {!folded && (
+        <>
+          <span className="truncate">Notifications</span>
+          {unread > 0 && (
+            <span
+              aria-hidden
+              className="bg-info-wash text-info text-2xs ml-auto rounded-[6px] px-1.5 py-0.5 font-mono leading-none font-semibold tabular-nums"
+            >
+              {countLabel(unread)}
+            </span>
+          )}
+        </>
+      )}
+    </Link>
   );
 }

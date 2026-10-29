@@ -259,7 +259,7 @@ somebody else. The emergency stop is the honest one: deactivate the person, and
 every key they hold stops on the next request with the audit trail intact.
 
 **Endpoints marked `person` accept one; endpoints marked `session` do not.** The
-Siri endpoints are the former. The `/timetable/my-*`, `/me`-shaped and
+Siri endpoints and the notification inbox are the former. The `/timetable/my-*`, `/me`-shaped and
 `/api-keys` endpoints remain browser-only, and widening any of them is a
 deliberate decision rather than a consequence of this feature.
 
@@ -269,6 +269,8 @@ deliberate decision rather than a consequence of this feature.
 | `POST /me/api-keys`                 | browser only               |
 | `POST /me/api-keys/{id}/revoke`     | browser only               |
 | `GET /siri/*`                       | browser or a personal key  |
+| `/notifications` inbox and preferences | browser or a personal key |
+| `/notifications/push/*`             | browser only               |
 
 ### The endpoints that refuse a key, and what to call instead
 
@@ -285,6 +287,8 @@ deliberate decision rather than a consequence of this feature.
 | `GET /users/me`                                        | `GET /users/{id}` — say who you mean                                                                                                                                 |
 | `GET /faculty/me`                                      | `GET /faculty` — search the directory                                                                                                                                |
 | `GET /calendar/connection` and the rest of `/calendar` | Nothing, and no scope can change this. A calendar connection is a person's own grant on their own Google account, and no permission in Plannr opens somebody else's. |
+| `/notifications/push` and everything under it          | Nothing. A push subscription is one browser on one person's phone, and an application has none.                                                                      |
+| the rest of `/notifications`, for a service key only   | Nothing. An inbox belongs to a person. A personal key is somebody, and reads and clears its owner's inbox as they could.                                             |
 | everything under `/api-keys`                           | Nothing. Keys are administered by people.                                                                                                                            |
 
 There is one more wall a key hits, and it is inside a procedure rather than at
@@ -718,6 +722,7 @@ list in a single request, which for most of these endpoints is the default.
 | `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`inactive`/`never-signed-in`)                                                           |
 | `GET /roles`                      | 1–500, default 200   | none                                                                                                                                |
 | `GET /api-keys`                   | 1–500, default 200   | none                                                                                                                                |
+| `GET /notifications`              | 1–200, default 50    | `filter` (`all`/`unread`), newest first so page 1 is what is new                                                                    |
 
 `includeIds` pins particular rows into the page even when the search excludes
 them — it is how a picker keeps a chosen option visible, and not a way to fetch
@@ -1002,7 +1007,7 @@ date the recurrence rule produced, not the date the sitting was moved to.
 
 ## Endpoint reference
 
-139 endpoints in 16 groups. This is the map; `GET /api/v1/openapi.json` is the
+158 endpoints in 18 groups. This is the map; `GET /api/v1/openapi.json` is the
 territory — it carries every parameter, every schema and every field, generated
 from the procedures themselves, along with the long-form description of each
 endpoint. Where a summary below reads as though it is hiding something, that
@@ -1091,6 +1096,34 @@ never included reaching into the calendars it lands in.
 | `GET /calendar/connection`         | Read the caller's own calendar connection  | —      | person only             |
 | `POST /calendar/connection/resync` | Bring the caller's calendar up to date now | —      | person only             |
 | `DELETE /calendar/connection`      | Disconnect the caller's calendar           | —      | person only, read twice |
+
+### Notifications
+
+A person's own inbox, and how they hear about things. The inbox is a row per
+person for each piece of news, so reading or clearing one never touches anybody
+else's. There are four categories (`CLASS_CHANGES`, `REQUESTS`, `APPROVALS`,
+`PLAN_REVIEWS`), and for each one a person chooses whether it lands in the inbox
+(`inApp`), is pushed to their phone (`push`), both or neither. Both are on until
+they say otherwise. The preferences list shows only the categories the caller
+can receive: a student is never asked about approvals they cannot give.
+
+The inbox routes are person only in the sense that a service key is refused; a
+personal key reads and clears its owner's inbox. They declare no scope, because
+nobody needs a permission to read their own, so the Scopes column reads `none`. The four `/notifications/push`
+routes are for a browser registering itself, and refuse every key.
+
+| Endpoint                                    | What it does                                             | Scopes | Notes                          |
+| ------------------------------------------- | -------------------------------------------------------- | ------ | ------------------------------ |
+| `GET /notifications`                        | List the caller's notifications, newest first            | none   | person only, takes `filter`    |
+| `GET /notifications/unread-count`           | Count the caller's unread notifications                  | none   | person only                    |
+| `POST /notifications/read`                  | Mark some notifications read                             | none   | person only, other ids ignored |
+| `POST /notifications/read-all`              | Mark every notification read                             | none   | person only                    |
+| `GET /notifications/preferences`            | Read how the caller hears about each category            | none   | person only                    |
+| `PUT /notifications/preferences/{category}` | Choose how the caller hears about one category           | none   | person only                    |
+| `GET /notifications/push`                   | Whether push is available, and the key to subscribe with | none   | browser only                   |
+| `POST /notifications/push/subscriptions`    | Turn notifications on for this browser                   | none   | browser only                   |
+| `POST /notifications/push/unsubscribe`      | Turn notifications off for this browser                  | none   | browser only                   |
+| `POST /notifications/push/test`             | Send a test notification to the caller's devices         | none   | browser only                   |
 
 ### Events
 
@@ -1369,7 +1402,7 @@ Dictionary Value, Speak Text, and there is nothing left to configure. Anything
 that wants the underlying data should read the timetable rather than parse
 English back apart.
 
-These are the only endpoints a [personal key](#personal-keys) may call. That is
+With the notification inbox above, these are the only endpoints a [personal key](#personal-keys) may call. That is
 enforced the safe way round — a personal key is refused everywhere by default
 and admitted here by name — because a good deal of the app is gated on identity
 rather than on a permission bit, and narrow scopes would not have protected

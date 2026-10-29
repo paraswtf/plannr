@@ -49,6 +49,8 @@ import {
   type SolverRequirement,
 } from "~/server/services/schedule-builder/solve";
 import type { Db } from "~/server/services/occurrences";
+import { withNote } from "~/server/services/notifications/audience";
+import { notify } from "~/server/services/notifications/notify";
 import { PlanStatus } from "../../../../generated/prisma";
 
 /**
@@ -1365,6 +1367,22 @@ export const plansRouter = createTRPCRouter({
       await assertCanApprove(ctx, input.reviewerIds);
 
       return ctx.db.$transaction(async (tx) => {
+        // Who was already asked, before the list is rebuilt below. A plan that
+        // is still out for review and gets a name added tells only that person;
+        // one that was withdrawn or sent back is being shown afresh, to all.
+        const alreadyAsked =
+          plan.status === "IN_REVIEW"
+            ? new Set(
+                (
+                  await tx.schedulePlanReviewer.findMany({
+                    where: { planId: plan.id },
+                    select: { userId: true },
+                  })
+                ).map((r) => r.userId),
+              )
+            : new Set<string>();
+        const sharedAt = new Date();
+
         // Re-sharing resets the answers: what a reviewer approved and what they
         // are being shown now must never be two different things.
         await tx.schedulePlanReviewer.deleteMany({
@@ -1387,8 +1405,33 @@ export const plansRouter = createTRPCRouter({
         }
         await tx.schedulePlan.update({
           where: { id: plan.id },
-          data: { status: PlanStatus.IN_REVIEW, sharedAt: new Date() },
+          data: { status: PlanStatus.IN_REVIEW, sharedAt },
         });
+
+        const author = await tx.user.findUnique({
+          where: { id: ctx.actor.id },
+          select: { name: true, email: true },
+        });
+        await notify(
+          tx,
+          input.reviewerIds.filter(
+            (id) => id !== ctx.actor.id && !alreadyAsked.has(id),
+          ),
+          {
+            orgId: ctx.orgId,
+            category: "PLAN_REVIEWS",
+            title: "Schedule plan shared for review",
+            body: withNote(
+              `${author?.name ?? author?.email ?? "Someone"} asks you to review ${plan.name}`,
+              input.message,
+            ),
+            url: `/planner/${plan.id}`,
+            // One key per sharing, so pressing Share twice in a moment tells
+            // nobody twice, but sharing the plan again after it was withdrawn
+            // is news again.
+            sourceKey: `plan-shared:${plan.id}:${sharedAt.getTime()}`,
+          },
+        );
         return { ok: true, reviewers: input.reviewerIds.length };
       });
     }),
@@ -1464,6 +1507,38 @@ export const plansRouter = createTRPCRouter({
               authorId: ctx.actor.id,
               body: input.note.trim(),
             },
+          });
+        }
+
+        // Saying the same thing again is not news, and nor is reviewing your
+        // own plan. The key carries the time of
+        // the answer being replaced, so two clicks that both saw the old
+        // answer write one notification between them, while approving after
+        // having asked for changes is a new one.
+        if (
+          seat.decision !== input.decision &&
+          plan.createdById !== ctx.actor.id
+        ) {
+          const reviewer = await tx.user.findUnique({
+            where: { id: ctx.actor.id },
+            select: { name: true, email: true },
+          });
+          const who = reviewer?.name ?? reviewer?.email ?? "A reviewer";
+          await notify(tx, [plan.createdById], {
+            orgId: ctx.orgId,
+            category: "PLAN_REVIEWS",
+            title:
+              input.decision === "APPROVED"
+                ? "Schedule plan approved"
+                : "Changes requested on a schedule plan",
+            body: withNote(
+              input.decision === "APPROVED"
+                ? `${who} approved ${plan.name}`
+                : `${who} asks for changes to ${plan.name}`,
+              input.note,
+            ),
+            url: `/planner/${plan.id}`,
+            sourceKey: `plan-review:${plan.id}:${ctx.actor.id}:${input.decision}:${seat.decidedAt?.getTime() ?? 0}`,
           });
         }
 

@@ -40,6 +40,7 @@ import { apiKeyRoutes } from "./routes/api-keys";
 import { attendanceRoutes } from "./routes/attendance";
 import { eventRoutes } from "./routes/events";
 import { groupRoutes } from "./routes/groups";
+import { notificationRoutes } from "./routes/notifications";
 import { peopleRoutes } from "./routes/people";
 import { planRoutes } from "./routes/plans";
 import { roomRoutes } from "./routes/rooms";
@@ -62,6 +63,7 @@ const ROUTE_MODULES: Array<[string, RouteDef[]]> = [
   ["src/server/rest/routes/plans.ts", planRoutes],
   ["src/server/rest/routes/people.ts", peopleRoutes],
   ["src/server/rest/routes/api-keys.ts", apiKeyRoutes],
+  ["src/server/rest/routes/notifications.ts", notificationRoutes],
 ];
 
 interface ProcedureLike {

@@ -22,6 +22,10 @@ import {
 } from "~/server/services/conflicts";
 import {
   lockResources,
+  notifyBookingDecided,
+  notifyBookingRequested,
+  notifyChangeDecided,
+  notifyChangeRequested,
   proposedSlots,
   verdictFor,
   verdictSeverity,
@@ -325,6 +329,10 @@ export const eventsRouter = createTRPCRouter({
         }
         await regenerateOccurrences(tx, event.id);
 
+        if (event.status === EventStatus.PENDING) {
+          await notifyBookingRequested(tx, event, ctx.actor.id);
+        }
+
         return {
           event,
           skipped: skipped.size,
@@ -410,22 +418,26 @@ export const eventsRouter = createTRPCRouter({
       // Not authorised to write, so it becomes a proposal instead. The event
       // goes on being what it is until somebody decides.
       if (!mayWriteDirectly) {
-        const request = await ctx.db.eventChangeRequest.create({
-          data: {
-            orgId: ctx.orgId,
-            eventId: event.id,
-            requestedById: ctx.actor.id,
-            scope:
-              RequestScope[
-                input.scope.toUpperCase() as keyof typeof RequestScope
-              ],
-            originalStart: input.originalStart ?? null,
-            newRoomId: input.patch.roomId ?? null,
-            newStartTime: input.patch.startTime ?? null,
-            newEndTime: input.patch.endTime ?? null,
-            newTitle: input.patch.title ?? null,
-            reason: input.patch.notes ?? null,
-          },
+        const request = await ctx.db.$transaction(async (tx) => {
+          const filed = await tx.eventChangeRequest.create({
+            data: {
+              orgId: ctx.orgId,
+              eventId: event.id,
+              requestedById: ctx.actor.id,
+              scope:
+                RequestScope[
+                  input.scope.toUpperCase() as keyof typeof RequestScope
+                ],
+              originalStart: input.originalStart ?? null,
+              newRoomId: input.patch.roomId ?? null,
+              newStartTime: input.patch.startTime ?? null,
+              newEndTime: input.patch.endTime ?? null,
+              newTitle: input.patch.title ?? null,
+              reason: input.patch.notes ?? null,
+            },
+          });
+          await notifyChangeRequested(tx, { ...filed, event });
+          return filed;
         });
         return {
           eventId: event.id,
@@ -903,6 +915,11 @@ export const eventsRouter = createTRPCRouter({
           },
         });
         await regenerateOccurrences(tx, event.id);
+        await notifyBookingDecided(tx, event, {
+          approved: true,
+          deciderId: ctx.actor.id,
+          note: input.note,
+        });
         return {
           approved: true,
           warnings: verdict.warnings,
@@ -924,7 +941,6 @@ export const eventsRouter = createTRPCRouter({
       return ctx.db.$transaction(async (tx) => {
         const event = await tx.event.findFirst({
           where: { id: input.id, orgId: ctx.orgId },
-          select: { id: true, status: true },
         });
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
         if (event.status !== EventStatus.PENDING) {
@@ -947,6 +963,11 @@ export const eventsRouter = createTRPCRouter({
           },
         });
         await regenerateOccurrences(tx, event.id);
+        await notifyBookingDecided(tx, event, {
+          approved: false,
+          deciderId: ctx.actor.id,
+          note: input.reason,
+        });
         return { rejected: true };
       });
     }),
@@ -1011,23 +1032,27 @@ export const eventsRouter = createTRPCRouter({
         });
       }
 
-      return ctx.db.eventChangeRequest.create({
-        data: {
-          orgId: ctx.orgId,
-          eventId: event.id,
-          requestedById: ctx.actor.id,
-          scope:
-            RequestScope[
-              input.scope.toUpperCase() as keyof typeof RequestScope
-            ],
-          originalStart: input.originalStart ?? null,
-          newRoomId: input.newRoomId ?? null,
-          newStartTime: input.newStartTime ?? null,
-          newEndTime: input.newEndTime ?? null,
-          newTitle: input.newTitle ?? null,
-          cancelling: input.cancelling,
-          reason: input.reason ?? null,
-        },
+      return ctx.db.$transaction(async (tx) => {
+        const filed = await tx.eventChangeRequest.create({
+          data: {
+            orgId: ctx.orgId,
+            eventId: event.id,
+            requestedById: ctx.actor.id,
+            scope:
+              RequestScope[
+                input.scope.toUpperCase() as keyof typeof RequestScope
+              ],
+            originalStart: input.originalStart ?? null,
+            newRoomId: input.newRoomId ?? null,
+            newStartTime: input.newStartTime ?? null,
+            newEndTime: input.newEndTime ?? null,
+            newTitle: input.newTitle ?? null,
+            cancelling: input.cancelling,
+            reason: input.reason ?? null,
+          },
+        });
+        await notifyChangeRequested(tx, { ...filed, event });
+        return filed;
       });
     }),
 
@@ -1171,6 +1196,11 @@ export const eventsRouter = createTRPCRouter({
             decisionNote: input.note ?? null,
           },
         });
+        await notifyChangeDecided(tx, request, {
+          approved: true,
+          deciderId: ctx.actor.id,
+          note: input.note,
+        });
         return { approved: true };
       });
     }),
@@ -1183,27 +1213,34 @@ export const eventsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const request = await ctx.db.eventChangeRequest.findFirst({
-        where: { id: input.id, orgId: ctx.orgId },
-        select: { id: true, status: true },
-      });
-      if (!request) throw new TRPCError({ code: "NOT_FOUND" });
-      if (request.status !== RequestStatus.PENDING) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "That request has already been decided.",
+      return ctx.db.$transaction(async (tx) => {
+        const request = await tx.eventChangeRequest.findFirst({
+          where: { id: input.id, orgId: ctx.orgId },
+          include: { event: true },
         });
-      }
-      await ctx.db.eventChangeRequest.update({
-        where: { id: request.id },
-        data: {
-          status: RequestStatus.REJECTED,
-          decidedById: ctx.actor.id,
-          decidedAt: new Date(),
-          decisionNote: input.reason ?? null,
-        },
+        if (!request) throw new TRPCError({ code: "NOT_FOUND" });
+        if (request.status !== RequestStatus.PENDING) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That request has already been decided.",
+          });
+        }
+        await tx.eventChangeRequest.update({
+          where: { id: request.id },
+          data: {
+            status: RequestStatus.REJECTED,
+            decidedById: ctx.actor.id,
+            decidedAt: new Date(),
+            decisionNote: input.reason ?? null,
+          },
+        });
+        await notifyChangeDecided(tx, request, {
+          approved: false,
+          deciderId: ctx.actor.id,
+          note: input.reason,
+        });
+        return { rejected: true };
       });
-      return { rejected: true };
     }),
 
   /** Thought better of it. Only the person who asked may take it back. */

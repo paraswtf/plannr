@@ -196,7 +196,19 @@ export function canOpen(permissions: bigint, pathname: string): boolean {
   return rule.requires.some((name) => bits.has(F[name]));
 }
 
-export const APP_PREFIXES = ROUTE_ACL.map((r) => r.prefix);
+/**
+ * Screens that need a session and nothing more. The inbox is one of them: it
+ * sits in the sidebar's footer rather than in `NAV_ITEMS`, and everybody signed
+ * in has one, so it carries no rule in `ROUTE_ACL` and `canOpen` stays true for
+ * it. It still has to be listed here, or the middleware would let a signed-out
+ * visitor through to a render before the layout sent them away.
+ */
+const SESSION_ONLY_PREFIXES = ["/notifications"];
+
+export const APP_PREFIXES = [
+  ...ROUTE_ACL.map((r) => r.prefix),
+  ...SESSION_ONLY_PREFIXES,
+];
 
 export function isAppRoute(pathname: string): boolean {
   return APP_PREFIXES.some(

@@ -241,6 +241,70 @@ permission on someone's calendar, redeemable by anyone holding it.
   that is the primary section only; if that is ever widened, widen
   `audienceFor` in step or the two screens will disagree.
 
+## Notifications
+
+Every person has their own inbox. Plannr writes one row per person for each piece
+of news, because "read" is per person: a class change that reaches sixty students
+is sixty rows, and each of them can open or clear theirs without touching anyone
+else's. The Notifications tab lists them newest first, with a count of what is
+unread, and the same inbox is on the API at `/notifications` (see
+[docs/api.md](docs/api.md)).
+
+**Four categories**, each with its own pair of switches, one for the inbox and
+one for push:
+
+| Category        | What arrives under it                                                    | Offered to people who can       |
+| --------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `CLASS_CHANGES` | A class you attend or teach moves, is called off, is added or is back on | everyone                        |
+| `REQUESTS`      | A booking or a change you asked for is approved or declined              | book rooms or manage own events |
+| `APPROVALS`     | Somebody asks for a room or a change that you can approve                | approve bookings                |
+| `PLAN_REVIEWS`  | A plan is shared with you, or a plan of yours is approved or sent back   | view schedule plans             |
+
+Everything is on until somebody says otherwise, so a person who never opens the
+settings still hears about their classes. A category a person cannot receive is
+not listed for them: a student is never asked whether they want approvals they
+cannot give. The defaults and the rules live in `src/lib/notifications.ts`, which
+the settings tab and the server both read.
+
+Somebody with the inbox off and push on gets a row that is never listed; it exists
+to carry the push. Somebody with both off gets no row at all. Inactive accounts
+and service accounts (the hidden user behind an API key) are never written to.
+
+### How a class change flows
+
+1. Any write to an event funnels through `regenerateOccurrences`, which compares
+   the sittings before and after and, for a class, writes a `ClassChangeNotice`
+   **in the same transaction** as the edit. It names the groups and teachers
+   concerned and nobody else. The edit and the obligation to tell people commit
+   together or not at all.
+2. After the response, `dispatchPending` takes the notice and addresses it: it
+   reads who is in those groups and who teaches, right then, so a student who
+   joined since still hears, and writes a `Notification` for each of them through
+   `notify()`. The row is keyed `class-change:<notice id>` and unique per person,
+   so a dispatcher that dies half way and is retried tells nobody twice.
+3. Every notification that owes a push is then sent to that person's devices.
+   Several dispatchers can run at once (the request that made the edit and the
+   cron sweep): work is taken with `FOR UPDATE SKIP LOCKED` under a short lease,
+   so each piece goes to one of them, and one that dies only delays its work.
+   A device the push service reports as gone (404 or 410) is forgotten.
+
+Only classes are announced, and only changes in the next **14 days**, so
+rearranging next term's timetable does not wake anybody. A notice or a push that
+has waited more than **24 hours** is dropped rather than sent: a missed class is
+not worth an alert a day late. A stale push is cleared, but the row stays in the
+inbox either way.
+
+**The inbox works without push.** Push needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`; without them nothing is offered to
+phones, but class changes are still recorded and still land in everybody's inbox.
+The preferences endpoint reports `pushAvailable: false` and the switches still
+save, so they apply once keys are added.
+
+A push carries the address `/api/notifications/<id>/open` rather than the page
+itself. Tapping it on a phone opens that route, which marks the notification read
+and then forwards to the page the news is about, so the unread count is right
+whether someone reads it in the app or from the lock screen.
+
 ## Keeping the timetable in step
 
 The college's timetable is not a feed. It is an MRBS install at

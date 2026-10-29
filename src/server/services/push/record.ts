@@ -1,6 +1,5 @@
 import type { Db } from "../occurrences";
 import { diffSittings, messagesFor, type Sitting } from "./diff";
-import { pushEnabled } from "./config";
 
 /** Everything about an event that the sentences need, and nothing more. */
 interface EventFacts {
@@ -20,9 +19,10 @@ interface EventFacts {
  * That placement is the point: the edit commits or no notice exists, and no
  * route that changes a class can forget to call it.
  *
- * It queues rows and talks to nobody. Sending happens after the response, in
- * `dispatchPending`, so a push service having a bad minute can never fail a
- * coordinator's drag-and-drop.
+ * It queues rows and talks to nobody. After the response, `dispatchPending`
+ * turns each notice into a notification per person concerned and pushes it to
+ * their devices, so a push service having a bad minute can never fail a
+ * coordinator's drag-and-drop. The inbox does not need push to be set up.
  *
  * Only classes are announced. A room booking changing is the requester's own
  * business and already has its own email; a class is something other people
@@ -34,7 +34,7 @@ export async function recordClassChanges(
   before: Sitting[],
   after: Sitting[],
 ): Promise<number> {
-  if (!pushEnabled() || event.kind !== "CLASS") return 0;
+  if (event.kind !== "CLASS") return 0;
 
   const changes = diffSittings(before, after, new Date());
   if (changes.length === 0) return 0;

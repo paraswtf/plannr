@@ -84,15 +84,16 @@ const SECTIONS: Section[] = [
     group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
-  // The third thing a person does once on their own phone. Like the calendar,
-  // listed only when the institution has set it up, since a door onto "this
-  // is not switched on" is not worth the row.
+  // The third thing a person sets up for themselves. It lives in the
+  // Notifications tab now, beside the inbox it decides the contents of, and
+  // is listed here too because this is where people look for it. Always
+  // listed: the inbox works whether or not this server can push.
   {
-    href: "/settings/notifications",
+    href: "/notifications?view=settings",
     title: "Notifications",
     blurb:
-      "Get a message on your phone the moment one of your classes moves, is cancelled or is added.",
-    icon: "alert",
+      "Choose what you hear about, in Plannr and on your phone: changes to your classes, your requests and what waits on you.",
+    icon: "bell",
     group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
@@ -128,13 +129,7 @@ export default async function SettingsPage() {
        * crypto and the Google client into a page that wanted one boolean.
        */
       (section.href !== "/settings/calendar" ||
-        env.GOOGLE_CALENDAR_SYNC_ENABLED) &&
-      (section.href !== "/settings/notifications" ||
-        Boolean(
-          env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
-          env.VAPID_PRIVATE_KEY &&
-          env.VAPID_SUBJECT,
-        )),
+        env.GOOGLE_CALENDAR_SYNC_ENABLED),
   );
 
   const groups = GROUPS.map((group) => ({

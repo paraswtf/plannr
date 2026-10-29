@@ -247,6 +247,13 @@ const PATHS = {
       <path d="M3 13.5h5l1.5 2.5h5l1.5-2.5h5" />
     </>
   ),
+  /** The Notifications tab: a bell with its clapper showing under the rim. */
+  bell: (
+    <>
+      <path d="M6 9.5a6 6 0 0 1 12 0c0 4.6 1.6 6.4 2.5 7.5h-17C4.4 15.9 6 14.1 6 9.5z" />
+      <path d="M10 20.5a2.2 2.2 0 0 0 4 0" />
+    </>
+  ),
   /** Rolling a credential: the same thing, come round again. */
   rotate: (
     <>
