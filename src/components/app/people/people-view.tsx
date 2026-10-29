@@ -18,7 +18,7 @@ import { Segmented } from "~/components/ui/segmented";
 import { Select } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { roleCard } from "./entity-cards";
-import { personName } from "~/lib/people";
+import { accountStatus, personName } from "~/lib/people";
 import { PermissionBitField, PermissionFlags } from "~/lib/permissions";
 import { api } from "~/trpc/react";
 import { AddPersonDialog } from "./add-person-dialog";
@@ -32,6 +32,7 @@ const STATUSES = [
   { value: "active" as const, label: "Active" },
   { value: "never-signed-in" as const, label: "Not signed in" },
   { value: "inactive" as const, label: "Disabled" },
+  { value: "waiting" as const, label: "Waiting" },
 ];
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -86,6 +87,40 @@ export function PeopleView({ permissions }: { permissions: string }) {
     { ...filters, page, pageSize },
     { placeholderData: (prev) => prev },
   );
+  /**
+   * A selection belongs to the rows it was made on. Once the list changes
+   * under it, the ticked people are no longer on screen, and "Remove selected"
+   * would delete people nobody can see. `debounced` rather than `query`,
+   * because the rows only change when the debounced value does.
+   */
+  useEffect(() => {
+    setSelected(new Set());
+  }, [debounced, roleId, status, page, pageSize]);
+
+  /**
+   * Back to the last page that has anybody on it. Removing the whole of the
+   * last page, here or from a person's dialog or by somebody else, leaves the
+   * list asking for a page past the end: no rows, and no pager to leave by.
+   * Only a page the server answered for is clamped, not the previous filter's
+   * page still shown while the next one loads.
+   */
+  useEffect(() => {
+    const d = list.data;
+    if (d?.page === page && page > d.pageCount) setPage(d.pageCount);
+  }, [list.data, page]);
+
+  /**
+   * A role deleted on the Roles tab is still the filter here, and the picker
+   * cannot show it, so the list would be empty under a box that reads "All
+   * roles". Waits for a loaded list, so a slow or failed fetch clears nothing.
+   */
+  useEffect(() => {
+    if (roleId && roles.data && !roles.data.rows.some((r) => r.id === roleId)) {
+      setRoleId(undefined);
+      setPage(1);
+    }
+  }, [roles.data, roleId]);
+
   // The count of what the *typed* query would return, before it is applied.
   const preview = api.users.count.useQuery(
     { ...filters, query: query || undefined },
@@ -111,6 +146,13 @@ export function PeopleView({ permissions }: { permissions: string }) {
 
   const rows = list.data?.rows ?? [];
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  /**
+   * The rows on screen belong to the previous filter until the new answer
+   * lands. Shown at full strength, picking "Active" would briefly list people
+   * who have never signed in under it, which reads as the filter not working.
+   */
+  const stale = list.isPlaceholderData;
+  const staleClass = `transition-opacity duration-150 ${stale ? "opacity-60" : ""}`;
 
   const listTop = useRef<HTMLDivElement>(null);
 
@@ -280,7 +322,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
               </div>
 
               {/*
-               * Four statuses are wider than a phone, and the strip already
+               * Five statuses are wider than a phone, and the strip already
                * scrolls inside itself, so all it wants here is a line of its
                * own; a second scroll box around it would clip the active
                * pill's shadow, which the strip's own padding exists to save.
@@ -316,7 +358,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
                   />
                 </div>
                 <span className="text-muted font-mono text-xs tabular-nums">
-                  {list.data?.total ?? 0} total
+                  {stale ? "Loading…" : `${list.data?.total ?? 0} total`}
                 </span>
               </div>
             </div>
@@ -372,7 +414,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
              * where a scrolling table would hide the status off the right edge.
              */}
             {!failed && (
-              <Card pad={8} className="md:hidden">
+              <Card pad={8} className={`md:hidden ${staleClass}`}>
                 {canManage && rows.length > 0 && (
                   <div className="px-3 shadow-[inset_0_-1px_0_var(--hair-soft)]">
                     <Checkbox
@@ -439,7 +481,7 @@ export function PeopleView({ permissions }: { permissions: string }) {
             )}
 
             {!failed && (
-              <Card pad={8} className="hidden md:block">
+              <Card pad={8} className={`hidden md:block ${staleClass}`}>
                 {/* Long role names can still outrun a tablet; the card scrolls. */}
                 <div className="plr-scroll overflow-x-auto">
                   <table className="w-full min-w-155 border-collapse">
@@ -690,18 +732,21 @@ function StatusBadge({
 }: {
   user: { isActive: boolean; email: string | null; hasSignedIn: boolean };
 }) {
-  if (!user.isActive && !user.email) {
-    // Shut out by the college's paperwork rather than by anybody here, which is
-    // not the same as disabled and should not be read in red across 133 rows.
-    return <Badge tone="neutral">Waiting on an address</Badge>;
+  // The status filter above the list reads the same rule, so whichever one
+  // is picked, every row under it says the same thing.
+  switch (accountStatus(user)) {
+    case "waiting":
+      // Shut out by the college's paperwork rather than by anybody here, which
+      // is not the same as disabled and should not be read in red across 133
+      // rows.
+      return <Badge tone="neutral">Waiting on an address</Badge>;
+    case "inactive":
+      return <Badge tone="red">Disabled</Badge>;
+    case "active":
+      return <span className="text-muted text-sm">Active</span>;
+    case "never-signed-in":
+      return <Badge tone="neutral">Not signed in</Badge>;
   }
-  if (!user.isActive) {
-    return <Badge tone="red">Disabled</Badge>;
-  }
-  if (user.hasSignedIn) {
-    return <span className="text-muted text-sm">Active</span>;
-  }
-  return <Badge tone="neutral">Not signed in</Badge>;
 }
 
 function Th({

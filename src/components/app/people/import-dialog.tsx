@@ -61,14 +61,16 @@ export function ImportDialog({
 
   const plan = preview.data;
   const rows = plan?.rows ?? [];
-  const shown = showErrorsOnly
-    ? rows.filter((r) => r.status === "error")
-    : rows;
   const blocked = (plan?.summary.error ?? 0) > 0;
+  // Only while there are errors to show: the toggle goes away with the last
+  // of them, and a filter left on would hide every row with no way back.
+  const shown =
+    showErrorsOnly && blocked ? rows.filter((r) => r.status === "error") : rows;
 
   const readFile = async (file: File) => {
     setFileName(file.name);
     setCsv(await file.text());
+    setShowErrorsOnly(false);
     setDone(null);
     setError(null);
   };
@@ -155,6 +157,7 @@ export function ImportDialog({
                 onClick={() => {
                   setCsv(TEMPLATE);
                   setFileName("example.csv");
+                  setShowErrorsOnly(false);
                 }}
               >
                 Use an example
@@ -172,6 +175,7 @@ export function ImportDialog({
                   onChange={(e) => {
                     setCsv(e.target.value);
                     setDone(null);
+                    setShowErrorsOnly(false);
                   }}
                   rows={5}
                   placeholder="name,email,prn,roles,groups"

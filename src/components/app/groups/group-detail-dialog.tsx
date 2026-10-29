@@ -18,8 +18,14 @@ import {
 import { Field, Textarea } from "~/components/ui/field";
 import { Segmented } from "~/components/ui/segmented";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Pager } from "./pager";
 import Link from "next/link";
-import { DEFAULT_TIMEZONE, formatDayLabel, formatHourLabel } from "~/lib/dates";
+import {
+  DEFAULT_TIMEZONE,
+  formatDayLabel,
+  formatHourLabel,
+  startOfLocalDay,
+} from "~/lib/dates";
 import { facultyCard } from "~/components/app/people/entity-cards";
 import { PersonAddress } from "~/components/app/people/person-address";
 import { personName } from "~/lib/people";
@@ -44,12 +50,16 @@ export function GroupDetailDialog({
   const [facultyPageSize, setFacultyPageSize] = useState(20);
   const debouncedFaculty = useDebounced(facultyQuery);
   const assignedFacultyIds = group.data?.faculty.map((f) => f.id) ?? [];
-  const faculty = api.groups.facultyList.useQuery({
-    query: debouncedFaculty || undefined,
-    pageSize: facultyPageSize,
-    // Pins whoever is already assigned so a search cannot hide them.
-    includeIds: assignedFacultyIds,
-  });
+  const faculty = api.groups.facultyList.useQuery(
+    {
+      query: debouncedFaculty || undefined,
+      pageSize: facultyPageSize,
+      // Pins whoever is already assigned so a search cannot hide them.
+      includeIds: assignedFacultyIds,
+    },
+    // Keeps the list on screen while a longer page or a new search loads.
+    { placeholderData: (prev) => prev },
+  );
 
   const [tab, setTab] = useState<
     "students" | "lectures" | "faculty" | "danger"
@@ -459,11 +469,43 @@ function GroupLectures({
   groupId: string;
   canMarkAttendance: boolean;
 }) {
-  // A page rather than the group's whole timetable, as it has always been:
-  // sixty sittings is a term's worth of the recent ones and the panel scrolls
-  // through them without a pager.
-  const lectures = api.groups.lectures.useQuery({ groupId, pageSize: 60 });
+  // A page rather than the group's whole timetable. It opens on what is still
+  // to come, soonest first, and "Earlier" reads back from the latest sitting,
+  // so the register that wants taking is never sixty pages away. The boundary
+  // is made once: a new Date on every render would be a new query every render.
+  const [today] = useState(() => startOfLocalDay(new Date(), DEFAULT_TIMEZONE));
+  const [when, setWhen] = useState<"upcoming" | "earlier">("upcoming");
+  const [page, setPage] = useState(1);
+  const lectures = api.groups.lectures.useQuery(
+    {
+      groupId,
+      ...(when === "upcoming"
+        ? { from: today, order: "asc" as const }
+        : { to: today, order: "desc" as const }),
+      page,
+      pageSize: 60,
+    },
+    { placeholderData: (prev) => prev },
+  );
   const rows = lectures.data?.rows ?? [];
+
+  const switcher = (
+    <div className="mb-3">
+      <Segmented
+        items={[
+          { value: "upcoming" as const, label: "Upcoming" },
+          { value: "earlier" as const, label: "Earlier" },
+        ]}
+        value={when}
+        onChange={(next) => {
+          setWhen(next);
+          setPage(1);
+        }}
+        size="sm"
+        ariaLabel="Show lectures"
+      />
+    </div>
+  );
 
   if (lectures.isLoading) {
     return (
@@ -480,81 +522,102 @@ function GroupLectures({
   }
   if (rows.length === 0) {
     return (
-      <EmptyState
-        compact
-        icon="calendar"
-        title="Nothing timetabled for this group yet"
-        className="rounded-[12px] shadow-[inset_0_0_0_1px_var(--hair)]"
-      >
-        Schedule a class from the timetable and pick this group.
-      </EmptyState>
+      <>
+        {switcher}
+        <EmptyState
+          compact
+          icon="calendar"
+          title={
+            when === "upcoming"
+              ? "Nothing coming up for this group"
+              : "Nothing earlier for this group"
+          }
+          className="rounded-[12px] shadow-[inset_0_0_0_1px_var(--hair)]"
+        >
+          {when === "upcoming"
+            ? "Schedule a class from the timetable and pick this group, or look at the earlier ones."
+            : "Nothing was timetabled for this group before today."}
+        </EmptyState>
+      </>
     );
   }
 
+  // One list with hairlines rather than a ringed card per sitting, which put
+  // sixty boxes inside a dialog. On a phone a row is three lines (when, what,
+  // then where and the register) so the subject is never the thing cut short;
+  // from sm it is one line of fixed columns, so the titles all start at the
+  // same x.
   return (
-    // One list with hairlines rather than a ringed card per sitting, which
-    // put sixty boxes inside a dialog. On a phone a row is three lines (when,
-    // what, then where and the register) so the subject is never the thing
-    // cut short; from sm it is one line of fixed columns, so the titles all
-    // start at the same x.
-    <div className="rounded-[12px] p-px shadow-[inset_0_0_0_1px_var(--hair)]">
-      <ul
-        aria-label="Lectures"
-        className="plr-scroll max-h-[46vh] overflow-y-auto rounded-[11px]"
+    <>
+      {switcher}
+      <div
+        aria-busy={lectures.isPlaceholderData}
+        className="rounded-[12px] p-px shadow-[inset_0_0_0_1px_var(--hair)]"
       >
-        {rows.map((lecture, i) => (
-          <li
-            key={lecture.occurrenceId}
-            className={`flex flex-col gap-1 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3 ${
-              i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""
-            }`}
-          >
-            <span className="flex shrink-0 items-baseline gap-3">
-              <span className="text-title font-mono text-xs font-semibold sm:w-[84px]">
-                {formatDayLabel(lecture.start, DEFAULT_TIMEZONE)}
-              </span>
-              <span className="text-muted font-mono text-xs sm:w-[40px]">
-                {formatHourLabel(lecture.start, DEFAULT_TIMEZONE)}
-              </span>
-            </span>
-            <span className="min-w-0 sm:flex-1">
-              <span className="text-title block text-sm font-semibold sm:truncate">
-                {lecture.title}
-              </span>
-              {lecture.sharedWith.length > 0 && (
-                <span className="text-muted block text-xs sm:truncate">
-                  Shared with {lecture.sharedWith.join(", ")}
+        <ul
+          aria-label="Lectures"
+          className="plr-scroll max-h-[46vh] overflow-y-auto rounded-[11px]"
+        >
+          {rows.map((lecture, i) => (
+            <li
+              key={lecture.occurrenceId}
+              className={`flex flex-col gap-1 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3 ${
+                i > 0 ? "shadow-[inset_0_1px_0_var(--hair-soft)]" : ""
+              }`}
+            >
+              <span className="flex shrink-0 items-baseline gap-3">
+                <span className="text-title font-mono text-xs font-semibold sm:w-[84px]">
+                  {formatDayLabel(lecture.start, DEFAULT_TIMEZONE)}
                 </span>
-              )}
-            </span>
-            <span className="flex shrink-0 flex-wrap items-center gap-2">
-              <Badge tone="slate">{lecture.roomCode}</Badge>
-              {lecture.attendance ? (
-                <Badge tone="green">
-                  {lecture.attendance.present}/{lecture.attendance.total}
-                </Badge>
-              ) : (
-                <span className="text-muted text-xs">No register</span>
-              )}
-              {canMarkAttendance && (
-                <Link
-                  href={`/attendance/${lecture.occurrenceId}`}
-                  // A register still to take is the one that wants doing, so
-                  // it looks pressable at rest; an update is there if needed.
-                  className={buttonClass(
-                    lecture.attendance ? "ghost" : "quiet",
-                    "sm",
-                    "ml-auto gap-1 sm:ml-0",
-                  )}
-                >
-                  {lecture.attendance ? "Update" : "Take"}
-                  <Icon name="chevronRight" size={14} stroke={2} />
-                </Link>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+                <span className="text-muted font-mono text-xs sm:w-[40px]">
+                  {formatHourLabel(lecture.start, DEFAULT_TIMEZONE)}
+                </span>
+              </span>
+              <span className="min-w-0 sm:flex-1">
+                <span className="text-title block text-sm font-semibold sm:truncate">
+                  {lecture.title}
+                </span>
+                {lecture.sharedWith.length > 0 && (
+                  <span className="text-muted block text-xs sm:truncate">
+                    Shared with {lecture.sharedWith.join(", ")}
+                  </span>
+                )}
+              </span>
+              <span className="flex shrink-0 flex-wrap items-center gap-2">
+                <Badge tone="slate">{lecture.roomCode}</Badge>
+                {lecture.attendance ? (
+                  <Badge tone="green">
+                    {lecture.attendance.present}/{lecture.attendance.total}
+                  </Badge>
+                ) : (
+                  <span className="text-muted text-xs">No register</span>
+                )}
+                {canMarkAttendance && (
+                  <Link
+                    href={`/attendance/${lecture.occurrenceId}`}
+                    // A register still to take is the one that wants doing, so
+                    // it looks pressable at rest; an update is there if needed.
+                    className={buttonClass(
+                      lecture.attendance ? "ghost" : "quiet",
+                      "sm",
+                      "ml-auto gap-1 sm:ml-0",
+                    )}
+                  >
+                    {lecture.attendance ? "Update" : "Take"}
+                    <Icon name="chevronRight" size={14} stroke={2} />
+                  </Link>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Pager
+        page={page}
+        lastPage={lectures.data?.pageCount ?? 1}
+        onPrevious={() => setPage((n) => n - 1)}
+        onNext={() => setPage((n) => n + 1)}
+      />
+    </>
   );
 }

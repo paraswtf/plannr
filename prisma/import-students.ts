@@ -36,7 +36,10 @@ import {
   titleWithoutSection,
   type ElectiveScheme,
 } from "../src/lib/roster";
-import { electiveForClass, isJointResearchClass } from "../src/lib/student-lists";
+import {
+  electiveForClass,
+  isJointResearchClass,
+} from "../src/lib/student-lists";
 import { regenerateOccurrences } from "../src/server/services/occurrences";
 import { GroupKind, PrismaClient } from "../generated/prisma";
 
@@ -82,11 +85,13 @@ interface Row {
 
 async function main() {
   const roster = fromCsv(readFileSync(ROSTER, "utf8"));
-  console.log(`Read ${path.relative(process.cwd(), ROSTER)} — ${roster.length} students`);
+  console.log(
+    `Read ${path.relative(process.cwd(), ROSTER)} — ${roster.length} students`,
+  );
 
   const students: Row[] = roster.map((row) => ({
     prn: row.prn ?? "",
-    name: row.name ?? "",
+    name: (row.name ?? "").trim(),
     email: (row.college_email ?? "").trim().toLowerCase(),
     programme: row.programme ?? "",
     semester: row.semester ?? "",
@@ -97,7 +102,9 @@ async function main() {
     section: (row.section ?? "").trim(),
   }));
 
-  const org = await db.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG } });
+  const org = await db.organization.findUniqueOrThrow({
+    where: { slug: ORG_SLUG },
+  });
   await replaceStudents(org.id, students);
   await db.$disconnect();
 }
@@ -109,7 +116,8 @@ interface Cohort {
 }
 
 /** "BCA (VII)" — how every group of a cohort is named, whatever divides it. */
-const cohortPrefix = (programme: string, semester: string) => `${programme} (${semester})`;
+const cohortPrefix = (programme: string, semester: string) =>
+  `${programme} (${semester})`;
 
 /**
  * An elective as this app holds it: the group of everyone who chose it, and —
@@ -152,7 +160,11 @@ async function electiveGroups(
   const upsert = (name: string, label: string, kind: keyof typeof GroupKind) =>
     db.group.upsert({
       where: {
-        programmeId_semesterId_name: { programmeId: cohort.programmeId, semesterId: cohort.semesterId, name },
+        programmeId_semesterId_name: {
+          programmeId: cohort.programmeId,
+          semesterId: cohort.semesterId,
+          name,
+        },
       },
       update: { kind: GroupKind[kind], batchId: cohort.batchId },
       create: {
@@ -168,8 +180,13 @@ async function electiveGroups(
 
   for (const elective of scheme.electives) {
     const name = `${prefix} - ${elective.name}`;
-    const codes = elective.subjects.map((s) => s.code).filter(Boolean).join(", ");
-    const label = codes ? `Group ${elective.group} · ${codes}` : `Group ${elective.group}`;
+    const codes = elective.subjects
+      .map((s) => s.code)
+      .filter(Boolean)
+      .join(", ");
+    const label = codes
+      ? `Group ${elective.group} · ${codes}`
+      : `Group ${elective.group}`;
     const group = await upsert(name, label, elective.kind);
 
     // The roster records a section against the minor, which is the only kind
@@ -179,12 +196,19 @@ async function electiveGroups(
     if (scheme.sectioned) {
       const found = new Set(
         members
-          .filter((student) => student.minorGroup === elective.group && student.section)
+          .filter(
+            (student) =>
+              student.minorGroup === elective.group && student.section,
+          )
           .map((student) => student.section),
       );
       for (const section of [...found].sort()) {
         const short = shortSection(section);
-        const sub = await upsert(`${name} ${short}`, `${label} · ${short}`, elective.kind);
+        const sub = await upsert(
+          `${name} ${short}`,
+          `${label} · ${short}`,
+          elective.kind,
+        );
         sections.set(section, sub.id);
       }
     }
@@ -272,17 +296,24 @@ async function repointElectiveClasses(
     if (event.groupId === target) continue;
 
     await db.$transaction(async (tx) => {
-      await tx.event.update({ where: { id: event.id }, data: { groupId: target } });
+      await tx.event.update({
+        where: { id: event.id },
+        data: { groupId: target },
+      });
       // The join is rewritten rather than added to: a leftover row pointing at
       // the bucket would put a second, empty register on the marking screen.
       await tx.eventGroup.deleteMany({ where: { eventId: event.id } });
-      await tx.eventGroup.create({ data: { eventId: event.id, groupId: target } });
+      await tx.eventGroup.create({
+        data: { eventId: event.id, groupId: target },
+      });
       await regenerateOccurrences(tx, event.id);
     });
     moved++;
   }
 
-  console.log(`✓ ${moved} ${prefix} elective classes moved onto the group that takes them`);
+  console.log(
+    `✓ ${moved} ${prefix} elective classes moved onto the group that takes them`,
+  );
   for (const title of [...new Set(unmatched)]) {
     console.log(`  ! left where it was, matching no elective: ${title}`);
   }
@@ -315,7 +346,10 @@ async function alignTeaching(groupIds: string[]) {
     const shouldBe = new Set(teaching.map((event) => event.facultyId!));
     const assigned = new Set(
       (
-        await db.facultyGroupAssignment.findMany({ where: { groupId }, select: { facultyId: true } })
+        await db.facultyGroupAssignment.findMany({
+          where: { groupId },
+          select: { facultyId: true },
+        })
       ).map((row) => row.facultyId),
     );
 
@@ -338,7 +372,9 @@ async function alignTeaching(groupIds: string[]) {
   }
 
   if (added || dropped) {
-    console.log(`✓ teaching assignments: ${added} added, ${dropped} cleared off the empty buckets`);
+    console.log(
+      `✓ teaching assignments: ${added} added, ${dropped} cleared off the empty buckets`,
+    );
   }
 }
 
@@ -374,13 +410,18 @@ async function claimJointResearchClasses(orgId: string, ownerId: string) {
     if (!isJointResearchClass(event.notes ?? event.title)) continue;
 
     await db.$transaction(async (tx) => {
-      await tx.event.update({ where: { id: event.id }, data: { groupId: ownerId } });
+      await tx.event.update({
+        where: { id: event.id },
+        data: { groupId: ownerId },
+      });
       await tx.eventGroup.deleteMany({ where: { eventId: event.id } });
       await tx.eventGroup.createMany({
-        data: [ownerId, ...(alongside ? [alongside.id] : [])].map((groupId) => ({
-          eventId: event.id,
-          groupId,
-        })),
+        data: [ownerId, ...(alongside ? [alongside.id] : [])].map(
+          (groupId) => ({
+            eventId: event.id,
+            groupId,
+          }),
+        ),
       });
       await regenerateOccurrences(tx, event.id);
     });
@@ -403,7 +444,9 @@ async function clearOtherStudents(orgId: string, keepPrns: Set<string>) {
     select: {
       prn: true,
       userId: true,
-      user: { select: { email: true, facultyProfile: { select: { id: true } } } },
+      user: {
+        select: { email: true, facultyProfile: { select: { id: true } } },
+      },
     },
   });
   // Kept by PRN, which is what the roster is about; the one administering
@@ -418,9 +461,15 @@ async function clearOtherStudents(orgId: string, keepPrns: Set<string>) {
   // records with it; anyone who is also staff keeps their account and loses
   // only the student side of it.
   const staff = others.filter((o) => o.user.facultyProfile);
-  await db.studentProfile.deleteMany({ where: { userId: { in: staff.map((o) => o.userId) } } });
+  await db.studentProfile.deleteMany({
+    where: { userId: { in: staff.map((o) => o.userId) } },
+  });
   await db.user.deleteMany({
-    where: { id: { in: others.filter((o) => !o.user.facultyProfile).map((o) => o.userId) } },
+    where: {
+      id: {
+        in: others.filter((o) => !o.user.facultyProfile).map((o) => o.userId),
+      },
+    },
   });
 
   console.log(
@@ -438,11 +487,21 @@ async function clearOtherStudents(orgId: string, keepPrns: Set<string>) {
  * all. Only the groups the timetable already created are used: a student whose
  * cohort is not on it has nowhere to sit, and is reported rather than invented.
  */
-async function cohortGroups(orgId: string, programme: string, semester: string) {
+async function cohortGroups(
+  orgId: string,
+  programme: string,
+  semester: string,
+) {
   const prefix = cohortPrefix(programme, semester);
   const groups = await db.group.findMany({
     where: { orgId, name: { startsWith: prefix } },
-    select: { id: true, name: true, programmeId: true, semesterId: true, batchId: true },
+    select: {
+      id: true,
+      name: true,
+      programmeId: true,
+      semesterId: true,
+      batchId: true,
+    },
   });
   return { prefix, groups };
 }
@@ -475,7 +534,10 @@ async function replaceStudents(orgId: string, students: Row[]) {
     const { prefix, groups } = await cohortGroups(orgId, programme, semester);
     if (groups.length === 0) {
       for (const student of members) {
-        unplaced.push({ student, reason: `the timetable has no ${prefix} cohort` });
+        unplaced.push({
+          student,
+          reason: `the timetable has no ${prefix} cohort`,
+        });
       }
       continue;
     }
@@ -509,7 +571,7 @@ async function replaceStudents(orgId: string, students: Row[]) {
       // from the letters, as "Honours with Research" does.
       const home = student.division
         ? (byName.get(`${prefix} - Honours Div. ${student.division}`) ??
-           byName.get(`${prefix} - Div. ${student.division}`))
+          byName.get(`${prefix} - Div. ${student.division}`))
         : student.track
           ? byName.get(`${prefix} - ${student.track}`)
           : undefined;
@@ -521,9 +583,10 @@ async function replaceStudents(orgId: string, students: Row[]) {
         // register about who is enrolled.
         unplaced.push({
           student,
-          reason: student.division || student.track
-            ? `no ${prefix} group for ${student.track || `division ${student.division}`}`
-            : `${prefix} states no division for them`,
+          reason:
+            student.division || student.track
+              ? `no ${prefix} group for ${student.track || `division ${student.division}`}`
+              : `${prefix} states no division for them`,
         });
       }
 
@@ -533,7 +596,10 @@ async function replaceStudents(orgId: string, students: Row[]) {
       // group — a spelling nobody else used — keeps the elective and is
       // reported, rather than being dropped from it as well.
       const minor = electives.get(student.minorGroup);
-      const section = minor && student.section ? minor.sections.get(student.section) : undefined;
+      const section =
+        minor && student.section
+          ? minor.sections.get(student.section)
+          : undefined;
       if (minor && student.section && !section) {
         unsectioned.push({ prn: student.prn, section: student.section });
       }
@@ -543,9 +609,12 @@ async function replaceStudents(orgId: string, students: Row[]) {
       // classes taught to it and go on missing only their division's.
       placement.set(
         student.prn,
-        [home, electives.get(student.majorGroup)?.id, minor?.id, section].filter(
-          (id): id is string => Boolean(id),
-        ),
+        [
+          home,
+          electives.get(student.majorGroup)?.id,
+          minor?.id,
+          section,
+        ].filter((id): id is string => Boolean(id)),
       );
     }
   }
@@ -579,7 +648,7 @@ async function replaceStudents(orgId: string, students: Row[]) {
       await db.user.update({
         where: { id: already.userId },
         data: {
-          name: student.name,
+          name: student.name || null,
           ...(keepEmail ? {} : { email: address, isActive: real }),
         },
       });
@@ -589,7 +658,9 @@ async function replaceStudents(orgId: string, students: Row[]) {
       const user = await db.user.create({
         data: {
           orgId,
-          name: student.name,
+          // A roster row with no name is stored as no name, not as "", which
+          // would sort ahead of everybody named in the directory.
+          name: student.name || null,
           email: address,
           // Somebody with no address cannot sign in, and saying so here means
           // the door is shut by the account rather than only by the address.
@@ -620,7 +691,9 @@ async function replaceStudents(orgId: string, students: Row[]) {
     });
 
     await db.$transaction([
-      db.studentGroupMembership.deleteMany({ where: { studentId: profile.id } }),
+      db.studentGroupMembership.deleteMany({
+        where: { studentId: profile.id },
+      }),
       db.studentGroupMembership.createMany({
         data: groupIds.map((groupId) => ({ studentId: profile.id, groupId })),
       }),
@@ -628,12 +701,17 @@ async function replaceStudents(orgId: string, students: Row[]) {
   }
 
   const byReason = new Map<string, number>();
-  for (const { reason } of unplaced) byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+  for (const { reason } of unplaced)
+    byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
   for (const [reason, n] of [...byReason].sort((a, b) => b[1] - a[1])) {
-    console.log(`  · ${n} students are on the roll with nowhere to sit: ${reason}`);
+    console.log(
+      `  · ${n} students are on the roll with nowhere to sit: ${reason}`,
+    );
   }
   for (const { prn, section } of unsectioned) {
-    console.log(`  ! ${prn} is in "${section}", which is no sitting of their elective`);
+    console.log(
+      `  ! ${prn} is in "${section}", which is no sitting of their elective`,
+    );
   }
 
   console.log(`✓ ${created} students added, ${updated} already had an account`);

@@ -3,10 +3,12 @@ import Papa from "papaparse";
 import { z } from "zod";
 
 import {
+  accountStatusWhere,
   addressSearch,
   contactAddress,
   contactAddresses,
   personName,
+  type AccountStatus,
 } from "~/lib/people";
 import {
   ACT_ON_DENIAL_MESSAGE,
@@ -191,7 +193,7 @@ export const usersRouter = createTRPCRouter({
           query: z.string().trim().max(120).optional(),
           roleId: roleId.optional(),
           status: z
-            .enum(["all", "active", "inactive", "never-signed-in"])
+            .enum(["all", "active", "never-signed-in", "inactive", "waiting"])
             .default("all"),
           /**
            * A small default, which for a list of people is the exception
@@ -215,7 +217,14 @@ export const usersRouter = createTRPCRouter({
         ctx.db.user.findMany({
           where,
           include: userInclude,
-          orderBy: [{ name: "asc" }, { email: "asc" }],
+          // A person imported with no name sorts after everybody named, not
+          // ahead of them: the screen labels them by their address or PRN,
+          // so a blank at the top of every list reads as noise.
+          orderBy: [
+            { name: { sort: "asc", nulls: "last" } },
+            { email: "asc" },
+            { id: "asc" },
+          ],
           ...pageArgs(input),
         }),
         ctx.db.user.count({ where }),
@@ -234,7 +243,7 @@ export const usersRouter = createTRPCRouter({
           query: z.string().trim().max(120).optional(),
           roleId: roleId.optional(),
           status: z
-            .enum(["all", "active", "inactive", "never-signed-in"])
+            .enum(["all", "active", "never-signed-in", "inactive", "waiting"])
             .default("all"),
         })
         .default({}),
@@ -989,7 +998,7 @@ function buildWhere(
   input: {
     query?: string;
     roleId?: string;
-    status?: "all" | "active" | "inactive" | "never-signed-in";
+    status?: AccountStatus | "all";
   },
 ) {
   const q = input.query;
@@ -999,15 +1008,19 @@ function buildWhere(
     // colleagues. A machine identity is neither a colleague nor a headcount.
     isServiceAccount: false,
     ...(input.roleId ? { roles: { some: { roleId: input.roleId } } } : {}),
-    ...(input.status === "active" ? { isActive: true } : {}),
-    ...(input.status === "inactive" ? { isActive: false } : {}),
-    ...(input.status === "never-signed-in" ? { accounts: { none: {} } } : {}),
+    // The same rule the row's badge is drawn by, so a filter never returns a
+    // row whose badge says something else.
+    ...accountStatusWhere(input.status ?? "all"),
     ...(q
       ? {
           OR: [
             { name: { contains: q, mode: "insensitive" as const } },
             addressSearch(q),
-            { studentProfile: { prn: { contains: q } } },
+            {
+              studentProfile: {
+                prn: { contains: q, mode: "insensitive" as const },
+              },
+            },
           ],
         }
       : {}),

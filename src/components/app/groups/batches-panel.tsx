@@ -235,11 +235,14 @@ function BatchDialog({
   const [coursePageSize, setCoursePageSize] = useState(20);
   const [error, setError] = useState<string | null>(null);
 
-  const courses = api.groups.programmeList.useQuery({
-    query: useDebounced(programmeQuery) || undefined,
-    pageSize: coursePageSize,
-    includeIds: programmeId ? [programmeId] : undefined,
-  });
+  const courses = api.groups.programmeList.useQuery(
+    {
+      query: useDebounced(programmeQuery) || undefined,
+      pageSize: coursePageSize,
+      includeIds: programmeId ? [programmeId] : undefined,
+    },
+    { placeholderData: (prev) => prev },
+  );
   const selectedProgramme = courses.data?.rows.find(
     (c) => c.id === programmeId,
   );

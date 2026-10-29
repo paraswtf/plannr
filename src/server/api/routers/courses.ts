@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { contactAddress } from "~/lib/people";
 import { PermissionFlags } from "~/lib/permissions";
+import { todayAsDate } from "~/lib/semester-dates";
 import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import { createTRPCRouter, permissionProcedure } from "~/server/api/trpc";
 import type { db as Database } from "~/server/db";
@@ -41,7 +42,10 @@ type CourseRow = Prisma.CourseGetPayload<{ select: typeof courseSummary }>;
 
 /** The semester everything defaults to: the one running now, else the newest. */
 async function currentSemester(db: typeof Database, orgId: string) {
-  const today = new Date();
+  // Start and end are calendar dates, so compare against today's date in the
+  // institution's timezone rather than the instant, which would end the
+  // semester a day early.
+  const today = todayAsDate();
   const running = await db.semester.findFirst({
     where: { orgId, startDate: { lte: today }, endDate: { gte: today } },
     orderBy: { startDate: "desc" },
@@ -293,7 +297,12 @@ export const coursesRouter = createTRPCRouter({
                 select: {
                   id: true,
                   name: true,
-                  _count: { select: { groups: true } },
+                  // Only this semester's groups, like every other count here: the
+                  // intake's older groups stay behind when a semester is carried
+                  // forward, and the diagram's own total does not count them.
+                  _count: {
+                    select: { groups: { where: { semesterId: semester.id } } },
+                  },
                   semesters: {
                     where: { semesterId: semester.id },
                     select: { number: true },

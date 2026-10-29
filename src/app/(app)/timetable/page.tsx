@@ -26,7 +26,10 @@ export default async function TimetablePage({
   if (!canOpen(BigInt(session.user.permissions), "/timetable")) redirect("/");
 
   const params = await searchParams;
-  const date = params.date ? new Date(params.date) : new Date();
+  // The day comes from the address bar, so it can be anything. A value that is
+  // not a date falls back to today rather than failing the page.
+  const asked = params.date ? new Date(params.date) : new Date();
+  const date = Number.isNaN(asked.getTime()) ? new Date() : asked;
   // Read here rather than in the browser so the grid is rendered the shape it
   // is about to be: discovered after paint, a compact grid would draw full size
   // and then visibly collapse. Alongside the day rather than after it — neither

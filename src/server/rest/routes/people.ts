@@ -57,7 +57,7 @@ export const peopleRoutes: RouteDef[] = [
     procedure: "users.list",
     summary: "List people in the directory",
     description:
-      "Paged, and filterable by free text (`query`, matched against name, email and PRN), by `roleId`, and by `status` — one of `all`, `active`, `inactive` or `never-signed-in`, the last meaning imported but never yet arrived. Machine identities never appear; list those with `GET /api-keys`.",
+      "Paged, and filterable by free text (`query`, matched against name, email and PRN), by `roleId`, and by `status`: `all`; `active`, enabled and signed in at least once; `never-signed-in`, enabled but never yet arrived; `inactive`, disabled while holding a real address; or `waiting`, shut out until the college sends an address. The four statuses other than `all` cover every person exactly once. Machine identities never appear; list those with `GET /api-keys`.",
     tag: "People",
     scopes: ["ViewUsers"],
   },

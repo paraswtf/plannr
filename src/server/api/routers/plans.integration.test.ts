@@ -124,6 +124,7 @@ beforeEach(async () => {
   });
 
   await db.schedulePlan.deleteMany({ where: { orgId } });
+  await db.semester.deleteMany({ where: { orgId, name: "Plan Search Term" } });
   await db.event.deleteMany({ where: { orgId } });
 
   for (const role of SYSTEM_ROLES) {
@@ -424,6 +425,79 @@ describe("schedule plans", () => {
     expect(plan.comments.some((c) => c.body.includes("placement drive"))).toBe(
       true,
     );
+  });
+
+  it("stops asking for a sign-off once another reviewer sends the plan back", async () => {
+    const { api, planId } = await seedGeneratedPlan();
+    const second = await makeActor(
+      "plan-itest-reviewer2@plannr-demo.invalid",
+      "Second Reviewer",
+      ["faculty"],
+      PermissionFlags.ApproveSchedulePlans,
+    );
+    await api.plans.share({
+      id: planId,
+      reviewerIds: [reviewer.id, second.id],
+    });
+
+    const waiting = await callerFor(second).plans.list({ scope: "review" });
+    expect(waiting.rows.map((p) => p.id)).toEqual([planId]);
+    expect(waiting.rows[0]?.awaitingMe).toBe(true);
+
+    await callerFor(reviewer).plans.review({
+      id: planId,
+      decision: "CHANGES_REQUESTED",
+    });
+
+    // The second reviewer's own row is still pending, but the plan can no
+    // longer be answered, so neither the flag nor the scope claims it.
+    const all = await callerFor(second).plans.list();
+    expect(all.rows.find((p) => p.id === planId)?.awaitingMe).toBe(false);
+    expect(
+      (await callerFor(second).plans.list({ scope: "review" })).total,
+    ).toBe(0);
+  });
+
+  it("finds a plan by its term or its author as well as its name", async () => {
+    const { api, planId } = await seedGeneratedPlan("Sem III");
+    const term = await db.semester.create({
+      data: {
+        orgId,
+        name: "Plan Search Term",
+        startDate: new Date("2026-08-01"),
+        endDate: new Date("2026-12-15"),
+      },
+    });
+    await db.schedulePlan.update({
+      where: { id: planId },
+      data: { semesterId: term.id },
+    });
+
+    const ids = async (query: string) =>
+      (await api.plans.list({ query })).rows.map((p) => p.id);
+
+    expect(await ids("sem iii")).toEqual([planId]);
+    expect(await ids("search term")).toEqual([planId]);
+    expect(await ids("coordinator")).toEqual([planId]);
+    expect(await ids("itest-planner")).toEqual([planId]);
+    expect(await ids("no such thing")).toEqual([]);
+
+    // The total follows the same filter, so the page count is right.
+    expect((await api.plans.list({ query: "search term" })).total).toBe(1);
+    expect((await api.plans.list({ query: "no such thing" })).total).toBe(0);
+  });
+
+  it("does not search the placeholder address a student without one carries", async () => {
+    const nobody = await makeActor("plan-itest-nobody@unknown.invalid", "", [
+      "coordinator",
+    ]);
+    const plan = await callerFor(nobody).plans.create({ name: "Sem V" });
+
+    const mine = callerFor(nobody);
+    expect((await mine.plans.list({ query: "unknown" })).rows).toEqual([]);
+    expect(
+      (await mine.plans.list({ query: "Sem V" })).rows.map((p) => p.id),
+    ).toEqual([plan.id]);
   });
 
   it("refuses a review from someone it was not shared with", async () => {

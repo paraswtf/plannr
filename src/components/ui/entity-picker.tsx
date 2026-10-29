@@ -24,6 +24,13 @@ export interface PickerPage {
   rows: PickerOption[];
   total: number;
   hasMore: boolean;
+  /**
+   * How many rows are left to load, when the caller can say better than
+   * `total - rows.length`. A list that pins the chosen rows onto its page hands
+   * back more rows than the page held, so counting them undershoots. Pickers
+   * that build the page by hand leave it out and get the plain subtraction.
+   */
+  remaining?: number;
 }
 
 /**
@@ -43,7 +50,14 @@ export interface PickerPage {
  */
 export function pickerPage<T>(
   page:
-    { rows: T[]; total: number; page: number; pageCount: number } | undefined,
+    | {
+        rows: T[];
+        total: number;
+        page: number;
+        pageSize: number;
+        pageCount: number;
+      }
+    | undefined,
   toOptions: (rows: T[]) => PickerOption[],
 ): PickerPage | undefined {
   return (
@@ -51,6 +65,9 @@ export function pickerPage<T>(
       rows: toOptions(page.rows),
       total: page.total,
       hasMore: page.page < page.pageCount,
+      // `total` counts the filter alone, while the pinned rows in `rows` may sit
+      // outside it, so what is left is what the pages so far have not covered.
+      remaining: page.total - page.page * page.pageSize,
     }
   );
 }
@@ -287,7 +304,7 @@ export function EntityPicker({
                       onClick={onLoadMore}
                       className="text-slate hover:bg-tint-hover min-h-10 w-full cursor-pointer px-3 py-2 text-sm font-semibold transition-colors duration-150 lg:min-h-0"
                     >
-                      Show {page.total - rows.length} more
+                      Show {page.remaining ?? page.total - rows.length} more
                     </button>
                   )}
                 </>
@@ -491,7 +508,7 @@ export function SearchSelect({
                   onMouseDown={(e) => e.preventDefault()}
                   className="text-slate hover:bg-tint-hover min-h-10 w-full cursor-pointer rounded-[8px] px-2.5 py-1.5 text-xs font-semibold lg:min-h-0"
                 >
-                  Show {page.total - rows.length} more
+                  Show {page.remaining ?? page.total - rows.length} more
                 </button>
               )}
             </>

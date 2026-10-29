@@ -166,7 +166,25 @@ export function ApprovalsView({ initial }: { initial: Queue }) {
           />
         </div>
 
-        {items.length === 0 ? (
+        {items.length === 0 && counts.all > 0 ? (
+          <EmptyState
+            icon="checkCircle"
+            title={
+              filter === "booking"
+                ? "No bookings waiting"
+                : "No changes waiting"
+            }
+            action={
+              <Button variant="secondary" onClick={() => setFilter("all")}>
+                Show all requests
+              </Button>
+            }
+          >
+            {filter === "booking"
+              ? `${counts.change} ${counts.change === 1 ? "change is" : "changes are"} waiting.`
+              : `${counts.booking} ${counts.booking === 1 ? "booking is" : "bookings are"} waiting.`}
+          </EmptyState>
+        ) : items.length === 0 ? (
           <EmptyState icon="checkCircle" title="Nothing waiting">
             Requests appear here as people make them.
           </EmptyState>

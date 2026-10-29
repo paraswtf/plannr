@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// `authenticate.ts` imports `server-only`, which exists to fail any import
+// outside a server component graph. That is the guarantee wanted in the build
+// and an obstacle here, as in the REST handler's tests.
+vi.mock("server-only", () => ({}));
 
 import { PermissionFlags, SYSTEM_ROLES } from "~/lib/permissions";
 import { appRouter } from "~/server/api/root";
@@ -300,7 +305,7 @@ describe("what a personal key may not do", () => {
       permissions: PermissionFlags.Administrator,
     });
     await expect(admin.apiKeys.revokeMine({ id: key.id })).rejects.toThrow(
-      /no active key/i,
+      /no key with that id/i,
     );
   });
 

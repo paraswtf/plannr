@@ -274,6 +274,16 @@ describe("whose class is whose on the grid", () => {
     expect(grid.occurrences.map((o) => o.isMine)).toEqual([true]);
   });
 
+  it("leaves a sitting in an archived room out of the grid", async () => {
+    // The grid draws a column for every active room and nothing else, so a
+    // sitting in a room taken out of service would be counted with nowhere to
+    // be drawn.
+    await db.room.update({ where: { id: roomId }, data: { isActive: false } });
+    const grid = await callerFor(coordinator).timetable.grid({ date: DAY });
+    expect(grid.rooms).toEqual([]);
+    expect(grid.occurrences).toEqual([]);
+  });
+
   it("gives a coordinator with neither profile nothing of their own", async () => {
     const grid = await callerFor(coordinator).timetable.grid({ date: DAY });
     expect(grid.occurrences).toHaveLength(1);
@@ -541,6 +551,24 @@ describe("the people who can be looked at", () => {
     await expect(
       caller.timetable.mySchedule({ date: DAY, asUserId: principal.id }),
     ).rejects.toThrow(/No such person/i);
+  });
+
+  it("finds a PRN whatever case it is typed in", async () => {
+    const lettered = await makeActor(
+      "sched-lettered@plannr-demo.invalid",
+      "The Lettered",
+      ["student"],
+    );
+    await db.studentProfile.upsert({
+      where: { userId: lettered.id },
+      update: { prn: "SIC23B001" },
+      create: { userId: lettered.id, orgId, prn: "SIC23B001" },
+    });
+
+    const found = await callerFor(learner).timetable.searchPeople({
+      query: "sic23",
+    });
+    expect(found.rows.map((p) => p.id)).toEqual([lettered.id]);
   });
 });
 

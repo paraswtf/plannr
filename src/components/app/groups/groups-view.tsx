@@ -76,15 +76,34 @@ export function GroupsView({ permissions }: { permissions: string }) {
     { placeholderData: (prev) => prev },
   );
   const lastPage = groups.data?.pageCount ?? 1;
+  // Deleting the last group on the final page leaves the page number past the
+  // end, which shows an empty list with no pager. Placeholder data still
+  // carries the previous page count, so wait for the real answer.
+  useEffect(() => {
+    if (
+      groups.data &&
+      !groups.isPlaceholderData &&
+      page > groups.data.pageCount
+    ) {
+      setPage(Math.max(1, groups.data.pageCount));
+    }
+  }, [groups.data, groups.isPlaceholderData, page]);
   // The programme filter is itself a list, so it is paged and searchable too.
   const [programmeQuery, setProgrammeQuery] = useState("");
-  const courses = api.groups.programmeList.useQuery({
-    query: useDebounced(programmeQuery) || undefined,
-    pageSize: 20,
-    // Without this the chosen programme drops out of the rows on a narrowing
-    // search and its label falls back to a placeholder.
-    includeIds: programmeId ? [programmeId] : undefined,
-  });
+  const [programmePageSize, setProgrammePageSize] = useState(20);
+  const courses = api.groups.programmeList.useQuery(
+    {
+      query: useDebounced(programmeQuery) || undefined,
+      pageSize: programmePageSize,
+      // Without this the chosen programme drops out of the rows on a narrowing
+      // search and its label falls back to a placeholder.
+      includeIds: programmeId ? [programmeId] : undefined,
+    },
+    // Every change of key (a choice, a search, a longer page) would otherwise
+    // leave `data` empty until the answer arrives: the trigger would read "All
+    // programmes" with the list already filtered, and the open list would blank.
+    { placeholderData: (prev) => prev },
+  );
   const selectedProgramme = courses.data?.rows.find(
     (c) => c.id === programmeId,
   );
@@ -139,6 +158,7 @@ export function GroupsView({ permissions }: { permissions: string }) {
                 loading={courses.isLoading}
                 query={programmeQuery}
                 onQueryChange={setProgrammeQuery}
+                onLoadMore={() => setProgrammePageSize((n) => n + 20)}
                 // "Programme", as the tab beside it says: on this screen a
                 // course used to mean a degree here and a subject one click
                 // away on /courses, which is two levels of the hierarchy under
@@ -423,16 +443,24 @@ function NewGroupDialog({
     programmeId: programmeId || undefined,
   });
 
-  const courses = api.groups.programmeList.useQuery({
-    query: useDebounced(programmeQuery) || undefined,
-    pageSize: coursePageSize,
-    includeIds: programmeId ? [programmeId] : undefined,
-  });
-  const terms = api.groups.termList.useQuery({
-    query: useDebounced(termQuery) || undefined,
-    pageSize: termPageSize,
-    includeIds: semesterId ? [semesterId] : undefined,
-  });
+  // Placeholder data keeps the list and the chosen label on screen while a
+  // longer page loads, rather than blanking them for the round trip.
+  const courses = api.groups.programmeList.useQuery(
+    {
+      query: useDebounced(programmeQuery) || undefined,
+      pageSize: coursePageSize,
+      includeIds: programmeId ? [programmeId] : undefined,
+    },
+    { placeholderData: (prev) => prev },
+  );
+  const terms = api.groups.termList.useQuery(
+    {
+      query: useDebounced(termQuery) || undefined,
+      pageSize: termPageSize,
+      includeIds: semesterId ? [semesterId] : undefined,
+    },
+    { placeholderData: (prev) => prev },
+  );
   const selectedProgramme = courses.data?.rows.find(
     (c) => c.id === programmeId,
   );

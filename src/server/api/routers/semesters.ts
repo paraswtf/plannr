@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { PermissionFlags } from "~/lib/permissions";
+import { isRunning } from "~/lib/semester-dates";
 import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import { createTRPCRouter, permissionProcedure } from "~/server/api/trpc";
 
@@ -84,12 +85,12 @@ export const semestersRouter = createTRPCRouter({
         ctx.db.semester.count({ where }),
       ]);
 
-      const today = new Date();
+      const now = new Date();
       return toPage(
         semesters.map((semester) => ({
           ...semester,
           /** The one running now. There is at most one, and sometimes none. */
-          current: semester.startDate <= today && semester.endDate >= today,
+          current: isRunning(semester, now),
         })),
         total,
         input,

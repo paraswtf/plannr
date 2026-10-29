@@ -711,15 +711,15 @@ list in a single request, which for most of these endpoints is the default.
 | `GET /approvals/bookings`         | 1–500, default 200   | none                                                                                                                                |
 | `GET /courses`                    | 1–2000, default 1000 | `semesterId`, `programmeId`, `search`                                                                                               |
 | `GET /semesters`                  | 1–500, default 200   | none                                                                                                                                |
-| `GET /groups`                     | 1–1000, default 500  | `query`, `programmeId`, `semesterId`, `batchId`, `kind`, `includeIds`                                                               |
-| `GET /groups/{id}/lectures`       | 1–1000, default 200  | `from`, `to` — earliest sitting first, so paging walks forward                                                                      |
+| `GET /groups`                     | 1–1000, default 500  | `query` (name, label, programme, batch or teacher), `programmeId`, `semesterId`, `batchId`, `kind`, `includeIds`                    |
+| `GET /groups/{id}/lectures`       | 1–1000, default 200  | `from`, `to`, `order`: `asc` (the default) is earliest sitting first, so paging walks forward; `desc` is latest first               |
 | `GET /faculty`                    | 1–1000, default 500  | `query`, `includeIds`                                                                                                               |
 | `GET /batches`                    | 1–500, default 200   | `query`, `programmeId`                                                                                                              |
 | `GET /programmes`                 | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
 | `GET /terms`                      | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
-| `GET /plans`                      | 1–100, default 20    | `query`, `scope` (`all`/`mine`/`shared`/`review`)                                                                                   |
+| `GET /plans`                      | 1–100, default 20    | `query` (plan name, term or author), `scope` (`all`/`mine`/`shared`/`review`)                                                       |
 | `GET /plans/{id}/history`         | 1–500, default 200   | none                                                                                                                                |
-| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`inactive`/`never-signed-in`)                                                           |
+| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`never-signed-in`/`inactive`/`waiting`, see below)                                      |
 | `GET /roles`                      | 1–500, default 200   | none                                                                                                                                |
 | `GET /api-keys`                   | 1–500, default 200   | none                                                                                                                                |
 | `GET /notifications`              | 1–200, default 50    | `filter` (`all`/`unread`), newest first so page 1 is what is new                                                                    |
@@ -728,6 +728,22 @@ list in a single request, which for most of these endpoints is the default.
 them — it is how a picker keeps a chosen option visible, and not a way to fetch
 by id. Pinned rows are appended, so `rows` can come back longer than `pageSize`,
 and `total` still counts what matched the filter rather than what you were handed.
+
+`status` on `GET /users` and `GET /users/count` is the account status the People
+screen shows on each row, and the four values other than `all` cover every person
+exactly once:
+
+| `status`          | Who it matches                                                        |
+| ----------------- | --------------------------------------------------------------------- |
+| `active`          | enabled, and has signed in at least once                              |
+| `never-signed-in` | enabled, but has never signed in (imported and not yet arrived)       |
+| `inactive`        | disabled, and has a real address                                      |
+| `waiting`         | disabled because the college has not sent an address for them yet    |
+
+`active` used to mean every enabled account, signed in or not. Those who have
+never signed in are now `never-signed-in` only, and `never-signed-in` no longer
+returns disabled people. Ask for `active` and `never-signed-in` separately to get
+everybody enabled.
 
 ### The two lists that answer whole
 

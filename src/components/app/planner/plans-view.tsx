@@ -72,9 +72,17 @@ export function PlansView({ permissions }: { permissions: string }) {
   // beneath it is broader than that to-do: not on "Needs my review", where the
   // whole list already is the queue, and not on "Mine", since nobody signs off
   // their own plan.
-  const awaitingMe = rows.filter((p) => p.awaitingMe);
-  const showQueue =
-    awaitingMe.length > 0 && (scope === "all" || scope === "shared");
+  //
+  // It has a query of its own, because the list's page and search box would
+  // otherwise decide what is in it: a plan waiting on the reader on page two,
+  // or one the search text does not match, has to be found just the same.
+  const queueScope = scope === "all" || scope === "shared";
+  const queue = api.plans.list.useQuery(
+    { scope: "review", page: 1, pageSize: 100 },
+    { enabled: queueScope },
+  );
+  const awaitingMe = queue.data?.rows ?? [];
+  const showQueue = queueScope && awaitingMe.length > 0;
 
   return (
     <>
@@ -95,7 +103,9 @@ export function PlansView({ permissions }: { permissions: string }) {
       />
 
       <PageBody className="flex flex-col gap-6">
-        {showQueue && <SignOffQueue plans={awaitingMe} />}
+        {showQueue && (
+          <SignOffQueue plans={awaitingMe} total={queue.data?.total ?? 0} />
+        )}
 
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -114,7 +124,7 @@ export function PlansView({ permissions }: { permissions: string }) {
               icon="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search plans…"
+              placeholder="Search name, term or author…"
               aria-label="Search plans"
               className="w-full sm:w-64"
             />
@@ -155,7 +165,7 @@ export function PlansView({ permissions }: { permissions: string }) {
                 }
               >
                 {debounced
-                  ? "Try a shorter name, or clear the search to see every plan."
+                  ? "Try a shorter name, a term or an author, or clear the search to see every plan."
                   : scope !== "review" && canBuild
                     ? "Start one, paste in what each group needs, and the builder will lay out the week."
                     : undefined}
@@ -228,7 +238,7 @@ function planMeta(plan: PlanRow) {
  * it is the one block on the page that should be found before it is looked
  * for. A row opens the plan, the same as in the list below.
  */
-function SignOffQueue({ plans }: { plans: PlanRow[] }) {
+function SignOffQueue({ plans, total }: { plans: PlanRow[]; total: number }) {
   return (
     <section
       aria-labelledby="plans-queue-title"
@@ -243,7 +253,7 @@ function SignOffQueue({ plans }: { plans: PlanRow[] }) {
           Waiting on your sign-off
         </h2>
         <span className="text-warn text-sm font-semibold tabular-nums">
-          {plans.length}
+          {total}
         </span>
       </div>
       {/* Concentric with the wash around it: 14px outside, 6px of padding, 8px

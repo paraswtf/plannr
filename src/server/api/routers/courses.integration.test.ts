@@ -706,3 +706,92 @@ describe("an API key's machine identity", () => {
     ).toBe(before);
   });
 });
+
+describe("lists that are paged and searched", () => {
+  it("counts only this semester's groups on the setup diagram", async () => {
+    const batch = await db.batch.findFirstOrThrow({ where: { orgId } });
+    const older = await db.semester.create({
+      data: {
+        orgId,
+        name: "Spring 2026",
+        startDate: new Date("2026-01-01"),
+        endDate: new Date("2026-05-31"),
+      },
+    });
+    // A group the intake had last semester and kept: it is no longer part of
+    // the semester the diagram is about.
+    await db.group.create({
+      data: {
+        orgId,
+        programmeId: batch.programmeId,
+        semesterId: older.id,
+        batchId: batch.id,
+        name: "Div A",
+      },
+    });
+
+    const structure = await coordinator.courses.structure();
+    expect(structure?.programmes[0]?.batches[0]?.groups).toBe(1);
+    expect(structure?.totals.groups).toBe(1);
+  });
+
+  it("walks groups that share a name without repeating or losing one", async () => {
+    const batch = await db.batch.findFirstOrThrow({ where: { orgId } });
+    // No semester, so the (programme, semester, name) constraint does not
+    // apply and the name and programme code alone leave every row tied.
+    await db.group.createMany({
+      data: Array.from({ length: 6 }, () => ({
+        orgId,
+        programmeId: batch.programmeId,
+        name: "Elective",
+      })),
+    });
+
+    const seen: string[] = [];
+    for (let page = 1; page <= 4; page++) {
+      const result = await coordinator.groups.list({ page, pageSize: 2 });
+      seen.push(...result.rows.map((g) => g.id));
+    }
+    expect(seen).toHaveLength(7);
+    expect(new Set(seen).size).toBe(7);
+  });
+
+  it("finds a group by the name of a teacher it has", async () => {
+    await coordinator.groups.setFaculty({ groupId, facultyIds: [facultyId] });
+
+    const found = await coordinator.groups.list({ query: "Dr. Teacher" });
+    expect(found.rows.map((g) => g.id)).toEqual([groupId]);
+    const missed = await coordinator.groups.list({ query: "Nobody Atall" });
+    expect(missed.total).toBe(0);
+  });
+
+  it("walks faculty with no short name without repeating or losing one", async () => {
+    for (let i = 0; i < 5; i++) {
+      const email = `cat-extra-${i}@plannr-demo.invalid`;
+      const user = await db.user.upsert({
+        where: { email },
+        update: {},
+        create: { orgId, email, name: `Extra Teacher ${i}` },
+      });
+      await db.facultyProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: { userId: user.id, orgId },
+      });
+    }
+
+    const first = await coordinator.groups.facultyList({ pageSize: 2 });
+    // The fixture's teacher and the five more, at least.
+    expect(first.total).toBeGreaterThanOrEqual(6);
+    const seen = [...first.rows.map((f) => f.id)];
+    for (let page = 2; page <= first.pageCount; page++) {
+      const result = await coordinator.groups.facultyList({
+        page,
+        pageSize: 2,
+      });
+      seen.push(...result.rows.map((f) => f.id));
+    }
+    expect(seen).toHaveLength(first.total);
+    expect(new Set(seen).size).toBe(first.total);
+  });
+});

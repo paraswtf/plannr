@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { contactAddress, contactAddresses } from "~/lib/people";
 import { PermissionFlags } from "~/lib/permissions";
+import { isRunning } from "~/lib/semester-dates";
 import { pageArgs, pageInput, toPage } from "~/server/api/pagination";
 import {
   createTRPCRouter,
@@ -108,6 +109,31 @@ export const groupsRouter = createTRPCRouter({
                     },
                   },
                 },
+                // The row lists its teachers, so a teacher's name finds it.
+                {
+                  faculty: {
+                    some: {
+                      faculty: {
+                        OR: [
+                          {
+                            shortName: {
+                              contains: input.query,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                          {
+                            user: {
+                              name: {
+                                contains: input.query,
+                                mode: "insensitive" as const,
+                              },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
               ],
             }
           : {}),
@@ -130,9 +156,14 @@ export const groupsRouter = createTRPCRouter({
           },
         },
       } as const;
+      // The same name can sit under one programme in several semesters, or with
+      // no semester at all, so code and name alone leave ties, and Postgres may
+      // order tied rows differently from one page query to the next. The id
+      // makes the order total.
       const orderBy = [
         { programme: { code: "asc" as const } },
         { name: "asc" as const },
+        { id: "asc" as const },
       ];
 
       const [rows, total, pinned] = await Promise.all([
@@ -570,7 +601,15 @@ export const groupsRouter = createTRPCRouter({
         user: { select: { id: true, name: true, email: true, isActive: true } },
         _count: { select: { assignments: true } },
       } as const;
-      const orderBy = { shortName: "asc" as const };
+      // Rows are drawn under `shortName ?? user.name`, which Prisma cannot sort
+      // by. Sorting on the short name, then the full name, then the id keeps the
+      // order total: a short name is optional, so every member without one used
+      // to tie, and tied rows can repeat or vanish between pages.
+      const orderBy = [
+        { shortName: "asc" as const },
+        { user: { name: "asc" as const } },
+        { id: "asc" as const },
+      ];
 
       const [rows, total, pinned] = await Promise.all([
         ctx.db.facultyProfile.findMany({
@@ -707,7 +746,8 @@ export const groupsRouter = createTRPCRouter({
     }),
 
   /**
-   * A group's scheduled lectures, earliest sitting first.
+   * A group's scheduled lectures, earliest sitting first unless `order` says
+   * otherwise.
    *
    * Reads occurrences rather than events, so a weekly class appears as the
    * dates it actually sits — which is what a register is taken against. Picks up
@@ -719,6 +759,12 @@ export const groupsRouter = createTRPCRouter({
         groupId: z.string().cuid(),
         from: z.date().optional(),
         to: z.date().optional(),
+        /**
+         * `desc` puts the latest sitting first, for reading back through a
+         * group's history without paging to the end of it to find the recent
+         * ones.
+         */
+        order: z.enum(["asc", "desc"]).default("asc"),
         /**
          * Replaces a `limit` that stopped at sixty and said nothing about what
          * it had left out. One group sits fifteen to twenty lectures a week, so
@@ -771,7 +817,9 @@ export const groupsRouter = createTRPCRouter({
               },
             },
           },
-          orderBy: { start: "asc" },
+          // The id breaks ties between two sittings that start together, so a
+          // row cannot repeat or vanish between pages.
+          orderBy: [{ start: input.order }, { id: input.order }],
           ...pageArgs(input),
         }),
         ctx.db.eventOccurrence.count({ where }),
@@ -1135,7 +1183,7 @@ export const groupsRouter = createTRPCRouter({
       const rows = [...terms, ...pinned.filter((t) => !seen.has(t.id))];
       // Decided here rather than in the browser: the dates are @db.Date, which
       // a client would read in its own timezone and get wrong at the edges.
-      const today = new Date();
+      const now = new Date();
 
       return toPage(
         rows.map((t) => ({
@@ -1143,7 +1191,7 @@ export const groupsRouter = createTRPCRouter({
           name: t.name,
           startDate: t.startDate,
           endDate: t.endDate,
-          isCurrent: t.startDate <= today && today <= t.endDate,
+          isCurrent: isRunning(t, now),
         })),
         total,
         input,

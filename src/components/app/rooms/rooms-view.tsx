@@ -49,6 +49,32 @@ type GridData = RouterOutputs["timetable"]["grid"];
 type GridRoom = GridData["rooms"][number];
 
 /**
+ * Whether a room answers to what was typed in the search box. One predicate
+ * for the in-service list and the archived one, so a search finds the same
+ * rooms on both tabs.
+ */
+function roomMatches(
+  room: {
+    code: string;
+    type: RoomTypeName;
+    floor: number;
+    building: { name: string };
+  },
+  needle: string,
+): boolean {
+  return (
+    room.code.toLowerCase().includes(needle) ||
+    (TYPE_LABEL[room.type]?.toLowerCase().includes(needle) ?? false) ||
+    room.building.name.toLowerCase().includes(needle) ||
+    // The floor is a visible axis now, so "ground" and "floor 3" are things
+    // somebody will type. Matched by the start of its name and not by
+    // substring, or "3" would fetch a whole floor on top of every code
+    // containing a 3, see `matchesFloor`.
+    matchesFloor(room.floor, needle)
+  );
+}
+
+/**
  * How wide a room's card is inside a floor's lane.
  *
  * 268px is the width the card was drawn for — the number the flat grid's track
@@ -175,26 +201,13 @@ export function RoomsView({
   const { rooms, sections } = useMemo(() => {
     const matches = (data?.rooms ?? []).filter((room) => {
       if (buildingId && room.building.id !== buildingId) return false;
-      if (!needle) return true;
-      return (
-        room.code.toLowerCase().includes(needle) ||
-        (TYPE_LABEL[room.type]?.toLowerCase().includes(needle) ?? false) ||
-        room.building.name.toLowerCase().includes(needle) ||
-        // The floor is a visible axis now, so "ground" and "floor 3" are things
-        // somebody will type. Matched by the start of its name and not by
-        // substring, or "3" would fetch a whole floor on top of every code
-        // containing a 3 — see `matchesFloor`.
-        matchesFloor(room.floor, needle)
-      );
+      return !needle || roomMatches(room, needle);
     });
     return { rooms: matches, sections: floorSections(matches) };
   }, [data?.rooms, needle, buildingId]);
 
   const archivedRooms = archived.filter(
-    (room) =>
-      !needle ||
-      room.code.toLowerCase().includes(needle) ||
-      room.building.name.toLowerCase().includes(needle),
+    (room) => !needle || roomMatches(room, needle),
   );
 
   // Which building a room is in only needs saying while more than one is in
@@ -479,6 +492,7 @@ export function RoomsView({
         {tab === "archived" ? (
           <ArchivedRooms
             rooms={archivedRooms}
+            searching={archived.length > 0}
             loading={archivedQuery.isLoading}
             restoring={restore.isPending ? restore.variables?.id : undefined}
             onRestore={(id) => restore.mutate({ id })}
@@ -935,6 +949,7 @@ function CompactRooms({
  */
 function ArchivedRooms({
   rooms,
+  searching,
   loading,
   restoring,
   onRestore,
@@ -947,6 +962,8 @@ function ArchivedRooms({
     features: RoomFeatureName[];
     building: { name: string };
   }>;
+  /** Some rooms are archived, so an empty list means the search found none. */
+  searching: boolean;
   loading: boolean;
   /** The room currently being put back, if any. */
   restoring?: string;
@@ -974,6 +991,16 @@ function ArchivedRooms({
             </div>
           ))}
         </div>
+      </Card>
+    );
+  }
+
+  if (rooms.length === 0 && searching) {
+    return (
+      <Card pad={0}>
+        <EmptyState icon="inbox" title="No archived rooms match" compact>
+          Try a different room, building, type or floor.
+        </EmptyState>
       </Card>
     );
   }

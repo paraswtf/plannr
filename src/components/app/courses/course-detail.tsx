@@ -239,12 +239,16 @@ function FacultyEditor({ course }: { course: Course }) {
   const utils = api.useUtils();
   const router = useRouter();
 
-  const faculty = api.groups.facultyList.useQuery({
-    query: useDebounced(query) || undefined,
-    pageSize,
-    // Pins whoever is already on the list so a search cannot hide them.
-    includeIds: course.faculty.map((f) => f.id),
-  });
+  const faculty = api.groups.facultyList.useQuery(
+    {
+      query: useDebounced(query) || undefined,
+      pageSize,
+      // Pins whoever is already on the list so a search cannot hide them.
+      includeIds: course.faculty.map((f) => f.id),
+    },
+    // Keeps the list on screen while a longer page or a new search loads.
+    { placeholderData: (prev) => prev },
+  );
 
   const setFaculty = api.courses.setFaculty.useMutation({
     onSuccess: async () => {
@@ -297,11 +301,14 @@ function GroupsEditor({ course }: { course: Course }) {
   const utils = api.useUtils();
   const router = useRouter();
 
-  const groups = api.groups.list.useQuery({
-    query: useDebounced(query) || undefined,
-    pageSize,
-    includeIds: course.groups.map((g) => g.id),
-  });
+  const groups = api.groups.list.useQuery(
+    {
+      query: useDebounced(query) || undefined,
+      pageSize,
+      includeIds: course.groups.map((g) => g.id),
+    },
+    { placeholderData: (prev) => prev },
+  );
 
   const setGroups = api.courses.setGroups.useMutation({
     onSuccess: async () => {

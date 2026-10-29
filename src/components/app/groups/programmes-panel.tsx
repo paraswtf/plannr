@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, IconButton } from "~/components/ui/button";
 import { Callout } from "~/components/ui/callout";
@@ -42,6 +42,15 @@ export function ProgrammesPanel({
   const setCreating = onCreatingChange ?? setOwnCreating;
   const [editing, setEditing] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // A new search starts from the first page. Without this, page 2 of a
+  // three-row result is empty, the pager disappears with it, and the only way
+  // out is to clear the box. Reset while rendering rather than in an effect, so
+  // the new query is never sent with the old page.
+  const [pagedQuery, setPagedQuery] = useState(query);
+  if (pagedQuery !== query) {
+    setPagedQuery(query);
+    setPage(1);
+  }
   const utils = api.useUtils();
 
   const courses = api.groups.programmeList.useQuery(
@@ -50,6 +59,18 @@ export function ProgrammesPanel({
   );
   const rows = courses.data?.rows ?? [];
   const lastPage = courses.data?.pageCount ?? 1;
+  // Deleting the last programme on the final page leaves the page number past
+  // the end. Placeholder data still carries the previous page count, so wait
+  // for the real answer before stepping back.
+  useEffect(() => {
+    if (
+      courses.data &&
+      !courses.isPlaceholderData &&
+      page > courses.data.pageCount
+    ) {
+      setPage(Math.max(1, courses.data.pageCount));
+    }
+  }, [courses.data, courses.isPlaceholderData, page]);
 
   return (
     <>

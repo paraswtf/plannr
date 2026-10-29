@@ -82,3 +82,66 @@ export const contactAddresses = (values: string[]): string[] =>
     .map((value) => contactAddress(value))
     .filter((value): value is string => value !== null)
     .map((value) => value.toLowerCase());
+
+/**
+ * Where somebody's account stands, as the directory names it.
+ *
+ * One definition shared by the badge on a row and the filter above the list,
+ * so that picking "Active" can only ever return rows that say Active. The four
+ * cover everybody exactly once: an account that is switched on has either
+ * been signed in to or not, and one that is switched off is either waiting on
+ * the college for an address or has been disabled by somebody here.
+ */
+export const ACCOUNT_STATUSES = [
+  "active",
+  "never-signed-in",
+  "inactive",
+  "waiting",
+] as const;
+
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+
+/**
+ * A person's account status. `email` may be the raw column or the address a
+ * screen was already handed, with the placeholder turned to null:
+ * `contactAddress` reads both the same.
+ */
+export function accountStatus(person: {
+  isActive: boolean;
+  email: string | null | undefined;
+  hasSignedIn: boolean;
+}): AccountStatus {
+  if (!person.isActive)
+    return contactAddress(person.email) === null ? "waiting" : "inactive";
+  return person.hasSignedIn ? "active" : "never-signed-in";
+}
+
+/**
+ * The Prisma filter for one account status, the same rule as `accountStatus`.
+ *
+ * "Waiting" is read from the placeholder domain because that is all the
+ * database holds about it. A blank address, which `contactAddress` also reads
+ * as none, is never written: every path that creates a person requires one.
+ */
+export function accountStatusWhere(status: AccountStatus | "all") {
+  switch (status) {
+    case "active":
+      return { isActive: true, accounts: { some: {} } };
+    case "never-signed-in":
+      return { isActive: true, accounts: { none: {} } };
+    case "inactive":
+      return {
+        isActive: false,
+        NOT: {
+          email: { endsWith: NO_ADDRESS_DOMAIN, mode: "insensitive" as const },
+        },
+      };
+    case "waiting":
+      return {
+        isActive: false,
+        email: { endsWith: NO_ADDRESS_DOMAIN, mode: "insensitive" as const },
+      };
+    case "all":
+      return {};
+  }
+}

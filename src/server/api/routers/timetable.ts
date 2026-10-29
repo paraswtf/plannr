@@ -404,9 +404,12 @@ export const timetableRouter = createTRPCRouter({
               ...(input.includeCancelled
                 ? {}
                 : { status: { in: [...OCCUPYING_STATUSES] } }),
-              ...(input.buildingId
-                ? { room: { buildingId: input.buildingId } }
-                : {}),
+              // The same rooms the grid draws, so a sitting in an archived room
+              // is neither counted nor sent without a column to sit in.
+              room: {
+                isActive: true,
+                ...(input.buildingId ? { buildingId: input.buildingId } : {}),
+              },
             },
             select: selectOccurrence,
             orderBy: { start: "asc" },
@@ -590,7 +593,14 @@ export const timetableRouter = createTRPCRouter({
                         mode: "insensitive" as const,
                       },
                     },
-                    { studentProfile: { prn: { contains: input.query } } },
+                    {
+                      studentProfile: {
+                        prn: {
+                          contains: input.query,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
                   ],
                 },
               ]
@@ -664,7 +674,11 @@ export const timetableRouter = createTRPCRouter({
             OR: [
               { name: { contains: input.query, mode: "insensitive" as const } },
               addressSearch(input.query),
-              { studentProfile: { prn: { contains: input.query } } },
+              {
+                studentProfile: {
+                  prn: { contains: input.query, mode: "insensitive" as const },
+                },
+              },
             ],
           }
         : {};

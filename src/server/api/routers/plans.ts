@@ -281,10 +281,42 @@ export const plansRouter = createTRPCRouter({
         AND: [
           visible,
           scoped,
+          // A row shows its term and its author as well as its name, so
+          // those are what a search matches. The author is searched by name
+          // and by address through `addressSearch`, which keeps the
+          // placeholder addresses out of the results.
           ...(input.query
             ? [
                 {
-                  name: { contains: input.query, mode: "insensitive" as const },
+                  OR: [
+                    {
+                      name: {
+                        contains: input.query,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                    {
+                      semester: {
+                        name: {
+                          contains: input.query,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
+                    {
+                      createdBy: {
+                        OR: [
+                          {
+                            name: {
+                              contains: input.query,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                          addressSearch(input.query),
+                        ],
+                      },
+                    },
+                  ],
                 },
               ]
             : []),
@@ -346,10 +378,17 @@ export const plansRouter = createTRPCRouter({
           reviewerCount: p.reviewers.length,
           approvedCount: p.reviewers.filter((r) => r.decision === "APPROVED")
             .length,
-          /** Set when this person still owes the plan an answer. */
-          awaitingMe: p.reviewers.some(
-            (r) => r.userId === ctx.actor.id && r.decision === "PENDING",
-          ),
+          /**
+           * Set when this person still owes the plan an answer. Only a plan
+           * that is out for review can be answered, so this is the same test
+           * the "review" scope applies: once another reviewer asks for
+           * changes, this person's own pending row no longer counts.
+           */
+          awaitingMe:
+            p.status === PlanStatus.IN_REVIEW &&
+            p.reviewers.some(
+              (r) => r.userId === ctx.actor.id && r.decision === "PENDING",
+            ),
         })),
         total,
         input,
