@@ -18,7 +18,6 @@ import {
   checkCapacity,
   checkConflicts,
   hasHardConflict,
-  type Conflict,
 } from "~/server/services/conflicts";
 import {
   lockResources,
@@ -31,11 +30,16 @@ import {
   verdictSeverity,
   type Verdict,
 } from "~/server/services/approvals";
+import { announceRefusedClass } from "~/server/services/assignments/sittings";
 import {
   regenerateOccurrences,
   splitSeriesAt,
   type Db,
 } from "~/server/services/occurrences";
+import {
+  conflictError,
+  createEventInTx,
+} from "~/server/services/events/create";
 import {
   EventKind,
   EventStatus,
@@ -78,16 +82,6 @@ const createInput = z.object({
    */
   skipDates: z.array(z.date()).max(100).optional(),
 });
-
-/** Conflicts a client may safely be shown; the raw error carries the same list. */
-function conflictError(conflicts: Conflict[]): TRPCError {
-  const first = conflicts.find((c) => c.severity === "hard");
-  return new TRPCError({
-    code: "CONFLICT",
-    message: first?.message ?? "That slot is no longer free.",
-    cause: conflicts,
-  });
-}
 
 async function orgTimezone(db: Db, orgId: string) {
   const org = await db.organization.findUnique({
@@ -262,82 +256,31 @@ export const eventsRouter = createTRPCRouter({
         }
       }
 
-      const skipped = new Set(
-        (input.skipDates ?? []).map((date) => date.getTime()),
-      );
-
       return ctx.db.$transaction(async (tx) => {
-        // Re-checked inside the transaction: the client's preflight is a
-        // courtesy, not a guarantee, and the slot may have gone since.
-        const found = await checkConflicts(tx, {
+        const created = await createEventInTx(tx, {
           orgId: ctx.orgId,
+          createdById: ctx.actor.id,
+          kind: input.kind,
+          status,
+          title: input.title,
           roomId: input.roomId,
-          groupId: primaryGroupId,
           groupIds,
+          courseId: input.courseId,
           facultyId: input.facultyId,
+          semesterId: input.semesterId,
           startTime: input.startTime,
           endTime: input.endTime,
           timezone,
           rrule: input.rrule,
-        });
-        // A date being skipped is not booked, so whatever it clashed with is
-        // no longer this event's problem.
-        const conflicts = found.filter(
-          (c) => !c.candidate || !skipped.has(c.candidate.start.getTime()),
-        );
-        if (settings.blockConflicts && hasHardConflict(conflicts)) {
-          throw conflictError(conflicts);
-        }
-
-        const event = await tx.event.create({
-          data: {
-            orgId: ctx.orgId,
-            kind: input.kind,
-            status,
-            title: input.title,
-            roomId: input.roomId,
-            groupId: primaryGroupId,
-            courseId: input.courseId ?? null,
-            facultyId: input.facultyId ?? null,
-            semesterId: input.semesterId ?? null,
-            createdById: ctx.actor.id,
-            startTime: input.startTime,
-            endTime: input.endTime,
-            timezone,
-            rrule: input.rrule ?? null,
-            notes: input.notes ?? null,
-          },
+          notes: input.notes,
+          skipDates: input.skipDates,
+          blockConflicts: settings.blockConflicts,
         });
 
-        if (groupIds.length > 0) {
-          await tx.eventGroup.createMany({
-            data: groupIds.map((groupId) => ({ eventId: event.id, groupId })),
-          });
+        if (created.event.status === EventStatus.PENDING) {
+          await notifyBookingRequested(tx, created.event, ctx.actor.id);
         }
-
-        // Skipped dates are recorded the same way a cancelled occurrence is, so
-        // the series stays one event and the gaps are visible as exceptions.
-        if (skipped.size > 0) {
-          await tx.eventException.createMany({
-            data: [...skipped].map((time) => ({
-              eventId: event.id,
-              originalStart: new Date(time),
-              type: ExceptionType.CANCELLED,
-              reason: "Skipped when the series was booked",
-            })),
-          });
-        }
-        await regenerateOccurrences(tx, event.id);
-
-        if (event.status === EventStatus.PENDING) {
-          await notifyBookingRequested(tx, event, ctx.actor.id);
-        }
-
-        return {
-          event,
-          skipped: skipped.size,
-          warnings: conflicts.filter((c) => c.severity === "warning"),
-        };
+        return created;
       });
     }),
 
@@ -629,13 +572,36 @@ export const eventsRouter = createTRPCRouter({
       await assertMayEdit(ctx, event);
 
       return ctx.db.$transaction(async (tx) => {
-        await tx.eventException.deleteMany({
+        const cancelled = await tx.eventException.findFirst({
           where: {
             eventId: event.id,
             originalStart: input.originalStart,
             type: ExceptionType.CANCELLED,
           },
+          select: {
+            id: true,
+            _count: { select: { assignmentSittings: true } },
+          },
         });
+        if (cancelled && cancelled._count.assignmentSittings > 0) {
+          // A test is pinned to this sitting through its exception, so the
+          // exception goes back to being a plain pin instead of being deleted:
+          // the sitting returns to where the rule put it, and the test with it.
+          await tx.eventException.update({
+            where: { id: cancelled.id },
+            data: {
+              type: ExceptionType.MODIFIED,
+              newStartTime: null,
+              newEndTime: null,
+              newRoomId: null,
+              newTitle: null,
+              newFacultyId: null,
+              reason: null,
+            },
+          });
+        } else if (cancelled) {
+          await tx.eventException.delete({ where: { id: cancelled.id } });
+        }
         await regenerateOccurrences(tx, event.id);
         return { restored: true };
       });
@@ -660,7 +626,9 @@ export const eventsRouter = createTRPCRouter({
       const where = {
         orgId: ctx.orgId,
         status: EventStatus.PENDING,
-        kind: EventKind.BOOKING,
+        // A class waits here only when a teacher scheduled one for a test and
+        // the institution asks for that to be approved.
+        kind: { in: [EventKind.BOOKING, EventKind.CLASS] },
       };
       const [rows, total] = await Promise.all([
         ctx.db.event.findMany({
@@ -695,7 +663,9 @@ export const eventsRouter = createTRPCRouter({
           where: {
             orgId: ctx.orgId,
             status: EventStatus.PENDING,
-            kind: EventKind.BOOKING,
+            // Classes too: a teacher's extra class for a test waits here when
+            // changes need approval. Classes are never otherwise PENDING.
+            kind: { in: [EventKind.BOOKING, EventKind.CLASS] },
           },
           include: {
             room: { select: { code: true, capacity: true } },
@@ -730,6 +700,8 @@ export const eventsRouter = createTRPCRouter({
       const bookingItems = await Promise.all(
         bookings.map(async (event) => ({
           kind: "booking" as const,
+          /** An extra class for a test rather than a room booking. */
+          isClass: event.kind === EventKind.CLASS,
           id: event.id,
           title: event.title,
           requestedAt: event.createdAt,
@@ -963,6 +935,9 @@ export const eventsRouter = createTRPCRouter({
           },
         });
         await regenerateOccurrences(tx, event.id);
+        if (event.kind === EventKind.CLASS) {
+          await announceRefusedClass(tx, event.id);
+        }
         await notifyBookingDecided(tx, event, {
           approved: false,
           deciderId: ctx.actor.id,

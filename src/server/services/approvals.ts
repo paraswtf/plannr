@@ -423,6 +423,38 @@ export async function notifyBookingRequested(
   );
 }
 
+/**
+ * A class a teacher scheduled for a test is waiting: every approver but the
+ * teacher hears of it. Its own words rather than a booking's, because what is
+ * being approved is a lecture for a group, not a room for an afternoon.
+ */
+export async function notifyClassRequested(
+  db: Db,
+  lecture: BookingFacts,
+  requesterId: string,
+): Promise<void> {
+  const [approvers, requester, words] = await Promise.all([
+    approversOf(db, lecture.orgId),
+    db.user.findUnique({
+      where: { id: requesterId },
+      select: { name: true, email: true },
+    }),
+    bookingWords(db, lecture),
+  ]);
+  await notify(
+    db,
+    approvers.filter((id) => id !== requesterId),
+    {
+      orgId: lecture.orgId,
+      category: "APPROVALS",
+      title: "Extra class waiting for approval",
+      body: `${requester?.name ?? requester?.email ?? "Someone"} asks for ${words}. ${lecture.title}`,
+      url: "/approvals",
+      sourceKey: `class-requested:${lecture.id}`,
+    },
+  );
+}
+
 /** A booking was granted or refused: the person who asked is told, unless they decided it. */
 export async function notifyBookingDecided(
   db: Db,

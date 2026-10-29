@@ -32,3 +32,10 @@ const handler = (req: NextRequest) =>
   });
 
 export { handler as GET, handler as POST };
+
+/**
+ * Saving, opening and releasing a question paper derive a key with scrypt and
+ * typeset with typst, a page at a time on release, which can outrun a
+ * function's default limit. Vercel caps this by plan, as the cron route says.
+ */
+export const maxDuration = 60;

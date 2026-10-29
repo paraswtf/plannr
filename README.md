@@ -311,6 +311,58 @@ itself. Tapping it on a phone opens that route, which marks the notification rea
 and then forwards to the page the news is about, so the unread count is right
 whether someone reads it in the app or from the lock screen.
 
+## Assignments
+
+Tests and presentations a teacher sets for one of their groups, under the
+Assignments tab, which students have too. There are four kinds: a class test
+sat on paper, an online test and an in-class test both read and answered in
+Plannr, and a presentation.
+
+**A test is pinned to a class sitting.** The teacher picks one of the group's
+sittings they teach, or schedules a new class for it. A new class goes through
+the same `createEventInTx` as `events.create`, so conflicts are checked the one
+way, and it waits in Approvals when `requireApprovalChanges` is on, unless the
+person scheduling it holds `ManageAllEvents`. The pin is an `EventException` of
+type MODIFIED with no overrides: it changes nothing about the sitting, but it is
+the row a "this and following" split carries to the new series, and
+`EventOccurrence.exceptionId` points at it, which is how the timetable shows a
+test on the sitting it is in, for everybody who sees that sitting. Regeneration
+keeps pinned sittings' times in step (`syncAssignmentSittings`), so a moved
+class moves its test; a sitting called off says so; and a series retimed so
+that the sitting no longer exists prunes the exception, and the test says it has
+lost its class instead of quietly following another one. Restoring a called-off
+sitting turns its exception back into a plain pin rather than deleting it.
+
+**Who may set what is decided by the timetable.** A teacher holds
+`ManageOwnAssignments` and may set work only for a group and course they are
+timetabled to teach (`teaches` in `src/server/services/assignments/sittings.ts`),
+never on the strength of being cleared to teach a course. `ManageAllAssignments`
+(coordinators) manages everybody's. Both bits are granted to the built-in roles
+by the `20261029140000_assignments` migration. Every access decision goes
+through `src/server/services/assignments/access.ts`.
+
+**A presentation** runs over a range of calendar days in the institution's
+timezone. Its teams are students of the group, each in one team only, and each
+team is booked into a sitting inside the range, or a new class; teams sharing a
+sitting present in order.
+
+**Lists.** `startsAt` and `endsAt` on an assignment are derived (the first
+sitting's start and the last one's end, or the window's days), and are what
+Upcoming (soonest first) and Past (most recent first) sort and split on.
+
+**Question papers** are written in Plannr (typeset with typst, in a child
+process, `src/server/services/papers/typesetter.ts`) or uploaded as a PDF, and
+sealed with a password the teacher chooses (`crypto.ts`), so only that teacher
+can open one, at a browser. Every procedure that takes the password goes
+through `openForOwner` in `unlock.ts`, which counts wrong tries: five lock the
+paper for 15 minutes. Writes of a sealed paper are conditional on the sealing
+they opened, so a save and a password change in two tabs cannot undo each
+other. Opening a paper to students draws its pages as SVG inside the request,
+within a 30-second budget, and fixes when answers close (`answersCloseAt`) at
+that moment. The institution's letterhead and logo are in Settings, Documents;
+the logo is typeset once before it is saved, and the Prisma client in
+`src/server/db.ts` leaves it out of every read that does not select it by name.
+
 ## Keeping the timetable in step
 
 The college's timetable is not a feed. It is an MRBS install at

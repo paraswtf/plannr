@@ -5,6 +5,10 @@ import { useEffect, useRef } from "react";
 import { useLongPress } from "~/components/ui/use-long-press";
 import { courseTone } from "~/lib/course-colour";
 import { decimalHour, formatHourLabel } from "~/lib/dates";
+import {
+  AssignmentMark,
+  type BlockAssignment,
+} from "~/components/app/assignments/assignment-mark";
 import { blockPaint, NowMark } from "./block-paint";
 import {
   blockHeight,
@@ -35,6 +39,8 @@ export interface DayCalendarEvent {
   courseTitle?: string | null;
   /** Whatever the viewer's perspective wants said about it, most useful first. */
   lines?: string[];
+  /** Tests and presentations held in this sitting. */
+  assignments?: BlockAssignment[];
 }
 
 // Re-exported because the geometry moved into the pure module beside this one
@@ -252,6 +258,7 @@ function DayBlock({
        * they are.
        */}
       <span className="text-title block truncate text-[13px] leading-tight font-semibold">
+        <AssignmentMark assignments={event.assignments} />
         {event.title}
       </span>
       {span >= 0.5 && (

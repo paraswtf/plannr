@@ -38,6 +38,17 @@ export type RouterInputs = inferRouterInputs<AppRouter>;
  */
 export type RouterOutputs = inferRouterOutputs<AppRouter>;
 
+/**
+ * Whether a call carries a password, as a question paper's calls do. Those are
+ * never logged, in development or when they fail: the logger prints a call's
+ * input, and a wrong password would otherwise land in the browser console as
+ * it was typed.
+ */
+const carriesPassword = (input: unknown) =>
+  typeof input === "object" &&
+  input !== null &&
+  ("password" in input || "newPassword" in input);
+
 export function TRPCReactProvider(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
 
@@ -45,9 +56,12 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
     api.createClient({
       links: [
         loggerLink({
+          // The type leaves the input out of a reply, but the link passes the
+          // whole operation both ways, so it is there to check.
           enabled: (op) =>
-            process.env.NODE_ENV === "development" ||
-            (op.direction === "down" && op.result instanceof Error),
+            !carriesPassword("input" in op ? op.input : undefined) &&
+            (process.env.NODE_ENV === "development" ||
+              (op.direction === "down" && op.result instanceof Error)),
         }),
         httpBatchStreamLink({
           transformer: SuperJSON,

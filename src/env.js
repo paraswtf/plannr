@@ -69,6 +69,21 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: z.string().optional(),
     /** A `mailto:` or https URL the push services can reach the operator at. */
     VAPID_SUBJECT: z.string().optional(),
+
+    // --- Question papers ---
+    /**
+     * 32 bytes, base64 (`openssl rand -base64 32`), sealing each teacher's own
+     * paper secret. Unset, question papers are off: tests can still be set,
+     * but no paper can be uploaded or written. Losing or changing it makes
+     * every sealed paper unopenable, so it is backed up like the database.
+     */
+    QUESTION_PAPER_KEY: z
+      .string()
+      .refine(
+        (v) => Buffer.from(v, "base64").length === 32,
+        "QUESTION_PAPER_KEY must be base64 of exactly 32 bytes. Generate it with `openssl rand -base64 32`.",
+      )
+      .optional(),
   },
 
   /**
@@ -109,6 +124,7 @@ export const env = createEnv({
     CALENDAR_TOKEN_KEY: process.env.CALENDAR_TOKEN_KEY,
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    QUESTION_PAPER_KEY: process.env.QUESTION_PAPER_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },

@@ -18,6 +18,7 @@ import {
   packOverlaps,
   ROW_HEIGHT,
 } from "./day-layout";
+import { AssignmentMark } from "~/components/app/assignments/assignment-mark";
 import { blockPaint, NowMark } from "./block-paint";
 import { clashesWithNow, type DayCalendarEvent } from "./day-calendar";
 
@@ -393,6 +394,7 @@ function WeekBlock({
     >
       {/* Solid inks on the fill, at `fitLines`'s sizes: see `DayBlock`. */}
       <span className="text-title block truncate text-[12px] leading-tight font-semibold">
+        <AssignmentMark assignments={event.assignments} />
         {event.title}
       </span>
       {span >= 0.5 && (

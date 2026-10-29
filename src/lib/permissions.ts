@@ -55,6 +55,12 @@ export const PermissionFlags = {
   /** Sign a shared draft off, or send it back for changes. */
   ApproveSchedulePlans: 1n << 52n,
 
+  // --- Assignments ---
+  /** Set and run tests and presentations for the groups you teach. */
+  ManageOwnAssignments: 1n << 53n,
+  /** Set and run anybody's tests and presentations. */
+  ManageAllAssignments: 1n << 54n,
+
   // --- Organisation ---
   ManageSettings: 1n << 40n,
 
@@ -100,6 +106,10 @@ export const PERMISSION_IMPLIES: Partial<
   ViewSchedulePlans: ["ViewGroups", "ViewRooms", "ViewAllEvents"],
   ManageSchedulePlans: ["ViewSchedulePlans"],
   ApproveSchedulePlans: ["ViewSchedulePlans"],
+  // Setting a test means picking a group and one of its sittings, and forming
+  // presentation teams means reading who is in the group.
+  ManageOwnAssignments: ["ViewGroups", "ViewOwnEvents"],
+  ManageAllAssignments: ["ManageOwnAssignments", "ViewAllEvents"],
 };
 
 /** Metadata for the permission editor, grouped the way the UI lists them. */
@@ -233,6 +243,20 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
     category: "Planning",
   },
   {
+    name: "ManageOwnAssignments",
+    label: "Set assignments",
+    description:
+      "Set tests and presentations for the groups you teach, and mark them.",
+    category: "Assignments",
+  },
+  {
+    name: "ManageAllAssignments",
+    label: "Manage all assignments",
+    description:
+      "Set, change and mark anybody's tests and presentations. Question papers still open only for whoever set them.",
+    category: "Assignments",
+  },
+  {
     name: "ManageSettings",
     label: "Manage settings",
     description: "Change scheduling rules and institution settings.",
@@ -252,6 +276,7 @@ export const PERMISSION_CATEGORIES = [
   "People",
   "Academic",
   "Planning",
+  "Assignments",
   "Organisation",
 ] as const;
 
@@ -435,7 +460,8 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       F.ViewRooms |
       F.ViewGroups |
       // Taking the register is the faculty job the timetable exists to support.
-      F.MarkAttendance,
+      F.MarkAttendance |
+      F.ManageOwnAssignments,
   },
   {
     key: "coordinator",
@@ -454,7 +480,8 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
       // Coordinators draft the timetable. Signing one off is deliberately not
       // included: approval is for whoever the institution nominates, granted
       // through a custom role or a personal grant.
-      F.ManageSchedulePlans,
+      F.ManageSchedulePlans |
+      F.ManageAllAssignments,
   },
   {
     key: "admin",

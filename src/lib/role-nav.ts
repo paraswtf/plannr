@@ -78,6 +78,18 @@ export const NAV_ITEMS: NavItem[] = [
     section: "day",
     requires: ["ViewOwnEvents", "ViewAttendance"],
   },
+  // Tests and presentations, for both ends of them. A teacher sets them here
+  // and a student reads and answers them here, so it opens on the permission
+  // everybody holds and the screen decides which half to draw; setting one is
+  // ManageOwnAssignments, checked by the screen and by every procedure behind
+  // it. It sits with the day because a test is something on your day.
+  {
+    href: "/assignments",
+    label: "Assignments",
+    icon: "pencil",
+    section: "day",
+    requires: ["ViewOwnEvents", "ManageOwnAssignments"],
+  },
   {
     href: "/planner",
     label: "Schedule builder",

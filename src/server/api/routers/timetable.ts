@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import type { AssignmentType } from "~/lib/assignments";
 import { DEFAULT_TIMEZONE, endOfLocalDay, startOfLocalDay } from "~/lib/dates";
 import { addressSearch, contactAddress, personName } from "~/lib/people";
 import { spanWindow, SPANS } from "~/lib/schedule-spans";
@@ -72,6 +73,8 @@ const selectOccurrence = {
   // What the recurrence rule produced, before any exception moved it — the key
   // an edit to a single occurrence is filed under.
   exception: { select: { originalStart: true } },
+  // What a test or presentation slot is pinned to; see `heldIn`.
+  exceptionId: true,
   room: { select: { code: true, buildingId: true } },
   group: { select: { id: true, name: true, label: true } },
   faculty: {
@@ -108,6 +111,7 @@ type OccurrenceRow = {
     groups: Array<{ group: { id: string; name: string } }>;
   };
   exception: { originalStart: Date } | null;
+  exceptionId: string | null;
   room: { code: string; buildingId: string };
   group: { id: string; name: string; label: string | null } | null;
   faculty: {
@@ -124,8 +128,124 @@ type OccurrenceRow = {
  *   because "no" and "you may not ask" are different answers and a screen that
  *   confused them would draw "not yet taken" over a lecture that was.
  */
-function toDto(row: OccurrenceRow, readsAttendance: boolean) {
+/** Tests and presentations held in a sitting, as a block shows them. */
+export interface HeldAssignment {
+  id: string;
+  type: AssignmentType;
+  title: string;
+  /** Presentations: the teams presenting in this sitting, in order. */
+  teams: string[];
+  /**
+   * Whether the viewer can open it: they manage it or are in its group. The
+   * teacher of the class it is held in is told it is there without being
+   * able to open somebody else's test.
+   */
+  canOpen: boolean;
+}
+
+type Held = Map<string, HeldAssignment[]>;
+
+/**
+ * Who is looking, for deciding which tests and presentations a block may name.
+ * Always the person signed in, never the person whose day is on screen: being
+ * allowed to read somebody's timetable is not being allowed to read the tests
+ * set for their groups.
+ */
+interface Viewer {
+  userId: string;
+  /** Holds ManageAllAssignments: sees every test. */
+  managesAll: boolean;
+  /** Holds ManageOwnAssignments: sees the tests they set. */
+  setsOwn: boolean;
+  /** The groups they study in: they see their groups' tests. */
+  groupIds: Set<string>;
+  /** Their faculty profile: they see what is held in the classes they teach. */
+  facultyId: string | null;
+}
+
+function viewerOf(
+  ctx: { actor: { id: string }; bits: { has: (flag: bigint) => boolean } },
+  own: Awaited<ReturnType<typeof profilesOf>>,
+): Viewer {
   return {
+    userId: ctx.actor.id,
+    managesAll: ctx.bits.has(PermissionFlags.ManageAllAssignments),
+    setsOwn: ctx.bits.has(PermissionFlags.ManageOwnAssignments),
+    groupIds: new Set(own.student?.memberships.map((m) => m.groupId) ?? []),
+    facultyId: own.faculty?.id ?? null,
+  };
+}
+
+/**
+ * The tests and presentation slots pinned to these sittings, in one query for
+ * the whole page of rows. A slot is pinned through its sitting's exception, so
+ * rows with none hold nothing and are not asked about.
+ *
+ * Only what this viewer may know of is kept. A test is pinned to one sitting,
+ * but a combined lecture is attended by several groups and the campus grid is
+ * open to everybody; naming the test there would tell every other group, and
+ * anybody browsing, the titles and teams of tests they cannot open. So an
+ * entry stays for whoever could open it (`assignmentForRead`: its manager, or
+ * a student of its group) and for the teacher taking the class it is held in,
+ * and is left out for everybody else.
+ */
+async function heldIn(
+  db: Db,
+  rows: Array<{ exceptionId: string | null; faculty: { id: string } | null }>,
+  viewer: Viewer,
+): Promise<Held> {
+  const teacherOf = new Map(
+    rows.flatMap((r) =>
+      r.exceptionId ? [[r.exceptionId, r.faculty?.id]] : [],
+    ),
+  );
+  const ids = [...teacherOf.keys()];
+  const held: Held = new Map();
+  if (ids.length === 0) return held;
+  const sittings = await db.assignmentSitting.findMany({
+    where: { exceptionId: { in: ids } },
+    select: {
+      exceptionId: true,
+      assignment: {
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          groupId: true,
+          createdById: true,
+        },
+      },
+      team: { select: { name: true } },
+    },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  });
+  for (const sitting of sittings) {
+    const { groupId, createdById, ...assignment } = sitting.assignment;
+    const canOpen =
+      viewer.managesAll ||
+      (viewer.setsOwn && createdById === viewer.userId) ||
+      viewer.groupIds.has(groupId);
+    const teaches =
+      viewer.facultyId !== null &&
+      teacherOf.get(sitting.exceptionId!) === viewer.facultyId;
+    if (!canOpen && !teaches) continue;
+
+    const list = held.get(sitting.exceptionId!) ?? [];
+    let entry = list.find((a) => a.id === assignment.id);
+    if (!entry) {
+      entry = { ...assignment, teams: [], canOpen };
+      list.push(entry);
+    }
+    if (sitting.team) entry.teams.push(sitting.team.name);
+    held.set(sitting.exceptionId!, list);
+  }
+  return held;
+}
+
+function toDto(row: OccurrenceRow, readsAttendance: boolean, held: Held) {
+  return {
+    /** Tests and presentations held in this sitting. */
+    assignments: row.exceptionId ? (held.get(row.exceptionId) ?? []) : [],
     occurrenceId: row.id,
     eventId: row.eventId,
     start: row.start,
@@ -231,7 +351,7 @@ function cohortDto(group: Cohort) {
 
 export type CohortDto = ReturnType<typeof cohortDto>;
 
-function toScheduleDto(row: ScheduleRow, readsAttendance: boolean) {
+function toScheduleDto(row: ScheduleRow, readsAttendance: boolean, held: Held) {
   // The occurrence carries the primary cohort and the join carries the rest; a
   // combined lecture needs all of them, and each of them once.
   const seen = new Map<string, Cohort>();
@@ -241,7 +361,7 @@ function toScheduleDto(row: ScheduleRow, readsAttendance: boolean) {
   const cohorts = [...seen.values()].map(cohortDto);
 
   return {
-    ...toDto(row, readsAttendance),
+    ...toDto(row, readsAttendance, held),
     cohorts,
     /** Everyone expected in the room, across every cohort attending. */
     headcount: cohorts.reduce((total, cohort) => total + cohort.size, 0),
@@ -275,6 +395,14 @@ export async function profilesOf(db: Db, userId: string) {
 }
 
 /**
+ * A class still waiting for approval: a teacher's extra class for a test. It
+ * is on its teacher's day, marked as waiting, but not yet on the students':
+ * until somebody approves it nobody is to plan around it, and when it is
+ * approved the students are told it is new.
+ */
+const AWAITING_APPROVAL = { kind: "CLASS", status: "PENDING" } as const;
+
+/**
  * The `OR` clauses that select somebody's own sittings, for a Prisma `where`.
  *
  * Empty when there is nothing of theirs to find — a coordinator who neither
@@ -294,7 +422,7 @@ export function ownedOccurrenceClauses(
   const clauses: object[] = [];
   const groupIds = profiles.student?.memberships.map((m) => m.groupId) ?? [];
   if (scope !== "teaching" && groupIds.length > 0) {
-    clauses.push({ groupId: { in: groupIds } });
+    clauses.push({ groupId: { in: groupIds }, NOT: AWAITING_APPROVAL });
   }
   if (scope !== "attending" && profiles.faculty) {
     clauses.push({ facultyId: profiles.faculty.id });
@@ -322,8 +450,18 @@ function ownershipTest(profiles: Awaited<ReturnType<typeof profilesOf>>) {
     profiles.student?.memberships.map((m) => m.groupId) ?? [],
   );
   const facultyId = profiles.faculty?.id ?? null;
-  return (occurrence: { groupId: string | null; facultyId: string | null }) =>
-    (occurrence.groupId !== null && groupIds.has(occurrence.groupId)) ||
+  return (occurrence: {
+    groupId: string | null;
+    facultyId: string | null;
+    kind: string;
+    status: string;
+  }) =>
+    (occurrence.groupId !== null &&
+      groupIds.has(occurrence.groupId) &&
+      !(
+        occurrence.kind === AWAITING_APPROVAL.kind &&
+        occurrence.status === AWAITING_APPROVAL.status
+      )) ||
     (facultyId !== null && occurrence.facultyId === facultyId);
 }
 
@@ -435,6 +573,7 @@ export const timetableRouter = createTRPCRouter({
       // with an implication closure behind it, and a campus day is hundreds of
       // sittings.
       const marks = readsAttendance(ctx.bits);
+      const held = await heldIn(ctx.db, occurrences, viewerOf(ctx, profiles));
 
       return {
         timeZone,
@@ -443,7 +582,7 @@ export const timetableRouter = createTRPCRouter({
         rooms,
         buildings,
         occurrences: (occurrences as OccurrenceRow[]).map((row) => {
-          const dto = toDto(row, marks);
+          const dto = toDto(row, marks, held);
           /** Drawn in gold on the grid — see `ownershipTest`. */
           return { ...dto, isMine: isMine(dto) };
         }),
@@ -477,7 +616,14 @@ export const timetableRouter = createTRPCRouter({
         orderBy: { start: "asc" },
       });
       const marks = readsAttendance(ctx.bits);
-      return (occurrences as OccurrenceRow[]).map((row) => toDto(row, marks));
+      const held = await heldIn(
+        ctx.db,
+        occurrences,
+        viewerOf(ctx, await profilesOf(ctx.db, ctx.actor.id)),
+      );
+      return (occurrences as OccurrenceRow[]).map((row) =>
+        toDto(row, marks, held),
+      );
     }),
 
   /**
@@ -501,20 +647,25 @@ export const timetableRouter = createTRPCRouter({
           start: { lt: to },
           end: { gt: from },
           ...(scope.kind === "student"
-            ? { groupId: { in: scope.groupIds } }
+            ? { groupId: { in: scope.groupIds }, NOT: AWAITING_APPROVAL }
             : { facultyId: scope.facultyId }),
         },
         select: selectOccurrence,
         orderBy: { start: "asc" },
       });
 
+      const held = await heldIn(
+        ctx.db,
+        occurrences,
+        viewerOf(ctx, await profilesOf(ctx.db, ctx.actor.id)),
+      );
       return {
         timeZone,
         from,
         to,
         scope,
         occurrences: (occurrences as OccurrenceRow[]).map((row) =>
-          toDto(row, readsAttendance(ctx.bits)),
+          toDto(row, readsAttendance(ctx.bits), held),
         ),
       };
     }),
@@ -1098,13 +1249,13 @@ export const timetableRouter = createTRPCRouter({
 
       const truncated = rows.length > MAX_SCHEDULE_OCCURRENCES;
       const marks = readsAttendance(ctx.bits);
+      const shown = (rows as ScheduleRow[]).slice(0, MAX_SCHEDULE_OCCURRENCES);
+      const held = await heldIn(ctx.db, shown, viewerOf(ctx, mine));
 
       return {
         ...base,
         truncated,
-        occurrences: (rows as ScheduleRow[])
-          .slice(0, MAX_SCHEDULE_OCCURRENCES)
-          .map((row) => toScheduleDto(row, marks)),
+        occurrences: shown.map((row) => toScheduleDto(row, marks, held)),
       };
     }),
 
@@ -1122,14 +1273,21 @@ export const timetableRouter = createTRPCRouter({
           start: { lt: input.to },
           end: { gt: input.from },
           ...(scope.kind === "student"
-            ? { groupId: { in: scope.groupIds } }
+            ? { groupId: { in: scope.groupIds }, NOT: AWAITING_APPROVAL }
             : { facultyId: scope.facultyId }),
         },
         select: selectOccurrence,
         orderBy: { start: "asc" },
       });
       const marks = readsAttendance(ctx.bits);
-      return (occurrences as OccurrenceRow[]).map((row) => toDto(row, marks));
+      const held = await heldIn(
+        ctx.db,
+        occurrences,
+        viewerOf(ctx, await profilesOf(ctx.db, ctx.actor.id)),
+      );
+      return (occurrences as OccurrenceRow[]).map((row) =>
+        toDto(row, marks, held),
+      );
     }),
 });
 

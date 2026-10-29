@@ -27,9 +27,28 @@ describe("navFor", () => {
       "/schedule",
       "/timetable",
       "/attendance",
+      "/assignments",
       "/rooms",
       "/settings",
     ]);
+  });
+
+  it("opens assignments to everybody, setting them to those who teach", () => {
+    // The screen is both ends of a test: set by a teacher, answered by a
+    // student. What each may do there is decided inside it.
+    expect(canOpen(permsFor("student"), "/assignments")).toBe(true);
+    expect(canOpen(permsFor("faculty"), "/assignments/x/paper")).toBe(true);
+    expect(
+      new PermissionBitField(permsFor("faculty")).has(F.ManageOwnAssignments),
+    ).toBe(true);
+    expect(
+      new PermissionBitField(permsFor("student")).has(F.ManageOwnAssignments),
+    ).toBe(false);
+    expect(
+      new PermissionBitField(permsFor("coordinator")).has(
+        F.ManageAllAssignments,
+      ),
+    ).toBe(true);
   });
 
   it("offers room booking to faculty and above, not to students", () => {

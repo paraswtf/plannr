@@ -43,6 +43,7 @@
     "@auth/prisma-adapter": "^2.7.2",
     "@date-fns/tz": "^1.5.0",
     "@hookform/resolvers": "^5.7.1",
+    "@myriaddreamin/typst-ts-node-compiler": "0.7.0",
     "@prisma/client": "^6.6.0",
     "@react-email/components": "^1.0.12",
     "@t3-oss/env-nextjs": "^0.12.0",

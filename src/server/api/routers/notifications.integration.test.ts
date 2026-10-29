@@ -267,7 +267,10 @@ describe("notifications.preferences", () => {
   it("starts with everything on, for the categories a student can have", async () => {
     const result = await asMe("student").notifications.preferences();
 
-    expect(result.categories.map((c) => c.category)).toEqual(["CLASS_CHANGES"]);
+    expect(result.categories.map((c) => c.category)).toEqual([
+      "CLASS_CHANGES",
+      "ASSIGNMENTS",
+    ]);
     expect(result.categories[0]).toMatchObject({ inApp: true, push: true });
     expect(result.categories[0]!.label).toBeTruthy();
     expect(result.categories[0]!.description).toBeTruthy();
@@ -279,8 +282,12 @@ describe("notifications.preferences", () => {
         (c) => c.category,
       );
 
-    expect(await offered("student")).toEqual(["CLASS_CHANGES"]);
-    expect(await offered("faculty")).toEqual(["CLASS_CHANGES", "REQUESTS"]);
+    expect(await offered("student")).toEqual(["CLASS_CHANGES", "ASSIGNMENTS"]);
+    expect(await offered("faculty")).toEqual([
+      "CLASS_CHANGES",
+      "REQUESTS",
+      "ASSIGNMENTS",
+    ]);
     expect(await offered("coordinator")).toEqual([...NOTIFICATION_CATEGORIES]);
     expect(await offered("admin")).toEqual([...NOTIFICATION_CATEGORIES]);
   });

@@ -97,6 +97,17 @@ const SECTIONS: Section[] = [
     group: "personal",
     requires: PermissionFlags.ViewOwnEvents,
   },
+  // The letterhead on question papers: the institution's own, so it asks for
+  // the bit every procedure behind it checks.
+  {
+    href: "/settings/documents",
+    title: "Documents",
+    blurb:
+      "The header, footer and logo printed on every question paper written in Plannr.",
+    icon: "pencil",
+    group: "institution",
+    requires: PermissionFlags.ManageSettings,
+  },
   {
     href: "/settings/api-keys",
     title: "API keys",

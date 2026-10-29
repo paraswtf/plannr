@@ -46,25 +46,30 @@ describe("the notification categories", () => {
 });
 
 describe("categoriesFor", () => {
-  it("offers a student only changes to their classes", () => {
-    expect(offeredTo("student")).toEqual(["CLASS_CHANGES"]);
+  it("offers a student their classes and their tests", () => {
+    expect(offeredTo("student")).toEqual(["CLASS_CHANGES", "ASSIGNMENTS"]);
   });
 
-  it("offers faculty their classes and their requests", () => {
-    expect(offeredTo("faculty")).toEqual(["CLASS_CHANGES", "REQUESTS"]);
+  it("offers faculty their classes, their requests and their tests", () => {
+    expect(offeredTo("faculty")).toEqual([
+      "CLASS_CHANGES",
+      "REQUESTS",
+      "ASSIGNMENTS",
+    ]);
   });
 
-  it("offers a coordinator all four", () => {
+  it("offers a coordinator every category", () => {
     expect(offeredTo("coordinator")).toEqual([...NOTIFICATION_CATEGORIES]);
   });
 
-  it("offers an admin all four", () => {
+  it("offers an admin every category", () => {
     expect(offeredTo("admin")).toEqual([...NOTIFICATION_CATEGORIES]);
   });
 
-  it("offers nothing beyond classes to somebody with no permissions", () => {
+  it("offers only what everybody gets to somebody with no permissions", () => {
     expect(categoriesFor(0n).map((meta) => meta.category)).toEqual([
       "CLASS_CHANGES",
+      "ASSIGNMENTS",
     ]);
   });
 });

@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AssignmentMark,
+  type BlockAssignment,
+} from "~/components/app/assignments/assignment-mark";
 
 import { Icon } from "~/components/ui/icon";
 import { useLongPress } from "~/components/ui/use-long-press";
@@ -61,6 +65,8 @@ export interface GridEvent {
    * others, rather than telling a student a lecture went unregistered.
    */
   attendanceMarked?: boolean | null;
+  /** Tests and presentations held in this sitting. */
+  assignments?: BlockAssignment[];
 }
 
 /** A span of one room's column, in decimal local hours. */
@@ -1283,6 +1289,7 @@ function EventBlock({
               : undefined
           }
         >
+          <AssignmentMark assignments={event.assignments} />
           {event.title}
         </span>
       )}

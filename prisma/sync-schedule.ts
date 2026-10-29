@@ -23,6 +23,7 @@
  */
 
 import { PrismaClient } from "../generated/prisma";
+import { announceLostSittings } from "../src/server/services/assignments/times";
 import { regenerateOccurrences } from "../src/server/services/occurrences";
 
 const ORG_SLUG = "default";
@@ -65,6 +66,7 @@ const selectEvent = {
   groups: { select: { group: { select: { name: true } } } },
   exceptions: {
     select: {
+      id: true,
       originalStart: true,
       type: true,
       newStartTime: true,
@@ -72,6 +74,8 @@ const selectEvent = {
       newTitle: true,
       newRoomId: true,
       reason: true,
+      // A test or a presentation slot pinned to the week; see the reskip.
+      _count: { select: { assignmentSittings: true } },
     },
   },
 } as const;
@@ -250,6 +254,10 @@ async function main() {
     for (const exception of theirs.exceptions) {
       if (exception.reason !== null) continue;
       if (!skipped.has(exception.originalStart.toISOString())) continue;
+      // A test pinned to the week made this one here, not an older sync. The
+      // reskip below calls the week off on the pin itself, so it is left as
+      // it is.
+      if (exception._count.assignmentSittings > 0) continue;
       toStamp.push({ id: theirs.id, at: exception.originalStart });
       exception.reason = FROM_TIMETABLE;
     }
@@ -402,6 +410,12 @@ async function main() {
   let removed = 0;
   for (const event of toDrop) {
     if (registered.has(event.id)) continue;
+    // The tests pinned to its weeks lose their class with it, and the people
+    // they concern are told so before the pins' links go.
+    await announceLostSittings(
+      there,
+      event.exceptions.map((exception) => exception.id),
+    );
     await there.event.delete({ where: { id: event.id } });
     removed++;
   }
@@ -453,11 +467,59 @@ async function main() {
         .filter((exception) => !fromTimetable(exception))
         .map((exception) => exception.originalStart.toISOString()),
     );
+    // A week a test is pinned to is not deleted and made again, which would
+    // cut the test loose from its class for good. The pin is the week's
+    // exception: it takes the college's skip while the college skips the week,
+    // so the test reads as called off, and becomes a plain pin again when the
+    // college puts the week back, so the test is back on with it.
+    const college = new Map(
+      mine.exceptions
+        .filter(fromTimetable)
+        .map((exception) => [exception.originalStart.toISOString(), exception]),
+    );
+    const pinned = theirs.exceptions.filter(
+      (exception) => exception._count.assignmentSittings > 0,
+    );
     await there.$transaction(
       async (tx) => {
         await tx.eventException.deleteMany({
-          where: { eventId: theirs.id, reason: FROM_TIMETABLE },
+          where: {
+            eventId: theirs.id,
+            reason: FROM_TIMETABLE,
+            id: { notIn: pinned.map((exception) => exception.id) },
+          },
         });
+        for (const pin of pinned) {
+          const skip = college.get(pin.originalStart.toISOString());
+          if (skip) {
+            await tx.eventException.update({
+              where: { id: pin.id },
+              data: {
+                type: skip.type,
+                newStartTime: skip.newStartTime,
+                newEndTime: skip.newEndTime,
+                newTitle: skip.newTitle,
+                newRoomId: skip.newRoomId
+                  ? (roomId.get(sourceRoomCode.get(skip.newRoomId) ?? "") ??
+                    null)
+                  : null,
+                reason: FROM_TIMETABLE,
+              },
+            });
+          } else if (fromTimetable(pin)) {
+            await tx.eventException.update({
+              where: { id: pin.id },
+              data: {
+                type: "MODIFIED",
+                newStartTime: null,
+                newEndTime: null,
+                newTitle: null,
+                newRoomId: null,
+                reason: null,
+              },
+            });
+          }
+        }
         await tx.eventException.createMany({
           data: mine.exceptions
             .filter(fromTimetable)

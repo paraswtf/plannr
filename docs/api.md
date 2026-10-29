@@ -179,8 +179,8 @@ not hold yourself, and `Administrator` cannot be granted to a key at all.
 ## A key is a service principal
 
 Everything in this section is about the keys an administrator mints from
-`/api-keys`. There is a second kind — a *personal* key, which does act as a
-person — described in [Personal keys](#personal-keys) below. Where the two
+`/api-keys`. There is a second kind: a _personal_ key, which does act as a
+person, described in [Personal keys](#personal-keys) below. Where the two
 differ is stated there rather than qualified everywhere here.
 
 Your key does not act as the administrator who created it. It acts as **itself**.
@@ -259,18 +259,23 @@ somebody else. The emergency stop is the honest one: deactivate the person, and
 every key they hold stops on the next request with the audit trail intact.
 
 **Endpoints marked `person` accept one; endpoints marked `session` do not.** The
-Siri endpoints and the notification inbox are the former. The `/timetable/my-*`, `/me`-shaped and
+Siri endpoints, the notification inbox and a student's own tests and marks are
+the former. A `person` endpoint that also names a scope still needs the key to
+hold it, and a personal key holds only `ViewOwnEvents`, so a teacher's personal
+key cannot set, manage or mark work: that is done from a signed-in browser. The `/timetable/my-*`, `/me`-shaped and
 `/api-keys` endpoints remain browser-only, and widening any of them is a
 deliberate decision rather than a consequence of this feature.
 
-| Endpoint                            | Who                        |
-| ----------------------------------- | -------------------------- |
-| `GET /me/api-keys`                  | browser only               |
-| `POST /me/api-keys`                 | browser only               |
-| `POST /me/api-keys/{id}/revoke`     | browser only               |
-| `GET /siri/*`                       | browser or a personal key  |
-| `/notifications` inbox and preferences | browser or a personal key |
-| `/notifications/push/*`             | browser only               |
+| Endpoint                                                                                       | Who                                                 |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `GET /me/api-keys`                                                                             | browser only                                        |
+| `POST /me/api-keys`                                                                            | browser only                                        |
+| `POST /me/api-keys/{id}/revoke`                                                                | browser only                                        |
+| `GET /siri/*`                                                                                  | browser or a personal key                           |
+| `/notifications` inbox and preferences                                                         | browser or a personal key                           |
+| `GET /assignments`, `GET /assignments/{id}` and a student's own answers, marks and open papers | browser or a personal key                           |
+| setting, managing and marking tests, and question papers                                       | browser only for a person; a service key is refused |
+| `/notifications/push/*`                                                                        | browser only                                        |
 
 ### The endpoints that refuse a key, and what to call instead
 
@@ -719,7 +724,7 @@ list in a single request, which for most of these endpoints is the default.
 | `GET /terms`                      | 1–500, default 200   | `query`, `includeIds`                                                                                                               |
 | `GET /plans`                      | 1–100, default 20    | `query` (plan name, term or author), `scope` (`all`/`mine`/`shared`/`review`)                                                       |
 | `GET /plans/{id}/history`         | 1–500, default 200   | none                                                                                                                                |
-| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`not-seen-lately`/`never-signed-in`/`inactive`/`waiting`, see below)                                      |
+| `GET /users`                      | 1–200, default 25    | `query`, `roleId`, `status` (`all`/`active`/`not-seen-lately`/`never-signed-in`/`inactive`/`waiting`, see below)                    |
 | `GET /roles`                      | 1–500, default 200   | none                                                                                                                                |
 | `GET /api-keys`                   | 1–500, default 200   | none                                                                                                                                |
 | `GET /notifications`              | 1–200, default 50    | `filter` (`all`/`unread`), newest first so page 1 is what is new                                                                    |
@@ -730,16 +735,16 @@ by id. Pinned rows are appended, so `rows` can come back longer than `pageSize`,
 and `total` still counts what matched the filter rather than what you were handed.
 
 `status` on `GET /users` and `GET /users/count` is the account status the People
-screen shows on each row, and the four values other than `all` cover every person
+screen shows on each row, and the five values other than `all` cover every person
 exactly once:
 
-| `status`          | Who it matches                                                        |
-| ----------------- | --------------------------------------------------------------------- |
-| `active`          | enabled, and seen in Plannr in the last 7 days                        |
-| `not-seen-lately` | enabled and signed in before, but not seen in the last 7 days         |
-| `never-signed-in` | enabled, but has never signed in (imported and not yet arrived)       |
-| `inactive`        | disabled, and has a real address                                      |
-| `waiting`         | disabled because the college has not sent an address for them yet    |
+| `status`          | Who it matches                                                    |
+| ----------------- | ----------------------------------------------------------------- |
+| `active`          | enabled, and seen in Plannr in the last 7 days                    |
+| `not-seen-lately` | enabled and signed in before, but not seen in the last 7 days     |
+| `never-signed-in` | enabled, but has never signed in (imported and not yet arrived)   |
+| `inactive`        | disabled, and has a real address                                  |
+| `waiting`         | disabled because the college has not sent an address for them yet |
 
 `active` used to mean every enabled account, signed in or not. Those who have
 never signed in are now `never-signed-in` only, and `never-signed-in` no longer
@@ -1029,7 +1034,7 @@ date the recurrence rule produced, not the date the sitting was moved to.
 
 ## Endpoint reference
 
-158 endpoints in 18 groups. This is the map; `GET /api/v1/openapi.json` is the
+195 endpoints in 22 groups. This is the map; `GET /api/v1/openapi.json` is the
 territory — it carries every parameter, every schema and every field, generated
 from the procedures themselves, along with the long-form description of each
 endpoint. Where a summary below reads as though it is hiding something, that
@@ -1147,6 +1152,166 @@ routes are for a browser registering itself, and refuse every key.
 | `POST /notifications/push/unsubscribe`      | Turn notifications off for this browser                  | none   | browser only                   |
 | `POST /notifications/push/test`             | Send a test notification to the caller's devices         | none   | browser only                   |
 
+### Assignments
+
+Tests and presentations a teacher sets for a group. A test is pinned to one
+sitting of a class the teacher teaches (`eventId` and the sitting's
+`originalStart`, as `GET /assignments/sittings` lists them), or to a new class
+scheduled for it, which waits in Approvals when the institution asks for changes
+to be approved. A presentation runs over a range of days, and each of its teams
+is booked into a sitting inside them. A pinned sitting follows its class: moved,
+the test moves with it; called off, the test says so (`state: "cancelled"`); and
+when the series is retimed so that the sitting no longer exists, the test says
+it has lost its class (`state: "lost"`) rather than following another, and its
+students and teacher are told. A class asked for a test and refused tells them
+too; a class still waiting for approval is not shown to students until it is
+approved.
+
+A teacher (`ManageOwnAssignments`) sets work only for a group and course they
+are timetabled to teach, and manages only what they set;
+`ManageAllAssignments` manages everybody's. A student reads their own groups'
+assignments, and an assignment of another group is not found. Every route is
+person only: a service key is refused. A personal key acts as its owner but
+holds only `ViewOwnEvents`, so it can list and read a student's work, and every
+route that names `ManageOwnAssignments` refuses it with `insufficient_scope`.
+Question papers and answers have their own tables below, under
+`/assignments/{id}/paper`, `/assignments/{id}/submission`,
+`/assignments/{id}/submissions`, `/assignments/{id}/marks/publish` and
+`/submissions/{submissionId}`.
+
+A student's own list says where they are with each test in `mine`: `not
+started`, `in progress`, `submitted`, or `handed in at the close` for answers
+begun and never handed in once the paper has closed. Changing a presentation's
+days is refused with a `400` while a team is booked outside the new ones.
+Deleting a test or presentation tells its students, and withdraws any class
+scheduled for it that is still waiting for approval.
+
+| Endpoint                                          | What it does                                             | Scopes                 | Notes                           |
+| ------------------------------------------------- | -------------------------------------------------------- | ---------------------- | ------------------------------- |
+| `GET /assignments`                                | List the caller's tests and presentations                | none                   | person only, takes `when`       |
+| `GET /assignments/teaching`                       | List the groups and courses the caller can set work for  | `ManageOwnAssignments` | person only                     |
+| `GET /assignments/sittings`                       | List a group's coming classes a test can be set in       | `ManageOwnAssignments` | person only                     |
+| `GET /assignments/{id}`                           | Fetch one test or presentation                           | none                   | person only                     |
+| `POST /assignments`                               | Set a test or a presentation                             | `ManageOwnAssignments` | person only, tells the students |
+| `PATCH /assignments/{id}`                         | Change a test's or presentation's details                | `ManageOwnAssignments` | person only                     |
+| `PUT /assignments/{id}/sitting`                   | Move a test to another class                             | `ManageOwnAssignments` | person only, tells the students |
+| `DELETE /assignments/{id}`                        | Delete a test or presentation                            | `ManageOwnAssignments` | person only, read twice         |
+| `GET /assignments/{id}/students`                  | List the students a presentation's teams are formed from | `ManageOwnAssignments` | person only                     |
+| `PUT /assignments/{id}/teams`                     | Replace a presentation's teams                           | `ManageOwnAssignments` | person only                     |
+| `PUT /assignments/{id}/teams/{teamId}/slot`       | Book a team's presentation slot                          | `ManageOwnAssignments` | person only, tells the team     |
+| `DELETE /assignments/{id}/teams/{teamId}/slot`    | Take a team's presentation slot away                     | `ManageOwnAssignments` | person only                     |
+| `PUT /assignments/{id}/slots/{exceptionId}/order` | Set the order teams present in within one class          | `ManageOwnAssignments` | person only                     |
+
+Timetable rows (`GET /timetable/grid`, `/timetable/week`, `/timetable/mine` and
+the rest) carry `assignments`: the tests and presentations held in each sitting,
+with the teams presenting, in order. They are filtered for the caller: a
+sitting lists only the work its viewer could open (`canOpen`), so somebody
+outside the group who neither teaches the class nor manages the test sees none
+of it, not even its title.
+
+### Question papers
+
+A test's question paper, written in Plannr or uploaded as a PDF (at most 4 MB).
+It is sealed with a password the teacher who set it chooses, so only that
+teacher can open it, and only at a browser: every endpoint that takes the
+password is browser only, refuses any key, a personal one included, and refuses
+everybody else whatever their permissions, `Administrator` too. Five wrong
+passwords in a row lock the paper for 15 minutes (`429`, saying when it opens
+again), for every endpoint that takes the password. A paper whose teacher's
+account was deleted has no owner, and nobody can open it again; a paper already
+opened to students keeps its pages, questions and key with their answers.
+
+Seeing whether a test has a paper, closing answers and removing a paper not yet
+opened follow the assignment: whoever may change it may do them, and they need
+no password. They are marked person only, but they need `ManageOwnAssignments`,
+which a personal key cannot hold, so in practice they are done from a signed-in
+browser too. A service key is refused, whatever scopes it holds.
+
+Saving, re-saving and changing the password are refused with `409` when the
+paper changed between opening it and writing it (another tab saved it, changed
+its password or opened it to students), so neither write undoes the other.
+
+Opening a paper to students (`release`) is for tests answered in Plannr, of at
+most 40 pages. It fixes when answers close, `answersCloseAt`, at that moment:
+the end of the test's class, or the time allowed from when the paper opened,
+whichever comes first. Moving the test or changing its length afterwards does
+not move it; only `close` ends answers earlier. It is refused with `412` when
+answers would close within two minutes, before the password is tried. Drawing
+the pages has 30 seconds in all; a paper that takes longer is refused with a
+message saying so, and nothing is stored.
+
+| Endpoint                                          | What it does                                                 | Scopes                 | Notes                                        |
+| ------------------------------------------------- | ------------------------------------------------------------ | ---------------------- | -------------------------------------------- |
+| `GET /assignments/{id}/paper`                     | Get whether a test has a question paper and where it stands  | `ManageOwnAssignments` | person only                                  |
+| `PUT /assignments/{id}/paper/authored`            | Save a question paper written in Plannr                      | `ManageOwnAssignments` | browser only, the owner only                 |
+| `POST /assignments/{id}/paper/upload`             | Save an uploaded PDF as the question paper                   | `ManageOwnAssignments` | browser only, the owner only                 |
+| `POST /assignments/{id}/paper/preview`            | Typeset a question paper without saving it                   | `ManageOwnAssignments` | person only                                  |
+| `POST /assignments/{id}/paper/unlock-for-editing` | Open a question paper written in Plannr for editing          | `ManageOwnAssignments` | browser only, read twice                     |
+| `POST /assignments/{id}/paper/unlock`             | Open a question paper's PDF for printing                     | `ManageOwnAssignments` | browser only, read twice                     |
+| `POST /assignments/{id}/paper/release`            | Open a question paper to the test's students                 | `ManageOwnAssignments` | browser only, read twice, tells the students |
+| `POST /assignments/{id}/paper/close`              | Stop answers to an open question paper                       | `ManageOwnAssignments` | person only, read twice                      |
+| `POST /assignments/{id}/paper/password`           | Change a question paper's password                           | `ManageOwnAssignments` | browser only, the owner only                 |
+| `DELETE /assignments/{id}/paper`                  | Remove a question paper that has not been opened to students | `ManageOwnAssignments` | person only, read twice                      |
+
+The browser itself uploads and prints through `POST /api/papers/upload`
+(multipart) and `POST /api/papers/print`, outside `/api/v1`, and loads a page as
+an image from `GET /api/papers/{assignmentId}/pages/{number}`.
+
+### Answers and marks
+
+A student answers a test taken in Plannr at its page, while the paper is open:
+starting, saving and handing in are browser only, and no key answers for a
+student. Reading their own answers, the open paper and its pages is `person`, so
+a student's own key can show their marks once they are published. Marking and
+publishing follow the assignment, like its other writes, and refuse a service
+key.
+
+Saving merges: the answers sent replace those questions' answers and the
+others are kept, so to clear an answer send its key with an empty value. When
+two devices save the same question, the later save wins. The window is fixed
+when the paper opens (`answersCloseAt`). An answer already begun may still be
+saved for two minutes after it closes, or for fifteen seconds when the teacher
+closes the paper early; `GET /assignments/{id}/submission` gives `serverNow`, so
+a countdown can use the server's clock. Marks, score and feedback reach a
+student only once they are published and the window and its grace are over,
+and publishing is refused with a `412` until then. Publishing marks any answers
+not yet marked by the key when every question is a choice with a correct
+option.
+
+| Endpoint                                     | What it does                                                | Scopes                 | Notes                                       |
+| -------------------------------------------- | ----------------------------------------------------------- | ---------------------- | ------------------------------------------- |
+| `GET /assignments/{id}/submission`           | Get your own answers to a test, its window and answer sheet | none                   | person only                                 |
+| `POST /assignments/{id}/submission/start`    | Begin answering a test                                      | none                   | browser only                                |
+| `PUT /assignments/{id}/submission/answers`   | Save answers to a test so far                               | none                   | browser only                                |
+| `POST /assignments/{id}/submission/submit`   | Hand in answers to a test                                   | none                   | browser only                                |
+| `GET /assignments/{id}/paper/released`       | Get an open paper's questions and answer sheet              | none                   | person only                                 |
+| `GET /assignments/{id}/paper/pages/{number}` | Get one page of an open paper as SVG text                   | none                   | person only                                 |
+| `GET /assignments/{id}/paper/pdf`            | Get an open paper's PDF                                     | none                   | person only                                 |
+| `GET /assignments/{id}/submissions`          | List the group's students and how far each got with a test  | `ManageOwnAssignments` | person only                                 |
+| `GET /submissions/{submissionId}`            | Get one student's answers with the answer sheet and key     | `ManageOwnAssignments` | person only                                 |
+| `PUT /submissions/{submissionId}/marks`      | Mark one student's answers                                  | `ManageOwnAssignments` | person only                                 |
+| `POST /assignments/{id}/marks/publish`       | Publish a test's marks to its students                      | `ManageOwnAssignments` | person only, read twice, tells the students |
+
+### Document settings
+
+What the institution prints on its question papers: the header lines (at most
+6, of at most 150 characters; the first is printed largest), a one-line footer
+of at most 200 characters, and a logo. The logo is a PNG or JPEG of at most
+256 KB and at most 4000 pixels on each side, and it is typeset once before it is
+saved or previewed, so a picture typst cannot read is refused with a `400`
+instead of stopping every paper after it. Reading the settings returns the
+logo's type and size, never the picture.
+
+| Endpoint                           | What it does                                                | Scopes           | Notes        |
+| ---------------------------------- | ----------------------------------------------------------- | ---------------- | ------------ |
+| `GET /settings/documents`          | Get the header, footer and logo printed on question papers  | `ManageSettings` | person only  |
+| `PUT /settings/documents`          | Save the header, footer and logo printed on question papers | `ManageSettings` | browser only |
+| `POST /settings/documents/preview` | Typeset a sample paper with a header, footer and logo       | `ManageSettings` | person only  |
+
+The preview takes the same `header`, `footer` and `logo` as saving (each left
+out uses the saved one, and `logo: null` prints none), saves nothing and returns
+`{ pdfBase64 }`. It is a POST because a logo does not fit in a query string.
+
 ### Events
 
 The half of the API that changes somebody's week. Three things explain most of
@@ -1263,6 +1428,13 @@ is **not** the id of the user who owns it, and the student ids `DELETE
 | `DELETE /groups/{id}`            | Delete a class group                             | `ManageGroups` | read twice  |
 | `GET /faculty`                   | List teaching staff                              | —              | —           |
 | `GET /faculty/me`                | Fetch the calling person's faculty profile       | —              | person only |
+
+A group that has tests or presentations cannot be deleted: its students' answers
+and marks hang off them. `DELETE /groups/{id}` refuses with a `412` while there
+are any, even with `confirmCascade`, and `GET /groups/{id}/delete-impact` counts
+them (`assignmentCount`), with the combined lectures the group joins without
+leading (`combinedCount`), which stay without it. Delete the tests and
+presentations first.
 
 ### Batches
 
@@ -1409,11 +1581,11 @@ behind this?" would wave it through, and a credential that can mint a credential
 outlives its own revocation. They need no scope, because a personal key grants
 nothing its owner does not already hold.
 
-| Endpoint                        | What it does                             | Scopes | Notes                   |
-| ------------------------------- | ---------------------------------------- | ------ | ----------------------- |
-| `GET /me/api-keys`              | List the caller's own personal keys       | —      | browser only            |
-| `POST /me/api-keys`             | Mint a personal key for the caller        | —      | browser only, read once |
-| `POST /me/api-keys/{id}/revoke` | Switch off one of the caller's own keys   | —      | browser only            |
+| Endpoint                        | What it does                            | Scopes | Notes                   |
+| ------------------------------- | --------------------------------------- | ------ | ----------------------- |
+| `GET /me/api-keys`              | List the caller's own personal keys     | —      | browser only            |
+| `POST /me/api-keys`             | Mint a personal key for the caller      | —      | browser only, read once |
+| `POST /me/api-keys/{id}/revoke` | Switch off one of the caller's own keys | —      | browser only            |
 
 ### Siri
 
@@ -1424,7 +1596,7 @@ Dictionary Value, Speak Text, and there is nothing left to configure. Anything
 that wants the underlying data should read the timetable rather than parse
 English back apart.
 
-With the notification inbox above, these are the only endpoints a [personal key](#personal-keys) may call. That is
+With the notification inbox and a student's own tests above, these are the only endpoints a [personal key](#personal-keys) may call. That is
 enforced the safe way round — a personal key is refused everywhere by default
 and admitted here by name — because a good deal of the app is gated on identity
 rather than on a permission bit, and narrow scopes would not have protected
@@ -1437,12 +1609,12 @@ means today. A day word that cannot be read is answered with a **200 and a
 sentence saying so**, not a 400 — a Shortcut hears an HTTP error as silence, and
 the person has no idea what they got wrong.
 
-| Endpoint                | What it does                                             | Scopes           | Notes             |
-| ----------------------- | -------------------------------------------------------- | ---------------- | ----------------- |
-| `GET /siri/next-class`  | Say what is on next, out loud                             | `ViewOwnEvents`  | takes no day      |
-| `GET /siri/day-start`   | Say when the day starts, out loud                         | `ViewOwnEvents`  | takes `day`       |
-| `GET /siri/timings`     | Say the college hours for a day, with the breaks          | `ViewOwnEvents`  | takes `day`       |
-| `GET /siri/any-classes` | Say whether there is anything on, out loud                | `ViewOwnEvents`  | takes `day`       |
+| Endpoint                | What it does                                     | Scopes          | Notes        |
+| ----------------------- | ------------------------------------------------ | --------------- | ------------ |
+| `GET /siri/next-class`  | Say what is on next, out loud                    | `ViewOwnEvents` | takes no day |
+| `GET /siri/day-start`   | Say when the day starts, out loud                | `ViewOwnEvents` | takes `day`  |
+| `GET /siri/timings`     | Say the college hours for a day, with the breaks | `ViewOwnEvents` | takes `day`  |
+| `GET /siri/any-classes` | Say whether there is anything on, out loud       | `ViewOwnEvents` | takes `day`  |
 
 ## How this is put together
 

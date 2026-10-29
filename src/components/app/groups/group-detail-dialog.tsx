@@ -105,6 +105,14 @@ export function GroupDetailDialog({
     onSuccess: refresh,
     onError,
   });
+  // What deleting would touch beyond the group itself, asked only once the
+  // danger tab is open: tests and presentations stop it outright.
+  const impact = api.groups.deleteImpact.useQuery(
+    { id: groupId },
+    { enabled: tab === "danger" && canManage },
+  );
+  const assignmentCount = impact.data?.assignmentCount ?? 0;
+  const combinedCount = impact.data?.combinedCount ?? 0;
   const remove = api.groups.delete.useMutation({
     onSuccess: async () => {
       await refresh();
@@ -419,12 +427,35 @@ export function GroupDetailDialog({
                     be removed; the people themselves stay.
                   </>
                 )}
+                {combinedCount > 0 && (
+                  <>
+                    {" "}
+                    It also joins <b>{combinedCount}</b> combined{" "}
+                    {combinedCount === 1 ? "lecture" : "lectures"} led by
+                    another group, which{" "}
+                    {combinedCount === 1 ? "stays" : "stay"} without it.
+                  </>
+                )}
               </p>
+              {assignmentCount > 0 && (
+                <p className="mt-2">
+                  It has <b>{assignmentCount}</b>{" "}
+                  {assignmentCount === 1
+                    ? "test or presentation"
+                    : "tests and presentations"}{" "}
+                  set for it, with its students&apos; answers and marks. Delete{" "}
+                  {assignmentCount === 1 ? "it" : "them"} from Assignments
+                  first; the group cannot be deleted while{" "}
+                  {assignmentCount === 1 ? "it remains" : "they remain"}.
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
                   variant="danger"
                   size="sm"
-                  disabled={remove.isPending}
+                  disabled={
+                    remove.isPending || impact.isLoading || assignmentCount > 0
+                  }
                   onClick={() =>
                     confirmDelete
                       ? remove.mutate({ id: groupId, confirmCascade: true })

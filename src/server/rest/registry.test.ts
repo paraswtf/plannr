@@ -41,6 +41,10 @@ import { attendanceRoutes } from "./routes/attendance";
 import { eventRoutes } from "./routes/events";
 import { groupRoutes } from "./routes/groups";
 import { notificationRoutes } from "./routes/notifications";
+import { assignmentRoutes } from "./routes/assignments";
+import { paperRoutes } from "./routes/papers";
+import { submissionRoutes } from "./routes/submissions";
+import { settingsRoutes } from "./routes/settings";
 import { peopleRoutes } from "./routes/people";
 import { planRoutes } from "./routes/plans";
 import { roomRoutes } from "./routes/rooms";
@@ -64,6 +68,10 @@ const ROUTE_MODULES: Array<[string, RouteDef[]]> = [
   ["src/server/rest/routes/people.ts", peopleRoutes],
   ["src/server/rest/routes/api-keys.ts", apiKeyRoutes],
   ["src/server/rest/routes/notifications.ts", notificationRoutes],
+  ["src/server/rest/routes/assignments.ts", assignmentRoutes],
+  ["src/server/rest/routes/papers.ts", paperRoutes],
+  ["src/server/rest/routes/submissions.ts", submissionRoutes],
+  ["src/server/rest/routes/settings.ts", settingsRoutes],
 ];
 
 interface ProcedureLike {
@@ -600,6 +608,27 @@ describe("the shape of the surface", () => {
    * description — the OpenAPI document renders it, and the handler's 403 is
    * seen only by whoever already made the mistake.
    */
+  /**
+   * Tests, papers and marks are decided by who the caller is: the teacher who
+   * set the work, or a student in its group. A service key is nobody, and a
+   * route that forgets its actor lets one through to whatever its scopes
+   * allow, which for ManageAllAssignments is closing a test mid-way or
+   * rewriting a student's marks.
+   */
+  it("lets no service key at a test, its paper or its marks", () => {
+    const people = ["assignments.", "papers.", "submissions."];
+    for (const route of ROUTES) {
+      if (!people.some((prefix) => route.procedure.startsWith(prefix))) {
+        continue;
+      }
+      expect(
+        route.actor,
+        `${label(route)} reaches ${route.procedure} with no actor, so a service key holding its scopes gets in. ` +
+          `Say \`actor: "person"\`, or \`"session"\` if it takes a password or is answered at a screen.`,
+      ).toMatch(/^(person|session)$/);
+    }
+  });
+
   it("tells an application what to call instead of a people-only endpoint", () => {
     for (const route of ROUTES) {
       if (route.actor !== "session") continue;

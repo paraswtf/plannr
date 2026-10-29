@@ -11,6 +11,7 @@ import {
   type RateVerdict,
 } from "~/server/api-keys/authenticate";
 import { appRouter, createCaller } from "~/server/api/root";
+import { PERSONAL_SCOPES } from "~/server/api/routers/api-keys";
 import { createTRPCContext } from "~/server/api/trpc";
 import { auth } from "~/server/auth";
 import { coerceInput, coerceQuery, inputSchemaOf } from "./coerce";
@@ -174,11 +175,14 @@ async function dispatch(request: Request, method: string): Promise<Response> {
   if (input instanceof Response) return withHeaders(input, caller.headers);
 
   try {
+    // The request's signal goes with it, as in the paper routes, so a paper
+    // still waiting to be typeset is dropped when its caller hangs up.
     const trpc = createCaller(
       await createTRPCContext({
         headers: request.headers,
         session: caller.session,
       }),
+      { signal: request.signal },
     );
 
     const resolved = route.procedure
@@ -485,14 +489,18 @@ function refuseScopes(
   if (missing.length === 0) return null;
 
   const one = missing.length === 1;
-  // A personal key is not short of a scope an administrator can add: its
-  // authority is capped by what its owner holds, so the only way it can be
-  // missing something is that they lost it. Sending them to the wrong person
+  // A personal key is not short of a scope an administrator can add. It holds
+  // only PERSONAL_SCOPES, and no more than its owner holds of those: a scope
+  // outside them is work a personal key never does, and one inside them can
+  // only be missing because the owner lost it. Sending them to the wrong person
   // is a whole afternoon.
+  const personal = PERSONAL_SCOPES as readonly string[];
   const remedy =
-    caller.key.ownerId !== null
-      ? `A personal key can never hold more than the person it belongs to, so ${one ? "that permission has" : "those permissions have"} been taken off their account. Ask whoever manages roles to look at it.`
-      : `Ask an administrator to add ${one ? "that scope" : "those scopes"} to it, or call with a key that already has ${one ? "it" : "them"}.`;
+    caller.key.ownerId === null
+      ? `Ask an administrator to add ${one ? "that scope" : "those scopes"} to it, or call with a key that already has ${one ? "it" : "them"}.`
+      : missing.some((name) => !personal.includes(name))
+        ? "A personal key reads only what its owner may see. Do this signed in at a browser instead, or with a service key that holds the scope."
+        : `A personal key can never hold more than the person it belongs to, so ${one ? "that permission has" : "those permissions have"} been taken off their account. Ask whoever manages roles to look at it.`;
   return fail(
     403,
     "insufficient_scope",

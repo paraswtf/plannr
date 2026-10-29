@@ -219,6 +219,7 @@ export function TimetableView({
     courseTitle: o.courseTitle,
     isMine: o.isMine,
     attendanceMarked: o.attendanceMarked,
+    assignments: o.assignments,
   }));
 
   // Whether anything on this day is the viewer's own, which is what decides

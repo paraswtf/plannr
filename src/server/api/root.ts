@@ -1,15 +1,19 @@
 import { apiKeysRouter } from "~/server/api/routers/api-keys";
+import { assignmentsRouter } from "~/server/api/routers/assignments";
 import { attendanceRouter } from "~/server/api/routers/attendance";
 import { calendarRouter } from "~/server/api/routers/calendar";
 import { coursesRouter } from "~/server/api/routers/courses";
 import { eventsRouter } from "~/server/api/routers/events";
 import { groupsRouter } from "~/server/api/routers/groups";
 import { notificationsRouter } from "~/server/api/routers/notifications";
+import { papersRouter } from "~/server/api/routers/papers";
 import { plansRouter } from "~/server/api/routers/plans";
 import { rolesRouter } from "~/server/api/routers/roles";
 import { semestersRouter } from "~/server/api/routers/semesters";
+import { settingsRouter } from "~/server/api/routers/settings";
 import { pushRouter } from "~/server/api/routers/push";
 import { siriRouter } from "~/server/api/routers/siri";
+import { submissionsRouter } from "~/server/api/routers/submissions";
 import { buildingsRouter, roomsRouter } from "~/server/api/routers/rooms";
 import { timetableRouter } from "~/server/api/routers/timetable";
 import { usersRouter } from "~/server/api/routers/users";
@@ -37,6 +41,10 @@ export const appRouter = createTRPCRouter({
   siri: siriRouter,
   push: pushRouter,
   notifications: notificationsRouter,
+  assignments: assignmentsRouter,
+  papers: papersRouter,
+  submissions: submissionsRouter,
+  settings: settingsRouter,
 });
 
 // export type definition of API

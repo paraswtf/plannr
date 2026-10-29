@@ -18,6 +18,7 @@ export const NOTIFICATION_CATEGORIES = [
   "REQUESTS",
   "APPROVALS",
   "PLAN_REVIEWS",
+  "ASSIGNMENTS",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -29,7 +30,7 @@ export interface CategoryMeta {
   /** One line on what arrives under it. */
   description: string;
   /** The glyph beside each notification of this kind in the inbox. */
-  icon: "calendar" | "inbox" | "checkCircle" | "sparkles";
+  icon: "calendar" | "inbox" | "checkCircle" | "sparkles" | "pencil";
   /**
    * Only offered to people holding one of these. A student is never asked
    * whether they want to hear about approvals they cannot give.
@@ -66,6 +67,13 @@ export const CATEGORY_META: Record<NotificationCategory, CategoryMeta> = {
       "A plan is shared with you for review, or a plan of yours is approved or sent back.",
     icon: "sparkles",
     requires: ["ViewSchedulePlans"],
+  },
+  ASSIGNMENTS: {
+    category: "ASSIGNMENTS",
+    label: "Tests and presentations",
+    description:
+      "A test or presentation is set for you, a paper opens, or marks are published.",
+    icon: "pencil",
   },
 };
 

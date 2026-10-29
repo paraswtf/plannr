@@ -1,14 +1,18 @@
 import { compileRoute, type CompiledRoute, type RouteDef } from "./types";
 import { academicsRoutes } from "./routes/academics";
 import { apiKeyRoutes } from "./routes/api-keys";
+import { assignmentRoutes } from "./routes/assignments";
 import { attendanceRoutes } from "./routes/attendance";
 import { eventRoutes } from "./routes/events";
 import { groupRoutes } from "./routes/groups";
 import { notificationRoutes } from "./routes/notifications";
+import { paperRoutes } from "./routes/papers";
 import { peopleRoutes } from "./routes/people";
 import { planRoutes } from "./routes/plans";
 import { roomRoutes } from "./routes/rooms";
+import { settingsRoutes } from "./routes/settings";
 import { siriRoutes } from "./routes/siri";
+import { submissionRoutes } from "./routes/submissions";
 import { timetableRoutes } from "./routes/timetable";
 
 /**
@@ -32,6 +36,10 @@ export const ROUTES: RouteDef[] = [
   ...apiKeyRoutes,
   ...siriRoutes,
   ...notificationRoutes,
+  ...assignmentRoutes,
+  ...paperRoutes,
+  ...submissionRoutes,
+  ...settingsRoutes,
 ];
 
 /**

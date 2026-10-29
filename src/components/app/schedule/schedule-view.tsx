@@ -198,7 +198,13 @@ export function ScheduleView({
       title: o.title,
       roomCode: o.roomCode,
       courseTitle: o.courseTitle,
-      lines: describeClass(o, seen),
+      // A class asked for and not yet approved is only ever on the day of the
+      // teacher who asked for it; it says so, so they do not take it as set.
+      lines:
+        o.status === "PENDING"
+          ? ["Waiting for approval", ...describeClass(o, seen)]
+          : describeClass(o, seen),
+      assignments: o.assignments,
     }));
   };
 
@@ -868,5 +874,6 @@ function toGridEvent(o: Schedule["occurrences"][number]): GridEvent {
     facultyName: o.facultyName,
     groupNames: o.cohorts.map((c) => c.name),
     attendanceMarked: o.attendanceMarked,
+    assignments: o.assignments,
   };
 }

@@ -22,6 +22,10 @@ import type {
 import { ExceptionType } from "../../../generated/prisma";
 
 import { expandSeries, hasCount, setCount, setUntil } from "~/lib/recurrence";
+import {
+  announceLostSittings,
+  syncAssignmentSittings,
+} from "./assignments/times";
 import { enqueueForEvent } from "./calendar/sync";
 import { dispatchAfterResponse } from "./notifications/notify";
 import { recordClassChanges } from "./push/record";
@@ -43,7 +47,9 @@ export interface RegenerateResult {
  * occurrences are still written (with CANCELLED status) so the UI can show a
  * ghost and offer to restore them; scheduling queries filter them out.
  * Exceptions whose anchor no longer exists (because the series was retimed)
- * are deleted, otherwise they would silently suppress the wrong dates.
+ * are deleted, otherwise they would silently suppress the wrong dates. A
+ * one-off class is the exception to that: it has one sitting, so an exception
+ * left over after it moves can only be about that sitting, and it follows it.
  *
  * Rows are matched to the sittings they stand for by natural start: a row that
  * still has its sitting is updated where it differs, a sitting with no row gets
@@ -68,6 +74,8 @@ export async function regenerateOccurrences(
     timezone: event.timezone,
     rrule: event.rrule,
   });
+
+  await followOneOff(db, event, natural);
 
   const byOriginalStart = new Map(
     event.exceptions.map((e) => [e.originalStart.getTime(), e]),
@@ -136,7 +144,7 @@ export async function regenerateOccurrences(
       _count: { select: { attendance: true } },
     },
   });
-  const sittingsBefore: Sitting[] = existing.map((row) => ({
+  const sittingsBefore: Sitting[] = existing.filter(announced).map((row) => ({
     start: row.start,
     end: row.end,
     roomId: row.roomId,
@@ -190,6 +198,9 @@ export async function regenerateOccurrences(
     });
   }
   if (orphanIds.length) {
+    // Before the delete: afterwards the pins' links are null and nobody could
+    // find the tests that were in these sittings to say so.
+    await announceLostSittings(db, orphanIds);
     await db.eventException.deleteMany({ where: { id: { in: orphanIds } } });
   }
   for (const { data, ids } of updates.values()) {
@@ -198,6 +209,10 @@ export async function regenerateOccurrences(
   if (creates.length) {
     await db.eventOccurrence.createMany({ data: creates });
   }
+
+  // A test or presentation slot pinned to one of these sittings takes its new
+  // times, so the lists of assignments sort by when they now happen.
+  await syncAssignmentSittings(db, eventId);
 
   // Everyone whose Google Calendar mirrors this event is now out of date.
   //
@@ -210,11 +225,73 @@ export async function regenerateOccurrences(
 
   // And everyone it concerns is told what changed, by the same rule: queued
   // here, in this transaction, addressed and pushed after the response.
-  if (await recordClassChanges(db, event, sittingsBefore, rows as Sitting[])) {
+  const sittingsAfter = (rows as Sitting[]).filter(announced);
+  if (await recordClassChanges(db, event, sittingsBefore, sittingsAfter)) {
     await dispatchAfterResponse();
   }
 
   return { written: rows.length, prunedExceptions: orphanIds.length };
+}
+
+/**
+ * Whether a sitting is one people have been told about, for the class-change
+ * notices. A class waiting for approval (a teacher's extra class for a test)
+ * is not on anybody's day yet, and a refused one never was: leaving both out
+ * of the before and the after means the class is announced as new when it is
+ * approved, and a refusal or a withdrawal says nothing about a class nobody
+ * heard of.
+ */
+const announced = (sitting: { status: string }) =>
+  sitting.status !== "PENDING" && sitting.status !== "REJECTED";
+
+/**
+ * Keeps a one-off class's exception with its one sitting when the class moves.
+ *
+ * Exceptions are keyed on the start the rule gave the sitting, and for a
+ * one-off that is the event's own start, so moving the class (dragging it, or
+ * approving a move) would otherwise orphan its exception and prune it. That
+ * exception is how a test is pinned to the class, so the test would lose its
+ * class for the class having moved. When the one sitting has no exception of
+ * its own and exactly one is left over, that one is about this sitting: it is
+ * re-keyed to the new start, and the pinned tests' record of it with it.
+ *
+ * Its own time override goes, because the move just made is the time now. The
+ * row that stands for the sitting is then found by the new key and updated in
+ * place, so it keeps its id and any register taken on it.
+ */
+async function followOneOff(
+  db: Db,
+  event: {
+    rrule: string | null;
+    exceptions: Array<{
+      id: string;
+      originalStart: Date;
+      newStartTime: Date | null;
+      newEndTime: Date | null;
+    }>;
+  },
+  natural: Array<{ start: Date }>,
+): Promise<void> {
+  if (event.rrule !== null || natural.length !== 1) return;
+  const start = natural[0]!.start;
+  const unmatched = event.exceptions.filter(
+    (e) => e.originalStart.getTime() !== start.getTime(),
+  );
+  if (unmatched.length !== 1 || unmatched.length !== event.exceptions.length) {
+    return;
+  }
+  const exception = unmatched[0]!;
+  await db.eventException.update({
+    where: { id: exception.id },
+    data: { originalStart: start, newStartTime: null, newEndTime: null },
+  });
+  await db.assignmentSitting.updateMany({
+    where: { exceptionId: exception.id },
+    data: { originalStart: start },
+  });
+  exception.originalStart = start;
+  exception.newStartTime = null;
+  exception.newEndTime = null;
 }
 
 /** What a regeneration may change on a row that keeps standing for its sitting. */

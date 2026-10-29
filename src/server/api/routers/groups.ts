@@ -12,6 +12,7 @@ import {
 } from "~/server/api/trpc";
 import { enqueueForEvents } from "~/server/services/calendar/sync";
 import { OCCUPYING_STATUSES } from "~/server/services/conflicts";
+import type { Db } from "~/server/services/occurrences";
 import { GroupKind } from "../../../../generated/prisma";
 
 /**
@@ -47,6 +48,20 @@ const displayName = (f: {
   shortName: string | null;
   user: { name: string | null };
 }) => f.shortName ?? f.user.name ?? "Unnamed";
+
+/**
+ * The combined lectures a group joins without being their primary group. They
+ * are not deleted with it (they belong to the primary group), but the group
+ * leaves them, which whoever deletes it should be told.
+ */
+function combinedLectures(db: Db, groupId: string) {
+  return db.event.count({
+    where: {
+      groups: { some: { groupId } },
+      OR: [{ groupId: null }, { groupId: { not: groupId } }],
+    },
+  });
+}
 
 export const groupsRouter = createTRPCRouter({
   list: permissionProcedure(PermissionFlags.ViewGroups)
@@ -474,13 +489,20 @@ export const groupsRouter = createTRPCRouter({
   deleteImpact: permissionProcedure(PermissionFlags.ManageGroups)
     .input(z.object({ id: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
-      const [group, upcoming] = await Promise.all([
+      const [group, upcoming, combined] = await Promise.all([
         ctx.db.group.findFirst({
           where: { id: input.id, orgId: ctx.orgId },
           select: {
             name: true,
             label: true,
-            _count: { select: { students: true, events: true, faculty: true } },
+            _count: {
+              select: {
+                students: true,
+                events: true,
+                faculty: true,
+                assignments: true,
+              },
+            },
           },
         }),
         ctx.db.eventOccurrence.count({
@@ -490,12 +512,17 @@ export const groupsRouter = createTRPCRouter({
             status: { in: ["CONFIRMED", "PENDING"] },
           },
         }),
+        combinedLectures(ctx.db, input.id),
       ]);
       return {
         name: group?.label ?? group?.name ?? null,
         studentCount: group?._count.students ?? 0,
         eventCount: group?._count.events ?? 0,
         upcomingOccurrences: upcoming,
+        /** Tests and presentations set for it; while there are any it cannot be deleted. */
+        assignmentCount: group?._count.assignments ?? 0,
+        /** Combined lectures it joins but is not the primary group of; they stay, without it. */
+        combinedCount: combined,
       };
     }),
 
@@ -515,13 +542,35 @@ export const groupsRouter = createTRPCRouter({
         });
         if (!group) throw new TRPCError({ code: "NOT_FOUND" });
 
-        const eventCount = await tx.event.count({
+        // Tests and presentations hold students' answers and marks, which no
+        // confirmation about classes should be able to throw away. The
+        // database refuses the delete as well; this says why, and what to do.
+        const assignments = await tx.assignment.count({
           where: { groupId: group.id },
         });
-        if (eventCount > 0 && !input.confirmCascade) {
+        if (assignments > 0) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: `${group.name} has ${assignments} ${assignments === 1 ? "test or presentation" : "tests and presentations"} set for it. Delete ${assignments === 1 ? "it" : "them"} on the Assignments tab first, then delete the group.`,
+          });
+        }
+
+        const [eventCount, combined] = await Promise.all([
+          tx.event.count({ where: { groupId: group.id } }),
+          combinedLectures(tx, group.id),
+        ]);
+        if ((eventCount > 0 || combined > 0) && !input.confirmCascade) {
+          const parts = [
+            eventCount > 0
+              ? `${eventCount} scheduled ${eventCount === 1 ? "class" : "classes"}, which ${eventCount === 1 ? "goes" : "go"} with it`
+              : null,
+            combined > 0
+              ? `${combined} combined ${combined === 1 ? "lecture" : "lectures"} with other groups, which ${combined === 1 ? "stays" : "stay"} on for them`
+              : null,
+          ].filter(Boolean);
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `${group.name} has ${eventCount} scheduled ${eventCount === 1 ? "class" : "classes"}. Deleting it removes them too.`,
+            message: `${group.name} has ${parts.join(", and ")}. Confirm to delete it.`,
           });
         }
         // Occurrences cascade from their events.

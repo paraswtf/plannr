@@ -8,6 +8,7 @@ import { Button, buttonClass } from "~/components/ui/button";
 import { Callout } from "~/components/ui/callout";
 import { type IconName } from "~/components/ui/icon";
 import { Segmented } from "~/components/ui/segmented";
+import { ASSIGNMENT_TYPE_META, type AssignmentType } from "~/lib/assignments";
 import { formatDayLabel, formatDuration, formatHourLabel } from "~/lib/dates";
 import { api } from "~/trpc/react";
 import type { GridEvent } from "./timetable-grid";
@@ -137,6 +138,37 @@ export function EventDetails({
           <span className="text-title text-base font-medium">
             {event.facultyName}
           </span>
+        </Detail>
+      )}
+
+      {event.assignments && event.assignments.length > 0 && (
+        <Detail label="Tests and presentations">
+          <ul className="flex flex-col gap-1.5">
+            {event.assignments.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-baseline gap-x-2">
+                {/* Somebody else's test in a class this teacher takes: named,
+                    so they know it is happening, but not a link to a page
+                    that would only say it does not exist. */}
+                {a.canOpen === false ? (
+                  <span className="text-title text-base font-medium">
+                    {a.title}
+                  </span>
+                ) : (
+                  <Link
+                    href={`/assignments/${a.id}`}
+                    className="text-slate-ink text-base font-medium hover:underline"
+                  >
+                    {a.title}
+                  </Link>
+                )}
+                <span className="text-muted text-xs">
+                  {ASSIGNMENT_TYPE_META[a.type as AssignmentType]?.label ??
+                    "Assignment"}
+                  {a.teams.length > 0 && ` · ${a.teams.join(", ")}`}
+                </span>
+              </li>
+            ))}
+          </ul>
         </Detail>
       )}
 
