@@ -1,7 +1,7 @@
 import type { SpeakerId, StakeholderId } from "~/deck/types";
 import type { IconName } from "~/ui/icon";
 
-/** Who presents. This deck has one speaker; the engine still wants a person. */
+/** Who presents. src/sections/index.ts says who has which slides. */
 export interface Person {
   id: SpeakerId;
   name: string;

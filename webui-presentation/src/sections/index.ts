@@ -1,4 +1,9 @@
-import { resolveDeck, type SectionDef } from "~/deck/types";
+import {
+  resolveDeck,
+  type SectionDef,
+  type SlideDef,
+  type SpeakerId,
+} from "~/deck/types";
 
 import { slide as cover } from "~/slides/01-cover";
 import { slide as googleSignin } from "~/slides/02-google-signin";
@@ -28,15 +33,23 @@ import { slide as interfaceTour } from "~/slides/z0-interface";
 import { slide as demo } from "~/slides/z1-demo";
 import { slide as conclusion } from "~/slides/z2-conclusion";
 
+/** A run of slides presented by someone other than their section's speaker. */
+function by(speaker: SpeakerId, ...slides: SlideDef[]): SlideDef[] {
+  return slides.map((slide) => ({ ...slide, speaker }));
+}
+
 /**
  * The running order. To add a slide: create src/slides/NN-name.tsx exporting
  * `slide`, import it here and put it in the list. See SLIDES.md.
+ *
+ * Each section names who usually presents it, and `by` hands a run of slides
+ * to someone else; the presenter view calls out every hand-over.
  */
 export const SECTIONS: SectionDef[] = [
   {
     id: "the-project",
     title: "The project",
-    speaker: "paras",
+    speaker: "tanisha",
     slides: [
       cover,
       problem,
@@ -44,10 +57,7 @@ export const SECTIONS: SectionDef[] = [
       techUsed,
       whyStack,
       mainFeatures,
-      architecture,
-      erDiagram,
-      dfd,
-      dfdLevel1,
+      ...by("paras", architecture, erDiagram, dfd, dfdLevel1),
     ],
   },
   {
@@ -56,9 +66,7 @@ export const SECTIONS: SectionDef[] = [
     speaker: "paras",
     slides: [
       googleSignin,
-      personalSchedule,
-      dragAndDrop,
-      responsive,
+      ...by("sonal", personalSchedule, dragAndDrop, responsive),
       domApis,
       hybridRendering,
       pwa,
@@ -66,14 +74,13 @@ export const SECTIONS: SectionDef[] = [
       postgres,
       siri,
       openApi,
-      calendarSync,
-      pushNotifications,
+      ...by("sonal", calendarSync, pushNotifications),
     ],
   },
   {
     id: "wrap-up",
     title: "Wrap up",
-    speaker: "paras",
+    speaker: "sonal",
     slides: [interfaceTour, demo, conclusion, thanks],
   },
 ];
